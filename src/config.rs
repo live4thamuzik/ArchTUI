@@ -66,7 +66,7 @@ impl ConfigOption {
                     && !value.starts_with('-')
                     && value.len() <= 32
             }
-            "User Password" | "Root Password" => !self.get_value().is_empty(),
+            "User Password" | "Root Password" => !self.get_value().trim().is_empty(),
             "Disk" => self.get_value().starts_with("/dev/"),
             _ => true, // Default: any non-empty value is valid
         }
@@ -104,8 +104,7 @@ pub struct Configuration {
     pub options: Vec<ConfigOption>,
 }
 
-impl Configuration {
-}
+impl Configuration {}
 
 impl Default for Configuration {
     fn default() -> Self {
