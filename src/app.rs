@@ -135,8 +135,10 @@ impl App {
         }
 
         // Handle main application navigation
+        eprintln!("DEBUG: Key pressed: {:?}", key_event.code);
         match key_event.code {
             KeyCode::Char('q') => {
+                eprintln!("DEBUG: Quit key pressed");
                 // Exit application
                 return Ok(true);
             }
@@ -159,6 +161,7 @@ impl App {
                 self.move_to_last();
             }
             KeyCode::Enter => {
+                eprintln!("DEBUG: Enter key detected in main match");
                 self.handle_enter()?;
             }
             _ => {}
