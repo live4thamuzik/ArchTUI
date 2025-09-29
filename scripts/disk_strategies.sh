@@ -1188,8 +1188,8 @@ do_auto_lvm_partitioning_efi_xbootldr() {
 }
 
 do_auto_btrfs_partitioning_efi_xbootldr() {
-    echo "=== PHASE 1: Disk Partitioning with Btrfs (ESP + XBOOTLDR) ==="
-    log_info "Starting auto Btrfs partitioning with ESP + XBOOTLDR for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
+    echo "=== PHASE 1: Disk Partitioning (ESP + XBOOTLDR) ==="
+    log_info "Starting auto partitioning with ESP + XBOOTLDR for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
 
     wipe_disk "$INSTALL_DISK"
 
@@ -1253,15 +1253,15 @@ do_auto_btrfs_partitioning_efi_xbootldr() {
         part_num=$((part_num + 1))
     fi
 
-    # Root Partition (Btrfs) and Optional Home Partition
+    # Root Partition and Optional Home Partition
     local root_size_mib=$DEFAULT_ROOT_SIZE_MIB
     
-    # Set Btrfs as the default filesystem type
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-btrfs}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-btrfs}"
+    # Set default filesystem types if not specified (respect user choice)
+    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
+    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
 
     if [ "$WANT_HOME_PARTITION" == "yes" ]; then
-        log_info "Creating Root and Home partitions with Btrfs..."
+        log_info "Creating Root and Home partitions..."
         # Root partition (fixed size)
         local root_size_mb="${root_size_mib}M"
         if [ "$BOOT_MODE" == "uefi" ]; then
@@ -1281,7 +1281,7 @@ do_auto_btrfs_partitioning_efi_xbootldr() {
         part_num=$((part_num + 1))
 
         # Home partition (takes remaining space)
-        log_info "Creating Home partition with Btrfs (rest of disk)..."
+        log_info "Creating Home partition (rest of disk)..."
         if [ "$BOOT_MODE" == "uefi" ]; then
             sgdisk -n "$part_num:0:0" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create home partition."
         else
@@ -1298,7 +1298,7 @@ do_auto_btrfs_partitioning_efi_xbootldr() {
         create_btrfs_subvolumes "/mnt/home"
     else
         # Root takes all remaining space
-        log_info "Creating Root partition with Btrfs (rest of disk)..."
+        log_info "Creating Root partition (rest of disk)..."
         if [ "$BOOT_MODE" == "uefi" ]; then
             sgdisk -n "$part_num:0:0" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create root partition."
         else
@@ -1314,7 +1314,7 @@ do_auto_btrfs_partitioning_efi_xbootldr() {
         create_btrfs_subvolumes "/mnt"
     fi
 
-    log_info "Btrfs auto partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
+    log_info "Auto partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
 }
 
 # Export constants that might be used by other scripts
