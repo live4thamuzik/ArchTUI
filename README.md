@@ -5,8 +5,9 @@ A Rust/Bash implementation of the Arch Linux installer with a clean TUI interfac
 ## Overview
 
 This is a complete rewrite of the Arch Linux installer using:
+
 - **Rust TUI** frontend for user interaction
-- **Bash backend** following Arch Wiki installation guide
+- **Bash backend** for installation execution
 - **Pre-compiled binary** for immediate use on live ISO
 
 ## Quick Start
@@ -14,31 +15,35 @@ This is a complete rewrite of the Arch Linux installer using:
 ```bash
 git clone https://github.com/your-username/archinstall.git
 cd archinstall
-sudo ./archinstall-tui
+./archinstall-tui
 ```
 
 ## Features
 
 ### Core Functionality
+
 - **40+ configuration options** covering all installation aspects
 - **Real-time progress** with live installation feedback
 - **Smart validation** to prevent configuration errors
 - **Zero dependencies** - pre-compiled binary included
 
 ### Partitioning
-- **ESP + XBOOTLDR** setup (Arch Wiki recommended)
+
+- **ESP + XBOOTLDR** setup for dual-boot compatibility
 - **Multiple filesystems**: ext4, xfs, btrfs
 - **LVM support** for complex partitioning
 - **LUKS encryption** support
 - **UUID-based** device management
 
 ### Package Management
+
 - **Interactive package selection** with terminal-like interface
-- **AUR integration** via API (no paru/yay required)
-- **Dependency checking** before installation
 - **Pacman package search** with real-time results
+- **AUR package search** via API (no paru/yay required)
+- **Dependency checking** before installation
 
 ### System Configuration
+
 - **Desktop environments**: GNOME, KDE, Hyprland, i3, XFCE
 - **Display managers** auto-configured based on DE selection
 - **Plymouth themes** and GRUB customization
@@ -67,22 +72,26 @@ Frontend (Rust TUI)     Backend (Bash)
 ## Configuration Options
 
 ### Boot Setup
+
 - Boot Mode (Auto/UEFI/BIOS)
 - Secure Boot (with UEFI validation)
 - Bootloader (GRUB/systemd-boot)
 
 ### System Setup
+
 - Disk selection and partitioning
 - Filesystem selection (ext4/xfs/btrfs)
 - Encryption configuration
 - Swap and home partition options
 
 ### Localization
+
 - Timezone and region selection
 - Locale configuration
 - Keymap selection
 
 ### Software
+
 - Desktop environment selection
 - Display manager configuration
 - Additional packages (Pacman + AUR)
@@ -91,18 +100,21 @@ Frontend (Rust TUI)     Backend (Bash)
 ## Technical Details
 
 ### Rust Frontend
+
 - **ratatui** for TUI interface
 - **crossterm** for terminal control
 - **Modular design** with separate concerns
 - **Type-safe configuration** management
 
 ### Bash Backend
-- **Arch Wiki compliant** installation process
-- **Error handling** with proper exit codes
+
+- **Robust installation process** with proper error handling
 - **Logging** for troubleshooting
 - **Dependency management** for required packages
+- **Clean script organization** with modular functions
 
 ### Validation & Safety
+
 - **UEFI detection** for boot mode validation
 - **Secure Boot warnings** for proper setup
 - **Dependency checking** before operations
@@ -111,6 +123,7 @@ Frontend (Rust TUI)     Backend (Bash)
 ## Development
 
 ### Project Structure
+
 ```
 src/
 ├── main.rs          # Application entry point
@@ -128,6 +141,7 @@ scripts/
 ```
 
 ### Building
+
 ```bash
 # Development
 git checkout dev
