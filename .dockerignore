@@ -1,0 +1,30 @@
+# Docker ignore file for archinstall-tui
+
+# Git
+.git
+.gitignore
+
+# Build artifacts
+target/
+*.o
+*.so
+*.dylib
+*.dll
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
