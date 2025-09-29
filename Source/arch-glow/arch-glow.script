@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Arch Glow Plymouth Theme Script
+# Based on Arch Linux branding with glowing effects
+
+# Configuration
+WIDTH=1920
+HEIGHT=1080
+ARCH_LOGO_WIDTH=200
+ARCH_LOGO_HEIGHT=200
+PROGRESS_BAR_WIDTH=400
+PROGRESS_BAR_HEIGHT=20
+
+# Colors (RGB values)
+ARCH_BLUE=(0.2 0.4 0.8)
+ARCH_WHITE=(1.0 1.0 1.0)
+GLOW_COLOR=(0.4 0.6 1.0)
+
+# Initialize Plymouth
+plymouth --newroot=/sysroot
+plymouth --show-splash
+
+# Set up the display
+plymouth set --background-color=0x000000
+plymouth set --background-start-color=0x000000
+plymouth set --background-end-color=0x1a1a1a
+
+# Create the main window
+plymouth create-window --width=$WIDTH --height=$HEIGHT
+
+# Load images
+plymouth load-image --file="/usr/share/plymouth/themes/arch-glow/arch-logo.png" --x=860 --y=340
+plymouth load-image --file="/usr/share/plymouth/themes/arch-glow/progress-bg.png" --x=760 --y=600
+plymouth load-image --file="/usr/share/plymouth/themes/arch-glow/progress-bar.png" --x=760 --y=600
+
+# Set up progress bar
+plymouth set --progress-bar-color=0x3366cc
+plymouth set --progress-bar-background-color=0x333333
+
+# Display "Arch Linux" text
+plymouth display-message --text="Arch Linux" --x=860 --y=580 --color=0x6699ff --font-size=24
+
+# Animate the logo with a subtle glow effect
+for i in {1..100}; do
+    # Create a pulsing glow effect
+    glow_intensity=$(echo "scale=2; 0.5 + 0.3 * sin($i * 0.1)" | bc -l)
+    plymouth set --logo-glow-intensity=$glow_intensity
+    
+    # Update progress
+    progress=$((i * 100 / 100))
+    plymouth set --progress=$progress
+    
+    sleep 0.1
+done
+
+# Keep the splash screen visible
+plymouth --wait
