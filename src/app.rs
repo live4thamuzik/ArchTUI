@@ -219,12 +219,17 @@ impl App {
     fn handle_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (should_open_input, should_start_installation) = {
             let state = self.state.lock().unwrap();
+            eprintln!("DEBUG: Enter pressed - selected_index: {}, total_options: {}", 
+                state.config_scroll.selected_index, state.config.options.len());
             match state.mode {
                 AppMode::Configuration => {
                     // Check if we're on the green button (one step past the last config option)
                     if state.config_scroll.selected_index == state.config.options.len() {
+                        eprintln!("DEBUG: Should start installation");
                         (false, true) // Start installation
                     } else {
+                        eprintln!("DEBUG: Should open input dialog for option: {}", 
+                            state.config.options[state.config_scroll.selected_index].name);
                         (true, false) // Open input dialog
                     }
                 }
