@@ -56,14 +56,14 @@ Frontend (Rust TUI)     Backend (Bash)
 ┌─────────────────┐     ┌─────────────────┐
 │ User Interface  │────▶│ Installation    │
 │ Configuration   │     │ Scripts         │
-│ Validation      │     │ Arch Wiki       │
-│ Progress Display│     │ Compliance      │
+│ Validation      │     │ Package         │
+│ Progress Display│     │ Management      │
 └─────────────────┘     └─────────────────┘
 ```
 
 ## Usage
 
-1. **Run the installer**: `sudo ./archinstall-tui`
+1. **Run the installer**: `./archinstall-tui`
 2. **Navigate**: Arrow keys to move, Enter to configure
 3. **Configure**: Set installation options through TUI dialogs
 4. **Install**: Press Space to start installation
