@@ -277,3 +277,70 @@ impl Configuration {
         env_vars
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_option_new() {
+        let option = ConfigOption::new("Test Option", true, "Test description", "default");
+        assert_eq!(option.name, "Test Option");
+        assert_eq!(option.required, true);
+        assert_eq!(option.description, "Test description");
+        assert_eq!(option.default_value, "default");
+        assert_eq!(option.value, "");
+    }
+
+    #[test]
+    fn test_config_option_get_value() {
+        let mut option = ConfigOption::new("Test Option", false, "Test description", "default");
+        
+        // Should return default when value is empty
+        assert_eq!(option.get_value(), "default");
+        
+        // Should return actual value when set
+        option.value = "custom".to_string();
+        assert_eq!(option.get_value(), "custom");
+    }
+
+    #[test]
+    fn test_configuration_new() {
+        let config = Configuration::new();
+        assert!(!config.options.is_empty());
+        
+        // Check that essential options exist
+        let option_names: Vec<&String> = config.options.iter().map(|opt| &opt.name).collect();
+        assert!(option_names.contains(&"Install Disk".to_string()));
+        assert!(option_names.contains(&"Root Filesystem".to_string()));
+        assert!(option_names.contains(&"Hostname".to_string()));
+        assert!(option_names.contains(&"Username".to_string()));
+    }
+
+    #[test]
+    fn test_package_serialization() {
+        let package = Package {
+            repo: "core".to_string(),
+            name: "linux".to_string(),
+            version: "6.1.0".to_string(),
+            installed: true,
+            description: "The Linux kernel".to_string(),
+        };
+        
+        let json = serde_json::to_string(&package).unwrap();
+        let deserialized: Package = serde_json::from_str(&json).unwrap();
+        assert_eq!(package, deserialized);
+    }
+
+    #[test]
+    fn test_environment_variable_mapping() {
+        let config = Configuration::new();
+        let env_vars = config.to_environment_variables();
+        
+        // Check that some expected environment variables are present
+        assert!(env_vars.contains_key("INSTALL_DISK"));
+        assert!(env_vars.contains_key("ROOT_FILESYSTEM"));
+        assert!(env_vars.contains_key("HOSTNAME"));
+        assert!(env_vars.contains_key("USERNAME"));
+    }
+}
