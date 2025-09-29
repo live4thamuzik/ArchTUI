@@ -247,7 +247,14 @@ impl App {
         // Start installation if needed
         if should_start_installation {
             if self.validate_configuration_for_installation() {
+                {
+                    let mut state = self.state.lock().unwrap();
+                    state.status_message = "Validation passed. Starting installation...".to_string();
+                }
                 self.start_installation()?;
+            } else {
+                // Validation failed - status message already set in validate_configuration_for_installation
+                // User will see the error message
             }
         }
 
@@ -374,17 +381,17 @@ impl App {
         }
 
         if self.validate_configuration(&config) {
+            // All validation passed - installation can proceed
             return true;
         } else {
             let mut state = self.state.lock().unwrap();
             let errors = self.get_validation_errors(&config);
 
-
             if errors.len() == 1 {
-                state.status_message = format!("Error: {}", errors[0]);
+                state.status_message = format!("❌ Cannot start installation: {}", errors[0]);
             } else {
                 state.status_message =
-                    format!("Errors: {} (and {} more)", errors[0], errors.len() - 1);
+                    format!("❌ Cannot start installation: {} (and {} more errors)", errors[0], errors.len() - 1);
             }
             false
         }
