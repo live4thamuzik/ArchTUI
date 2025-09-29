@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Arch Glow
+Description=Arch Linux themed Plymouth splash screen with glowing effects
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/arch-glow
+ScriptFile=/usr/share/plymouth/themes/arch-glow/arch-glow.script
