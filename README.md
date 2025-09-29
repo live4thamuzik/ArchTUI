@@ -2,14 +2,6 @@
 
 A Rust/Bash implementation of the Arch Linux installer with a clean TUI interface.
 
-## Overview
-
-This is a complete rewrite of the Arch Linux installer using:
-
-- **Rust TUI** frontend for user interaction
-- **Bash backend** for installation execution
-- **Pre-compiled binary** for immediate use on live ISO
-
 ## Quick Start
 
 ```bash
@@ -20,34 +12,13 @@ cd archinstall
 
 ## Features
 
-### Core Functionality
-
-- **40+ configuration options** covering all installation aspects
-- **Real-time progress** with live installation feedback
-- **Smart validation** to prevent configuration errors
-- **Zero dependencies** - pre-compiled binary included
-
-### Partitioning
-
-- **ESP + XBOOTLDR** setup for dual-boot compatibility
-- **Multiple filesystems**: ext4, xfs, btrfs
-- **LVM support** for complex partitioning
-- **LUKS encryption** support
-- **UUID-based** device management
-
-### Package Management
-
-- **Interactive package selection** with terminal-like interface
-- **Pacman package search** with real-time results
-- **AUR package search** via API (no paru/yay required)
-- **Dependency checking** before installation
-
-### System Configuration
-
-- **Desktop environments**: GNOME, KDE, Hyprland, i3, XFCE
-- **Display managers** auto-configured based on DE selection
-- **Plymouth themes** and GRUB customization
-- **Network configuration** and locale setup
+- **40+ configuration options** with real-time progress and smart validation
+- **Zero dependencies** - pre-compiled binary for immediate use on live ISO
+- **Interactive package selection** with Pacman and AUR search via API
+- **ESP + XBOOTLDR partitioning** for dual-boot compatibility
+- **Multiple filesystems**: ext4, xfs, btrfs with LVM and LUKS encryption support
+- **Desktop environments**: GNOME, KDE, Hyprland, i3, XFCE with auto-configured display managers
+- **Comprehensive validation** with UEFI detection and Secure Boot warnings
 
 ## Architecture
 
@@ -63,84 +34,36 @@ Frontend (Rust TUI)     Backend (Bash)
 
 ## Usage
 
-1. **Run the installer**: `./archinstall-tui`
-2. **Navigate**: Arrow keys to move, Enter to configure
-3. **Configure**: Set installation options through TUI dialogs
-4. **Install**: Press Space to start installation
-5. **Monitor**: Watch real-time progress and logs
+1. **Run**: `./archinstall-tui`
+2. **Navigate**: Arrow keys, Enter to configure
+3. **Install**: Press Space to start
+4. **Monitor**: Watch real-time progress
 
-## Configuration Options
+## Technical Stack
 
-### Boot Setup
+- **Frontend**: Rust with ratatui/crossterm for TUI interface
+- **Backend**: Bash scripts with modular functions and proper error handling
+- **Testing**: Comprehensive Rust test suite with CI/CD pipeline
 
-- Boot Mode (Auto/UEFI/BIOS)
-- Secure Boot (with UEFI validation)
-- Bootloader (GRUB/systemd-boot)
+## Project Structure
 
-### System Setup
+```
+src/                     # Rust TUI source
+├── main.rs             # Entry point
+├── app.rs              # Application logic
+├── config.rs           # Configuration management
+├── input.rs            # User input handling
+├── ui.rs               # TUI rendering
+└── package_utils.rs    # Package search utilities
 
-- Disk selection and partitioning
-- Filesystem selection (ext4/xfs/btrfs)
-- Encryption configuration
-- Swap and home partition options
-
-### Localization
-
-- Timezone and region selection
-- Locale configuration
-- Keymap selection
-
-### Software
-
-- Desktop environment selection
-- Display manager configuration
-- Additional packages (Pacman + AUR)
-- AUR helper installation
-
-## Technical Details
-
-### Rust Frontend
-
-- **ratatui** for TUI interface
-- **crossterm** for terminal control
-- **Modular design** with separate concerns
-- **Type-safe configuration** management
-
-### Bash Backend
-
-- **Robust installation process** with proper error handling
-- **Logging** for troubleshooting
-- **Dependency management** for required packages
-- **Clean script organization** with modular functions
-
-### Validation & Safety
-
-- **UEFI detection** for boot mode validation
-- **Secure Boot warnings** for proper setup
-- **Dependency checking** before operations
-- **Configuration validation** before installation
+scripts/                 # Bash installation backend
+├── install.sh          # Main installation script
+├── install_wrapper.sh  # TUI-friendly wrapper
+├── utils.sh           # Utility functions
+└── disk_strategies.sh # Partitioning strategies
+```
 
 ## Development
-
-### Project Structure
-
-```
-src/
-├── main.rs          # Application entry point
-├── app.rs           # Main application logic
-├── config.rs        # Configuration management
-├── input.rs         # User input handling
-├── ui.rs            # TUI rendering
-└── package_utils.rs # Package search utilities
-
-scripts/
-├── install.sh           # Main installation script
-├── install_wrapper.sh   # TUI-friendly wrapper
-├── utils.sh            # Utility functions
-└── disk_strategies.sh  # Partitioning strategies
-```
-
-### Building
 
 ```bash
 # Development
@@ -156,12 +79,8 @@ cargo test
 
 - Arch Linux live ISO
 - Root privileges
-- Internet connection (for packages)
+- Internet connection
 
 ## License
 
 MIT License
-
----
-
-**Simple, clean, and effective.** Just like Arch Linux itself.
