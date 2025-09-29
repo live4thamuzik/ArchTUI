@@ -320,21 +320,24 @@ partition_disk() {
         "auto_luks_lvm")
             strategy="do_auto_luks_lvm_partitioning"
             ;;
-        "auto_raid_simple")
-            strategy="do_auto_raid_simple_partitioning"
+        "auto_raid")
+            strategy="do_auto_raid_partitioning"
+            ;;
+        "auto_raid_luks")
+            strategy="do_auto_raid_luks_partitioning"
             ;;
         "auto_raid_lvm")
             strategy="do_auto_raid_lvm_partitioning"
             ;;
-        "auto_btrfs")
-            strategy="do_auto_btrfs_partitioning_efi_xbootldr"  # Use ESP + XBOOTLDR (Arch Wiki recommended)
+        "auto_raid_lvm_luks")
+            strategy="do_auto_raid_lvm_luks_partitioning"
             ;;
         "manual")
             strategy="do_manual_partitioning_guided"
             ;;
         *)
             echo "ERROR: Unknown partitioning strategy: $PARTITIONING_STRATEGY"
-            echo "Available strategies: auto_simple, auto_simple_luks, auto_lvm, auto_luks_lvm, auto_btrfs, auto_raid_simple, auto_raid_lvm, manual"
+            echo "Available strategies: auto_simple, auto_simple_luks, auto_lvm, auto_luks_lvm, auto_raid, auto_raid_luks, auto_raid_lvm, auto_raid_lvm_luks, manual"
             exit 1
             ;;
     esac
