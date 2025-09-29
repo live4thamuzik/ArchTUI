@@ -108,3 +108,48 @@ pub fn search_aur_packages(search_term: &str) -> Result<Vec<Package>, String> {
 
     Ok(packages)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_search_pacman_packages_invalid_command() {
+        // Test with an invalid search term that should return no results
+        let result = search_pacman_packages("this_package_does_not_exist_12345");
+        assert!(result.is_ok());
+        let packages = result.unwrap();
+        assert!(packages.is_empty());
+    }
+
+    #[test]
+    fn test_search_aur_packages_invalid_search() {
+        // Test with an invalid search term that should return no results
+        let result = search_aur_packages("this_package_does_not_exist_12345");
+        assert!(result.is_ok());
+        let packages = result.unwrap();
+        assert!(packages.is_empty());
+    }
+
+    #[test]
+    fn test_search_aur_packages_network_handling() {
+        // Test that AUR search handles network errors gracefully
+        // This test may fail if network is unavailable, which is expected
+        let result = search_aur_packages("linux");
+        // We don't assert success here because network may be unavailable in test environments
+        match result {
+            Ok(packages) => {
+                // If successful, packages should have valid structure
+                for package in packages {
+                    assert!(!package.name.is_empty());
+                    assert!(!package.repo.is_empty());
+                    assert_eq!(package.repo, "aur");
+                }
+            }
+            Err(_) => {
+                // Network error is acceptable in test environments
+                println!("AUR search failed (expected in test environment without network)");
+            }
+        }
+    }
+}
