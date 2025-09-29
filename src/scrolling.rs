@@ -45,7 +45,7 @@ impl ScrollState {
     /// Move selection down by one item
     pub fn move_down(&mut self) {
         // For selection dialogs, only go up to the last item
-        if self.selected_index < self.total_items.saturating_sub(1) {
+        if self.selected_index < self.total_items {
             self.selected_index += 1;
             self.ensure_selected_visible();
         }
@@ -65,7 +65,7 @@ impl ScrollState {
 
     /// Move selection down by one page
     pub fn page_down(&mut self) {
-        let max_index = self.total_items.saturating_sub(1);
+        let max_index = self.total_items;
         let jump_size = self.visible_items.saturating_sub(1);
         if self.selected_index + jump_size <= max_index {
             self.selected_index = (self.selected_index + jump_size).min(max_index);
@@ -83,7 +83,7 @@ impl ScrollState {
 
     /// Jump to last item
     pub fn move_to_last(&mut self) {
-        self.selected_index = self.total_items.saturating_sub(1);
+        self.selected_index = self.total_items;
         self.ensure_selected_visible();
     }
 
@@ -101,7 +101,7 @@ impl ScrollState {
         }
 
         // Ensure offset doesn't exceed bounds
-        let max_offset = self.total_items.saturating_sub(self.visible_items);
+        let max_offset = self.total_items.saturating_sub(self.visible_items.saturating_sub(1));
         if self.offset > max_offset {
             self.offset = max_offset.max(0);
         }
@@ -132,7 +132,7 @@ impl ScrollState {
 
     /// Set selected index directly (useful for external updates)
     pub fn set_selected(&mut self, index: usize) {
-        if index < self.total_items {
+        if index <= self.total_items {
             self.selected_index = index;
             self.ensure_selected_visible();
         }
