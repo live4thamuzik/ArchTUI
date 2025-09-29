@@ -66,7 +66,7 @@ impl ConfigOption {
                     && !value.starts_with('-')
                     && value.len() <= 32
             }
-            "User Password" | "Root Password" => self.get_value().len() >= 8,
+            "User Password" | "Root Password" => !self.get_value().is_empty(),
             "Disk" => self.get_value().starts_with("/dev/"),
             _ => true, // Default: any non-empty value is valid
         }
@@ -83,7 +83,7 @@ impl ConfigOption {
                         Some(format!("{} must contain only alphanumeric characters, hyphens, and underscores, and be 32 characters or less", self.name))
                     }
                     "User Password" | "Root Password" => {
-                        Some(format!("{} must be at least 8 characters long", self.name))
+                        Some(format!("{} must be set", self.name))
                     }
                     "Disk" => {
                         Some(format!("{} must be a valid device path (e.g., /dev/sda)", self.name))
