@@ -1219,29 +1219,471 @@ do_auto_lvm_partitioning_efi_xbootldr() {
 
 do_auto_raid_partitioning() {
     echo "=== PHASE 1: RAID Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting auto RAID partitioning with ESP + XBOOTLDR..."
+    log_info "Starting auto RAID partitioning with ESP + XBOOTLDR for multiple disks (RAID Level: ${RAID_LEVEL:-raid1})..."
+
+    # Validate RAID requirements
+    if [ ${#RAID_DEVICES[@]} -lt 2 ]; then 
+        error_exit "RAID requires at least 2 disks. Current disks: ${RAID_DEVICES[*]}"
+    fi
     
-    # This function should be implemented based on the existing do_auto_raid_simple_partitioning
-    # but with ESP + XBOOTLDR approach instead of traditional /boot/efi
-    error_exit "do_auto_raid_partitioning not yet implemented - use auto_raid_lvm for now"
+    local raid_level="${RAID_LEVEL:-raid1}"
+    log_info "RAID level: $raid_level"
+    log_info "RAID devices: ${RAID_DEVICES[*]}"
+    
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+
+    local efi_part_num=1
+    local xbootldr_part_num=2
+    local root_part_num=3
+    local home_part_num=4
+
+    # --- Phase 1: Partition all RAID member disks identically ---
+    for disk in "${RAID_DEVICES[@]}"; do
+        log_info "Partitioning RAID member disk: $disk"
+        wipe_disk "$disk"
+
+        local current_start_mib=1
+
+        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk."
+        partprobe "$disk"
+
+        # 1. ESP partition on each disk (if UEFI)
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            local efi_size_mb="${EFI_PART_SIZE_MIB}M"
+            sgdisk -n "$efi_part_num:0:+$efi_size_mb" -t "$efi_part_num:$EFI_PARTITION_TYPE" "$disk" || error_exit "Failed to create ESP partition on $disk."
+            current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
+        fi
+
+        # 2. XBOOTLDR partition on each disk (will be part of RAID)
+        local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
+        sgdisk -n "$xbootldr_part_num:0:+$xbootldr_size_mb" -t "$xbootldr_part_num:$XBOOTLDR_PARTITION_TYPE" "$disk" || error_exit "Failed to create XBOOTLDR partition on $disk."
+        current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
+        
+        # 3. Root partition on each disk (will be part of RAID)
+        local root_size_mib=102400  # 100GB
+        if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+            local root_size_mb_str="${root_size_mib}M"
+            sgdisk -n "$root_part_num:0:+$root_size_mb_str" -t "$root_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create root partition on $disk."
+            current_start_mib=$((current_start_mib + root_size_mib))
+            
+            # 4. Home partition on each disk (will be part of RAID, takes rest of disk)
+            sgdisk -n "$home_part_num:0:0" -t "$home_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create home partition on $disk."
+        else
+            # Root takes all remaining space
+            sgdisk -n "$root_part_num:0:0" -t "$root_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create root partition on $disk."
+        fi
+        
+        partprobe "$disk"
+    done
+
+    # --- Phase 2: Create RAID arrays ---
+    log_info "Creating RAID arrays..."
+    
+    # Get partition paths for RAID arrays
+    local efi_parts=()
+    local xbootldr_parts=()
+    local root_parts=()
+    local home_parts=()
+    
+    for disk in "${RAID_DEVICES[@]}"; do
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            efi_parts+=("$(get_partition_path "$disk" "$efi_part_num")")
+        fi
+        xbootldr_parts+=("$(get_partition_path "$disk" "$xbootldr_part_num")")
+        root_parts+=("$(get_partition_path "$disk" "$root_part_num")")
+        if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+            home_parts+=("$(get_partition_path "$disk" "$home_part_num")")
+        fi
+    done
+
+    # Create XBOOTLDR RAID array
+    log_info "Creating XBOOTLDR RAID array (level: $raid_level)..."
+    mdadm --create /dev/md0 --level="${raid_level#raid}" --raid-devices=${#xbootldr_parts[@]} "${xbootldr_parts[@]}" || error_exit "Failed to create XBOOTLDR RAID array."
+    capture_id_for_config "boot" "/dev/md0" "UUID"
+
+    # Create Root RAID array
+    log_info "Creating Root RAID array (level: $raid_level)..."
+    mdadm --create /dev/md1 --level="${raid_level#raid}" --raid-devices=${#root_parts[@]} "${root_parts[@]}" || error_exit "Failed to create Root RAID array."
+    capture_id_for_config "root" "/dev/md1" "UUID"
+
+    # Create Home RAID array (if separate home)
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        log_info "Creating Home RAID array (level: $raid_level)..."
+        mdadm --create /dev/md2 --level="${raid_level#raid}" --raid-devices=${#home_parts[@]} "${home_parts[@]}" || error_exit "Failed to create Home RAID array."
+        capture_id_for_config "home" "/dev/md2" "UUID"
+    fi
+
+    # --- Phase 3: Format and mount filesystems ---
+    
+    # Format and mount ESP (if UEFI) - use first ESP partition
+    if [ "$BOOT_MODE" == "uefi" ]; then
+        local first_efi="${efi_parts[0]}"
+        format_filesystem "$first_efi" "$EFI_FILESYSTEM"
+        capture_id_for_config "efi" "$first_efi" "UUID"
+        capture_id_for_config "efi" "$first_efi" "PARTUUID"
+        safe_mount "$first_efi" "/mnt/efi"
+    fi
+
+    # Format and mount XBOOTLDR
+    format_filesystem "/dev/md0" "$BOOT_FILESYSTEM"
+    safe_mount "/dev/md0" "/mnt/boot"
+
+    # Format and mount Root
+    format_filesystem "/dev/md1" "$ROOT_FILESYSTEM_TYPE"
+    safe_mount "/dev/md1" "/mnt"
+    
+    # Create Btrfs subvolumes if using Btrfs
+    if [ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]; then
+        create_btrfs_subvolumes "/mnt"
+    fi
+
+    # Format and mount Home (if separate)
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        format_filesystem "/dev/md2" "$HOME_FILESYSTEM_TYPE"
+        mkdir -p /mnt/home || error_exit "Failed to create /mnt/home."
+        safe_mount "/dev/md2" "/mnt/home"
+        
+        # Create Btrfs subvolumes if using Btrfs
+        if [ "$HOME_FILESYSTEM_TYPE" == "btrfs" ]; then
+            create_btrfs_subvolumes "/mnt/home"
+        fi
+    fi
+
+    log_info "RAID partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
 }
 
 do_auto_raid_luks_partitioning() {
     echo "=== PHASE 1: RAID + LUKS Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting auto RAID + LUKS partitioning with ESP + XBOOTLDR..."
+    log_info "Starting auto RAID + LUKS partitioning with ESP + XBOOTLDR for multiple disks (RAID Level: ${RAID_LEVEL:-raid1})..."
+
+    # Validate RAID requirements
+    if [ ${#RAID_DEVICES[@]} -lt 2 ]; then 
+        error_exit "RAID requires at least 2 disks. Current disks: ${RAID_DEVICES[*]}"
+    fi
     
-    # This function should be implemented based on existing RAID + LUKS functions
-    # but with ESP + XBOOTLDR approach
-    error_exit "do_auto_raid_luks_partitioning not yet implemented - use auto_raid_lvm_luks for now"
+    local raid_level="${RAID_LEVEL:-raid1}"
+    log_info "RAID level: $raid_level"
+    log_info "RAID devices: ${RAID_DEVICES[*]}"
+    
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+
+    local efi_part_num=1
+    local xbootldr_part_num=2
+    local root_part_num=3
+    local home_part_num=4
+
+    # --- Phase 1: Partition all RAID member disks identically ---
+    for disk in "${RAID_DEVICES[@]}"; do
+        log_info "Partitioning RAID member disk: $disk"
+        wipe_disk "$disk"
+
+        local current_start_mib=1
+
+        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk."
+        partprobe "$disk"
+
+        # 1. ESP partition on each disk (if UEFI) - NOT encrypted
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            local efi_size_mb="${EFI_PART_SIZE_MIB}M"
+            sgdisk -n "$efi_part_num:0:+$efi_size_mb" -t "$efi_part_num:$EFI_PARTITION_TYPE" "$disk" || error_exit "Failed to create ESP partition on $disk."
+            current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
+        fi
+
+        # 2. XBOOTLDR partition on each disk (will be part of RAID) - NOT encrypted
+        local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
+        sgdisk -n "$xbootldr_part_num:0:+$xbootldr_size_mb" -t "$xbootldr_part_num:$XBOOTLDR_PARTITION_TYPE" "$disk" || error_exit "Failed to create XBOOTLDR partition on $disk."
+        current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
+        
+        # 3. Root partition on each disk (will be part of RAID, then encrypted)
+        local root_size_mib=102400  # 100GB
+        if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+            local root_size_mb_str="${root_size_mib}M"
+            sgdisk -n "$root_part_num:0:+$root_size_mb_str" -t "$root_part_num:$LUKS_PARTITION_TYPE" "$disk" || error_exit "Failed to create root partition on $disk."
+            current_start_mib=$((current_start_mib + root_size_mib))
+            
+            # 4. Home partition on each disk (will be part of RAID, then encrypted, takes rest of disk)
+            sgdisk -n "$home_part_num:0:0" -t "$home_part_num:$LUKS_PARTITION_TYPE" "$disk" || error_exit "Failed to create home partition on $disk."
+        else
+            # Root takes all remaining space
+            sgdisk -n "$root_part_num:0:0" -t "$root_part_num:$LUKS_PARTITION_TYPE" "$disk" || error_exit "Failed to create root partition on $disk."
+        fi
+        
+        partprobe "$disk"
+    done
+
+    # --- Phase 2: Create RAID arrays ---
+    log_info "Creating RAID arrays..."
+    
+    # Get partition paths for RAID arrays
+    local efi_parts=()
+    local xbootldr_parts=()
+    local root_parts=()
+    local home_parts=()
+    
+    for disk in "${RAID_DEVICES[@]}"; do
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            efi_parts+=("$(get_partition_path "$disk" "$efi_part_num")")
+        fi
+        xbootldr_parts+=("$(get_partition_path "$disk" "$xbootldr_part_num")")
+        root_parts+=("$(get_partition_path "$disk" "$root_part_num")")
+        if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+            home_parts+=("$(get_partition_path "$disk" "$home_part_num")")
+        fi
+    done
+
+    # Create XBOOTLDR RAID array (NOT encrypted)
+    log_info "Creating XBOOTLDR RAID array (level: $raid_level)..."
+    mdadm --create /dev/md0 --level="${raid_level#raid}" --raid-devices=${#xbootldr_parts[@]} "${xbootldr_parts[@]}" || error_exit "Failed to create XBOOTLDR RAID array."
+    capture_id_for_config "boot" "/dev/md0" "UUID"
+
+    # Create Root RAID array (will be encrypted)
+    log_info "Creating Root RAID array (level: $raid_level)..."
+    mdadm --create /dev/md1 --level="${raid_level#raid}" --raid-devices=${#root_parts[@]} "${root_parts[@]}" || error_exit "Failed to create Root RAID array."
+
+    # Create Home RAID array (will be encrypted, if separate home)
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        log_info "Creating Home RAID array (level: $raid_level)..."
+        mdadm --create /dev/md2 --level="${raid_level#raid}" --raid-devices=${#home_parts[@]} "${home_parts[@]}" || error_exit "Failed to create Home RAID array."
+    fi
+
+    # --- Phase 3: Encrypt RAID arrays ---
+    log_info "Setting up LUKS encryption on RAID arrays..."
+    
+    # Encrypt Root RAID array
+    log_info "Encrypting Root RAID array..."
+    cryptsetup luksFormat --batch-mode /dev/md1 || error_exit "Failed to encrypt root RAID array."
+    cryptsetup open /dev/md1 cryptroot || error_exit "Failed to open encrypted root RAID array."
+    capture_id_for_config "root" "/dev/md1" "UUID"
+
+    # Encrypt Home RAID array (if separate home)
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        log_info "Encrypting Home RAID array..."
+        cryptsetup luksFormat --batch-mode /dev/md2 || error_exit "Failed to encrypt home RAID array."
+        cryptsetup open /dev/md2 crypthome || error_exit "Failed to open encrypted home RAID array."
+        capture_id_for_config "home" "/dev/md2" "UUID"
+    fi
+
+    # --- Phase 4: Format and mount filesystems ---
+    
+    # Format and mount ESP (if UEFI) - use first ESP partition
+    if [ "$BOOT_MODE" == "uefi" ]; then
+        local first_efi="${efi_parts[0]}"
+        format_filesystem "$first_efi" "$EFI_FILESYSTEM"
+        capture_id_for_config "efi" "$first_efi" "UUID"
+        capture_id_for_config "efi" "$first_efi" "PARTUUID"
+        safe_mount "$first_efi" "/mnt/efi"
+    fi
+
+    # Format and mount XBOOTLDR (NOT encrypted)
+    format_filesystem "/dev/md0" "$BOOT_FILESYSTEM"
+    safe_mount "/dev/md0" "/mnt/boot"
+
+    # Format and mount Root (encrypted)
+    format_filesystem "/dev/mapper/cryptroot" "$ROOT_FILESYSTEM_TYPE"
+    safe_mount "/dev/mapper/cryptroot" "/mnt"
+    
+    # Create Btrfs subvolumes if using Btrfs
+    if [ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]; then
+        create_btrfs_subvolumes "/mnt"
+    fi
+
+    # Format and mount Home (encrypted, if separate)
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        format_filesystem "/dev/mapper/crypthome" "$HOME_FILESYSTEM_TYPE"
+        mkdir -p /mnt/home || error_exit "Failed to create /mnt/home."
+        safe_mount "/dev/mapper/crypthome" "/mnt/home"
+        
+        # Create Btrfs subvolumes if using Btrfs
+        if [ "$HOME_FILESYSTEM_TYPE" == "btrfs" ]; then
+            create_btrfs_subvolumes "/mnt/home"
+        fi
+    fi
+
+    log_info "RAID + LUKS partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
 }
 
 do_auto_raid_lvm_luks_partitioning() {
     echo "=== PHASE 1: RAID + LVM + LUKS Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting auto RAID + LVM + LUKS partitioning with ESP + XBOOTLDR..."
+    log_info "Starting auto RAID + LVM + LUKS partitioning with ESP + XBOOTLDR for multiple disks (RAID Level: ${RAID_LEVEL:-raid1})..."
+
+    # Validate RAID requirements
+    if [ ${#RAID_DEVICES[@]} -lt 2 ]; then 
+        error_exit "RAID requires at least 2 disks. Current disks: ${RAID_DEVICES[*]}"
+    fi
     
-    # This should be the same as do_auto_raid_luks_lvm_partitioning but with ESP + XBOOTLDR
-    # For now, redirect to the existing function
-    do_auto_raid_luks_lvm_partitioning
+    local raid_level="${RAID_LEVEL:-raid1}"
+    log_info "RAID level: $raid_level"
+    log_info "RAID devices: ${RAID_DEVICES[*]}"
+    
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+
+    local efi_part_num=1
+    local xbootldr_part_num=2
+    local lvm_part_num=3
+
+    # --- Phase 1: Partition all RAID member disks identically ---
+    for disk in "${RAID_DEVICES[@]}"; do
+        log_info "Partitioning RAID member disk: $disk"
+        wipe_disk "$disk"
+
+        local current_start_mib=1
+
+        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk."
+        partprobe "$disk"
+
+        # 1. ESP partition on each disk (if UEFI) - NOT encrypted
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            local efi_size_mb="${EFI_PART_SIZE_MIB}M"
+            sgdisk -n "$efi_part_num:0:+$efi_size_mb" -t "$efi_part_num:$EFI_PARTITION_TYPE" "$disk" || error_exit "Failed to create ESP partition on $disk."
+            current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
+        fi
+
+        # 2. XBOOTLDR partition on each disk (will be part of RAID) - NOT encrypted
+        local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
+        sgdisk -n "$xbootldr_part_num:0:+$xbootldr_size_mb" -t "$xbootldr_part_num:$XBOOTLDR_PARTITION_TYPE" "$disk" || error_exit "Failed to create XBOOTLDR partition on $disk."
+        current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
+        
+        # 3. LVM partition on each disk (will be part of RAID, then encrypted, then LVM)
+        sgdisk -n "$lvm_part_num:0:0" -t "$lvm_part_num:$LUKS_PARTITION_TYPE" "$disk" || error_exit "Failed to create LVM partition on $disk."
+        partprobe "$disk"
+    done
+
+    # --- Phase 2: Create RAID arrays ---
+    log_info "Creating RAID arrays..."
+    
+    # Get partition paths for RAID arrays
+    local efi_parts=()
+    local xbootldr_parts=()
+    local lvm_parts=()
+    
+    for disk in "${RAID_DEVICES[@]}"; do
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            efi_parts+=("$(get_partition_path "$disk" "$efi_part_num")")
+        fi
+        xbootldr_parts+=("$(get_partition_path "$disk" "$xbootldr_part_num")")
+        lvm_parts+=("$(get_partition_path "$disk" "$lvm_part_num")")
+    done
+
+    # Create XBOOTLDR RAID array (NOT encrypted)
+    log_info "Creating XBOOTLDR RAID array (level: $raid_level)..."
+    mdadm --create /dev/md0 --level="${raid_level#raid}" --raid-devices=${#xbootldr_parts[@]} "${xbootldr_parts[@]}" || error_exit "Failed to create XBOOTLDR RAID array."
+    capture_id_for_config "boot" "/dev/md0" "UUID"
+
+    # Create LVM RAID array (will be encrypted, then LVM)
+    log_info "Creating LVM RAID array (level: $raid_level)..."
+    mdadm --create /dev/md1 --level="${raid_level#raid}" --raid-devices=${#lvm_parts[@]} "${lvm_parts[@]}" || error_exit "Failed to create LVM RAID array."
+
+    # --- Phase 3: Encrypt RAID array ---
+    log_info "Setting up LUKS encryption on LVM RAID array..."
+    
+    # Encrypt LVM RAID array
+    log_info "Encrypting LVM RAID array..."
+    cryptsetup luksFormat --batch-mode /dev/md1 || error_exit "Failed to encrypt LVM RAID array."
+    cryptsetup open /dev/md1 cryptlvm || error_exit "Failed to open encrypted LVM RAID array."
+
+    # --- Phase 4: Setup LVM on encrypted RAID ---
+    log_info "Setting up LVM on encrypted RAID array..."
+    
+    # Create LVM physical volume
+    pvcreate /dev/mapper/cryptlvm || error_exit "Failed to create LVM physical volume."
+    
+    # Create volume group
+    local vg_name="archvg"
+    vgcreate "$vg_name" /dev/mapper/cryptlvm || error_exit "Failed to create LVM volume group."
+    
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        log_info "Creating Root and Home logical volumes..."
+        
+        # Root logical volume (100GB)
+        local root_size_gb=100
+        lvcreate -L "${root_size_gb}G" -n root "$vg_name" || error_exit "Failed to create root logical volume."
+        
+        # Home logical volume (rest of space)
+        lvcreate -l 100%FREE -n home "$vg_name" || error_exit "Failed to create home logical volume."
+        
+        # Store LVM device mapping
+        LVM_DEVICES_MAP["${vg_name}_root"]="/dev/$vg_name/root"
+        LVM_DEVICES_MAP["${vg_name}_home"]="/dev/$vg_name/home"
+    else
+        log_info "Creating Root logical volume (rest of space)..."
+        
+        # Root logical volume (all remaining space)
+        lvcreate -l 100%FREE -n root "$vg_name" || error_exit "Failed to create root logical volume."
+        
+        # Store LVM device mapping
+        LVM_DEVICES_MAP["${vg_name}_root"]="/dev/$vg_name/root"
+    fi
+
+    # --- Phase 5: Format and mount filesystems ---
+    
+    # Format and mount ESP (if UEFI) - use first ESP partition
+    if [ "$BOOT_MODE" == "uefi" ]; then
+        local first_efi="${efi_parts[0]}"
+        format_filesystem "$first_efi" "$EFI_FILESYSTEM"
+        capture_id_for_config "efi" "$first_efi" "UUID"
+        capture_id_for_config "efi" "$first_efi" "PARTUUID"
+        safe_mount "$first_efi" "/mnt/efi"
+    fi
+
+    # Format and mount XBOOTLDR (NOT encrypted)
+    format_filesystem "/dev/md0" "$BOOT_FILESYSTEM"
+    safe_mount "/dev/md0" "/mnt/boot"
+
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        # Format and mount Root logical volume
+        local root_lv="/dev/$vg_name/root"
+        format_filesystem "$root_lv" "$ROOT_FILESYSTEM_TYPE"
+        capture_id_for_config "root" "$root_lv" "UUID"
+        safe_mount "$root_lv" "/mnt"
+        
+        # Create Btrfs subvolumes if using Btrfs
+        if [ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]; then
+            create_btrfs_subvolumes "/mnt"
+        fi
+        
+        # Format and mount Home logical volume
+        local home_lv="/dev/$vg_name/home"
+        format_filesystem "$home_lv" "$HOME_FILESYSTEM_TYPE"
+        capture_id_for_config "home" "$home_lv" "UUID"
+        mkdir -p /mnt/home || error_exit "Failed to create /mnt/home."
+        safe_mount "$home_lv" "/mnt/home"
+        
+        # Create Btrfs subvolumes if using Btrfs
+        if [ "$HOME_FILESYSTEM_TYPE" == "btrfs" ]; then
+            create_btrfs_subvolumes "/mnt/home"
+        fi
+    else
+        # Format and mount Root logical volume
+        local root_lv="/dev/$vg_name/root"
+        format_filesystem "$root_lv" "$ROOT_FILESYSTEM_TYPE"
+        capture_id_for_config "root" "$root_lv" "UUID"
+        safe_mount "$root_lv" "/mnt"
+        
+        # Create Btrfs subvolumes if using Btrfs
+        if [ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]; then
+            create_btrfs_subvolumes "/mnt"
+        fi
+    fi
+
+    log_info "RAID + LVM + LUKS partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
 }
 
 # Export constants that might be used by other scripts
