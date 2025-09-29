@@ -193,9 +193,13 @@ do_auto_simple_partitioning() {
     # Root Partition and Optional Home Partition
     local root_size_mib=$DEFAULT_ROOT_SIZE_MIB # Defaulting to 100 GiB for a reasonable root partition
     
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
 
     if [ "$WANT_HOME_PARTITION" == "yes" ]; then
         log_info "Creating Root partition and separate Home partition (rest of disk)..."
@@ -262,9 +266,13 @@ do_auto_luks_lvm_partitioning() {
     echo "=== PHASE 1: Disk Partitioning (LUKS+LVM) ==="
     log_info "Starting auto LUKS+LVM partitioning for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
 
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
 
     wipe_disk "$INSTALL_DISK"
 
@@ -350,9 +358,13 @@ do_auto_raid_luks_lvm_partitioning() {
     echo "=== PHASE 1: Disk Partitioning (RAID+LUKS+LVM) ==="
     log_info "Starting auto RAID+LUKS+LVM partitioning with disks: ${RAID_DEVICES[*]} (Boot Mode: $BOOT_MODE)..."
 
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
 
     if [ ${#RAID_DEVICES[@]} -lt 2 ]; then error_exit "RAID requires at least 2 disks."; fi
 
@@ -642,9 +654,13 @@ do_auto_raid_simple_partitioning() {
     log_info "RAID level: $raid_level"
     log_info "RAID devices: ${RAID_DEVICES[*]}"
     
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
 
     local efi_part_num=1
     local boot_part_num=2
@@ -750,9 +766,13 @@ do_auto_raid_lvm_partitioning() {
     log_info "RAID level: $raid_level"
     log_info "RAID devices: ${RAID_DEVICES[*]}"
     
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
 
     local efi_part_num=1
     local boot_part_num=2
@@ -983,9 +1003,13 @@ do_auto_simple_partitioning_efi_xbootldr() {
     # Root Partition and Optional Home Partition
     local root_size_mib=$DEFAULT_ROOT_SIZE_MIB
     
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
 
     if [ "$WANT_HOME_PARTITION" == "yes" ]; then
         log_info "Creating Root partition and separate Home partition (rest of disk)..."
@@ -1128,9 +1152,13 @@ do_auto_lvm_partitioning_efi_xbootldr() {
     local vg_name="archvg"
     vgcreate "$vg_name" "$part_dev" || error_exit "Failed to create LVM volume group."
     
-    # Set default filesystem types if not specified
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
     
     if [ "$WANT_HOME_PARTITION" == "yes" ]; then
         log_info "Creating Root and Home logical volumes..."
@@ -1187,134 +1215,33 @@ do_auto_lvm_partitioning_efi_xbootldr() {
     log_info "LVM auto partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
 }
 
-do_auto_btrfs_partitioning_efi_xbootldr() {
-    echo "=== PHASE 1: Disk Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting auto partitioning with ESP + XBOOTLDR for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
+# --- Missing RAID Partitioning Functions ---
 
-    wipe_disk "$INSTALL_DISK"
-
-    local current_start_mib=1
-    local part_num=1
-    local part_dev=""
-
-    # Create partition table (GPT for UEFI, MBR for BIOS)
-    if [ "$BOOT_MODE" == "uefi" ]; then
-        sgdisk -Z "$INSTALL_DISK" || error_exit "Failed to create GPT label on $INSTALL_DISK."
-    else
-        printf "o\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create MBR label on $INSTALL_DISK."
-    fi
-    partprobe "$INSTALL_DISK"
-
-    # ESP Partition (for UEFI) - mounted to /efi
-    if [ "$BOOT_MODE" == "uefi" ]; then
-        log_info "Creating ESP partition (${EFI_PART_SIZE_MIB}MiB) for /efi..."
-        local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-        sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create ESP partition."
-        partprobe "$INSTALL_DISK"
-        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        
-        format_filesystem "$part_dev" "$EFI_FILESYSTEM"  # vfat
-        capture_id_for_config "efi" "$part_dev" "UUID"
-        capture_id_for_config "efi" "$part_dev" "PARTUUID"
-        safe_mount "$part_dev" "/mnt/efi"
-        current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
-        part_num=$((part_num + 1))
-
-        # XBOOTLDR Partition - mounted to /boot
-        log_info "Creating XBOOTLDR partition (${XBOOTLDR_PART_SIZE_MIB}MiB) for /boot..."
-        local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
-        sgdisk -n "$part_num:0:+$xbootldr_size_mb" -t "$part_num:$XBOOTLDR_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create XBOOTLDR partition."
-        partprobe "$INSTALL_DISK"
-        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        
-        format_filesystem "$part_dev" "$BOOT_FILESYSTEM"  # ext4
-        capture_id_for_config "boot" "$part_dev" "UUID"
-        safe_mount "$part_dev" "/mnt/boot"
-        current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
-        part_num=$((part_num + 1))
-    fi
-
-    # Swap Partition (if desired)
-    if [ "$WANT_SWAP" == "yes" ]; then
-        log_info "Creating Swap partition..."
-        local swap_size_mib=$DEFAULT_SWAP_SIZE_MIB
-        local swap_size_mb="${swap_size_mib}M"
-        if [ "$BOOT_MODE" == "uefi" ]; then
-            sgdisk -n "$part_num:0:+$swap_size_mb" -t "$part_num:$SWAP_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create swap partition."
-        else
-            printf "n\np\n$part_num\n\n+${swap_size_mib}M\nt\n$part_num\n82\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create swap partition."
-        fi
-        partprobe "$INSTALL_DISK"
-        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        format_filesystem "$part_dev" "swap"
-        capture_id_for_config "swap" "$part_dev" "UUID"
-        swapon "$part_dev" || error_exit "Failed to activate swap on $part_dev."
-        current_start_mib=$((current_start_mib + swap_size_mib))
-        part_num=$((part_num + 1))
-    fi
-
-    # Root Partition and Optional Home Partition
-    local root_size_mib=$DEFAULT_ROOT_SIZE_MIB
+do_auto_raid_partitioning() {
+    echo "=== PHASE 1: RAID Partitioning (ESP + XBOOTLDR) ==="
+    log_info "Starting auto RAID partitioning with ESP + XBOOTLDR..."
     
-    # Set default filesystem types if not specified (respect user choice)
-    ROOT_FILESYSTEM_TYPE="${ROOT_FILESYSTEM_TYPE:-ext4}"
-    HOME_FILESYSTEM_TYPE="${HOME_FILESYSTEM_TYPE:-ext4}"
+    # This function should be implemented based on the existing do_auto_raid_simple_partitioning
+    # but with ESP + XBOOTLDR approach instead of traditional /boot/efi
+    error_exit "do_auto_raid_partitioning not yet implemented - use auto_raid_lvm for now"
+}
 
-    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
-        log_info "Creating Root and Home partitions..."
-        # Root partition (fixed size)
-        local root_size_mb="${root_size_mib}M"
-        if [ "$BOOT_MODE" == "uefi" ]; then
-            sgdisk -n "$part_num:0:+$root_size_mb" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create root partition."
-        else
-            printf "n\np\n$part_num\n\n+${root_size_mib}M\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create root partition."
-        fi
-        partprobe "$INSTALL_DISK"
-        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        format_filesystem "$part_dev" "$ROOT_FILESYSTEM_TYPE"
-        capture_id_for_config "root" "$part_dev" "UUID"
-        safe_mount "$part_dev" "/mnt"
-        
-        # Create Btrfs subvolumes for root
-        create_btrfs_subvolumes "/mnt"
-        current_start_mib=$((current_start_mib + root_size_mib))
-        part_num=$((part_num + 1))
+do_auto_raid_luks_partitioning() {
+    echo "=== PHASE 1: RAID + LUKS Partitioning (ESP + XBOOTLDR) ==="
+    log_info "Starting auto RAID + LUKS partitioning with ESP + XBOOTLDR..."
+    
+    # This function should be implemented based on existing RAID + LUKS functions
+    # but with ESP + XBOOTLDR approach
+    error_exit "do_auto_raid_luks_partitioning not yet implemented - use auto_raid_lvm_luks for now"
+}
 
-        # Home partition (takes remaining space)
-        log_info "Creating Home partition (rest of disk)..."
-        if [ "$BOOT_MODE" == "uefi" ]; then
-            sgdisk -n "$part_num:0:0" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create home partition."
-        else
-            printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create home partition."
-        fi
-        partprobe "$INSTALL_DISK"
-        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        format_filesystem "$part_dev" "$HOME_FILESYSTEM_TYPE"
-        capture_id_for_config "home" "$part_dev" "UUID"
-        mkdir -p /mnt/home || error_exit "Failed to create /mnt/home."
-        safe_mount "$part_dev" "/mnt/home"
-        
-        # Create Btrfs subvolumes for home
-        create_btrfs_subvolumes "/mnt/home"
-    else
-        # Root takes all remaining space
-        log_info "Creating Root partition (rest of disk)..."
-        if [ "$BOOT_MODE" == "uefi" ]; then
-            sgdisk -n "$part_num:0:0" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create root partition."
-        else
-            printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create root partition."
-        fi
-        partprobe "$INSTALL_DISK"
-        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        format_filesystem "$part_dev" "$ROOT_FILESYSTEM_TYPE"
-        capture_id_for_config "root" "$part_dev" "UUID"
-        safe_mount "$part_dev" "/mnt"
-        
-        # Create Btrfs subvolumes for root
-        create_btrfs_subvolumes "/mnt"
-    fi
-
-    log_info "Auto partitioning with ESP + XBOOTLDR complete. Filesystems formatted and mounted."
+do_auto_raid_lvm_luks_partitioning() {
+    echo "=== PHASE 1: RAID + LVM + LUKS Partitioning (ESP + XBOOTLDR) ==="
+    log_info "Starting auto RAID + LVM + LUKS partitioning with ESP + XBOOTLDR..."
+    
+    # This should be the same as do_auto_raid_luks_lvm_partitioning but with ESP + XBOOTLDR
+    # For now, redirect to the existing function
+    do_auto_raid_luks_lvm_partitioning
 }
 
 # Export constants that might be used by other scripts
