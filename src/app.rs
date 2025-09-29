@@ -378,6 +378,18 @@ impl App {
         } else {
             let mut state = self.state.lock().unwrap();
             let errors = self.get_validation_errors(&config);
+
+            // Debug: Print all validation errors
+            eprintln!("Validation errors: {:?}", errors);
+            for option in &config.options {
+                if !option.is_valid() {
+                    eprintln!(
+                        "Invalid option: {} = '{}' (required: {})",
+                        option.name, option.value, option.required
+                    );
+                }
+            }
+
             if errors.len() == 1 {
                 state.status_message = format!("Error: {}", errors[0]);
             } else {
@@ -702,11 +714,15 @@ impl App {
                 // Parse disk selection to extract only device path
                 let parsed_value = if option_name == "Disk" {
                     // Extract just the device path from "/dev/sda (128G)" -> "/dev/sda"
-                    value.split_whitespace().next().unwrap_or(&value).to_string()
+                    value
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(&value)
+                        .to_string()
                 } else {
                     value.clone()
                 };
-                
+
                 state.config.options[current_step].value = parsed_value.clone();
                 state.status_message = format!(
                     "Set {} to: {}",
