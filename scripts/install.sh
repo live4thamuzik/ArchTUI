@@ -327,7 +327,7 @@ partition_disk() {
             strategy="do_auto_raid_luks_partitioning"
             ;;
         "auto_raid_lvm")
-            strategy="do_auto_raid_lvm_partitioning"
+            strategy="do_auto_raid_lvm_partitioning_efi_xbootldr"  # Use ESP + XBOOTLDR (Arch Wiki recommended)
             ;;
         "auto_raid_lvm_luks")
             strategy="do_auto_raid_lvm_luks_partitioning"

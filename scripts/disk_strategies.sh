@@ -263,8 +263,8 @@ do_auto_simple_partitioning() {
 }
 
 do_auto_luks_lvm_partitioning() {
-    echo "=== PHASE 1: Disk Partitioning (LUKS+LVM) ==="
-    log_info "Starting auto LUKS+LVM partitioning for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
+    echo "=== PHASE 1: Disk Partitioning (LUKS+LVM) with ESP + XBOOTLDR ==="
+    log_info "Starting auto LUKS+LVM partitioning with ESP + XBOOTLDR for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
 
     # Verify filesystem types are set by user
     if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
@@ -289,52 +289,44 @@ do_auto_luks_lvm_partitioning() {
     fi
     partprobe "$INSTALL_DISK"
 
-    # 2. Dedicated /boot Partition - 2GiB (mount this FIRST)
-    log_info "Creating dedicated /boot partition (${BOOT_PART_SIZE_MIB}MiB)..."
-    local boot_size_mb="${BOOT_PART_SIZE_MIB}M"
+    # 2. ESP Partition (for UEFI) - mounted to /efi
     if [ "$BOOT_MODE" == "uefi" ]; then
-        sgdisk -n "$part_num:0:+$boot_size_mb" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create /boot partition."
-    else
-        # For BIOS, use fdisk for /boot partition
-        printf "n\np\n$part_num\n\n+${BOOT_PART_SIZE_MIB}M\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create /boot partition."
-    fi
-    partprobe "$INSTALL_DISK"
-    part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    format_filesystem "$part_dev" "ext4"
-    capture_id_for_config "boot" "$part_dev" "UUID"
-    mkdir -p /mnt/boot || error_exit "Failed to create /mnt/boot."
-    safe_mount "$part_dev" "/mnt/boot"
-    current_start_mib=$((current_start_mib + BOOT_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-
-    # 3. EFI Partition (for UEFI) - 1024MiB (mounted AFTER /boot partition)
-    if [ "$BOOT_MODE" == "uefi" ]; then
-        log_info "Creating EFI partition (${EFI_PART_SIZE_MIB}MiB)..."
-        # Create EFI partition with sgdisk: -n 1:0:+size -t 1:EF00
+        log_info "Creating ESP partition (${EFI_PART_SIZE_MIB}MiB) for /efi..."
         local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-        sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create EFI partition."
+        sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create ESP partition."
         partprobe "$INSTALL_DISK"
         part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
         
-        # Debug: Show partition info before formatting
-        log_info "EFI partition created at: $part_dev"
-        sgdisk -p "$INSTALL_DISK" || log_warn "Failed to print partition table"
-        
-        format_filesystem "$part_dev" "vfat"
+        format_filesystem "$part_dev" "$EFI_FILESYSTEM"  # vfat
         capture_id_for_config "efi" "$part_dev" "UUID"
         capture_id_for_config "efi" "$part_dev" "PARTUUID"
-        
-        # Create efi directory inside the mounted /boot partition
-        mkdir -p /mnt/boot/efi || error_exit "Failed to create /mnt/boot/efi directory."
-        safe_mount "$part_dev" "/mnt/boot/efi"
+        safe_mount "$part_dev" "/mnt/efi"
         current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
         part_num=$((part_num + 1))
     fi
 
+    # 3. XBOOTLDR Partition - mounted to /boot
+    log_info "Creating XBOOTLDR partition (${XBOOTLDR_PART_SIZE_MIB}MiB) for /boot..."
+    local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
+    if [ "$BOOT_MODE" == "uefi" ]; then
+        sgdisk -n "$part_num:0:+$xbootldr_size_mb" -t "$part_num:$XBOOTLDR_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create XBOOTLDR partition."
+    else
+        # For BIOS, use fdisk for boot partition
+        printf "n\np\n$part_num\n\n+${XBOOTLDR_PART_SIZE_MIB}M\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create boot partition."
+    fi
+    partprobe "$INSTALL_DISK"
+    part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+    
+    format_filesystem "$part_dev" "$BOOT_FILESYSTEM"  # ext4
+    capture_id_for_config "boot" "$part_dev" "UUID"
+    safe_mount "$part_dev" "/mnt/boot"
+    current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
+    part_num=$((part_num + 1))
+
     # 4. Main LUKS Container Partition (takes rest of disk)
     log_info "Creating LUKS container partition (rest of disk)..."
     if [ "$BOOT_MODE" == "uefi" ]; then
-        sgdisk -n "$part_num:0:0" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create LUKS container partition."
+        sgdisk -n "$part_num:0:0" -t "$part_num:$LUKS_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LUKS container partition."
     else
         # For BIOS, use fdisk for LUKS container partition (rest of disk)
         printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create LUKS container partition."
@@ -447,13 +439,14 @@ mapfile -t         luks_component_devices+ < <(get_partition_path "$disk" "$luks
 }
 
 do_auto_simple_luks_partitioning() {
-    echo "=== PHASE 1: Disk Partitioning with LUKS Encryption ==="
-    log_info "Starting auto simple LUKS partitioning for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
+    echo "=== PHASE 1: Disk Partitioning with LUKS Encryption (ESP + XBOOTLDR) ==="
+    log_info "Starting auto simple LUKS partitioning with ESP + XBOOTLDR for $INSTALL_DISK (Boot Mode: $BOOT_MODE)..."
 
     wipe_disk "$INSTALL_DISK"
 
     local current_start_mib=1
     local part_num=1
+    local part_dev=""
 
     # Create partition table (GPT for UEFI, MBR for BIOS)
     if [ "$BOOT_MODE" == "uefi" ]; then
@@ -463,41 +456,39 @@ do_auto_simple_luks_partitioning() {
     fi
     partprobe "$INSTALL_DISK"
 
-    # EFI Partition (for UEFI)
+    # ESP Partition (for UEFI) - mounted to /efi
     if [ "$BOOT_MODE" == "uefi" ]; then
-        log_info "Creating EFI partition (${EFI_PART_SIZE_MIB}MiB)..."
+        log_info "Creating ESP partition (${EFI_PART_SIZE_MIB}MiB) for /efi..."
         local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-        sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create EFI partition."
+        sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create ESP partition."
         partprobe "$INSTALL_DISK"
-        local efi_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        mkfs.fat -F32 "$efi_dev" || error_exit "Failed to format EFI partition."
-        PARTITION_UUIDS_EFI_UUID=$(blkid -s UUID -o value "$efi_dev")
-        PARTITION_UUIDS_EFI_PARTUUID=$(blkid -s PARTUUID -o value "$efi_dev")
-        log_info "EFI partition UUID: $PARTITION_UUIDS_EFI_UUID"
+        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+        
+        format_filesystem "$part_dev" "$EFI_FILESYSTEM"  # vfat
+        capture_id_for_config "efi" "$part_dev" "UUID"
+        capture_id_for_config "efi" "$part_dev" "PARTUUID"
+        safe_mount "$part_dev" "/mnt/efi"
+        current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
         part_num=$((part_num + 1))
-    fi
 
-    # Boot Partition (for BIOS or additional boot partition)
-    if [ "$BOOT_MODE" == "bios" ] || [ "$WANT_SEPARATE_BOOT" == "yes" ]; then
-        log_info "Creating Boot partition (${BOOT_PART_SIZE_MIB}MiB)..."
-        local boot_size_mb="${BOOT_PART_SIZE_MIB}M"
-        if [ "$BOOT_MODE" == "uefi" ]; then
-            sgdisk -n "$part_num:0:+$boot_size_mb" -t "$part_num:8300" "$INSTALL_DISK" || error_exit "Failed to create boot partition."
-        else
-            printf "n\np\n$part_num\n\n+${BOOT_PART_SIZE_MIB}M\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create boot partition."
-        fi
+        # XBOOTLDR Partition - mounted to /boot
+        log_info "Creating XBOOTLDR partition (${XBOOTLDR_PART_SIZE_MIB}MiB) for /boot..."
+        local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
+        sgdisk -n "$part_num:0:+$xbootldr_size_mb" -t "$part_num:$XBOOTLDR_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create XBOOTLDR partition."
         partprobe "$INSTALL_DISK"
-        local boot_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        mkfs.ext4 "$boot_dev" || error_exit "Failed to format boot partition."
-        PARTITION_UUIDS_BOOT_UUID=$(blkid -s UUID -o value "$boot_dev")
-        log_info "Boot partition UUID: $PARTITION_UUIDS_BOOT_UUID"
+        part_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+        
+        format_filesystem "$part_dev" "$BOOT_FILESYSTEM"  # ext4
+        capture_id_for_config "boot" "$part_dev" "UUID"
+        safe_mount "$part_dev" "/mnt/boot"
+        current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
         part_num=$((part_num + 1))
     fi
 
     # Create LUKS container partition (rest of disk)
     log_info "Creating LUKS container partition (rest of disk)..."
     if [ "$BOOT_MODE" == "uefi" ]; then
-        sgdisk -n "$part_num:0:0" -t "$part_num:8309" "$INSTALL_DISK" || error_exit "Failed to create LUKS container partition."
+        sgdisk -n "$part_num:0:0" -t "$part_num:$LUKS_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LUKS container partition."
     else
         printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create LUKS container partition."
     fi
@@ -506,27 +497,65 @@ do_auto_simple_luks_partitioning() {
     
     # Set up LUKS encryption
     log_info "Setting up LUKS encryption on $luks_dev..."
-    cryptsetup luksFormat --type luks2 "$luks_dev" || error_exit "Failed to create LUKS container."
+    cryptsetup luksFormat --batch-mode "$luks_dev" || error_exit "Failed to create LUKS container."
     cryptsetup open "$luks_dev" cryptroot || error_exit "Failed to open LUKS container."
     
-    # Get LUKS container UUID
-    PARTITION_UUIDS_LUKS_CONTAINER_UUID=$(blkid -s UUID -o value "$luks_dev")
-    log_info "LUKS container UUID: $PARTITION_UUIDS_LUKS_CONTAINER_UUID"
+    # Capture LUKS container UUID
+    capture_id_for_config "luks" "$luks_dev" "UUID"
+    
+    # Verify filesystem types are set by user
+    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
+        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
+    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
+        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
+    fi
     
     # Create filesystem on decrypted device
-    local root_fs="${ROOT_FILESYSTEM:-ext4}"
-    log_info "Creating $root_fs filesystem on /dev/mapper/cryptroot..."
-    case "$root_fs" in
-        "ext4") mkfs.ext4 /dev/mapper/cryptroot || error_exit "Failed to create ext4 filesystem." ;;
-        "btrfs") mkfs.btrfs /dev/mapper/cryptroot || error_exit "Failed to create btrfs filesystem." ;;
-        "xfs") mkfs.xfs /dev/mapper/cryptroot || error_exit "Failed to create xfs filesystem." ;;
-        *) error_exit "Unsupported filesystem: $root_fs" ;;
-    esac
+    log_info "Creating $ROOT_FILESYSTEM_TYPE filesystem on /dev/mapper/cryptroot..."
+    format_filesystem "/dev/mapper/cryptroot" "$ROOT_FILESYSTEM_TYPE"
+    capture_id_for_config "root" "/dev/mapper/cryptroot" "UUID"
     
-    PARTITION_UUIDS_ROOT_UUID=$(blkid -s UUID -o value /dev/mapper/cryptroot)
-    log_info "Root filesystem UUID: $PARTITION_UUIDS_ROOT_UUID"
+    # Mount root filesystem
+    safe_mount "/dev/mapper/cryptroot" "/mnt"
     
-    log_info "Auto simple LUKS partitioning completed successfully."
+    # Create Btrfs subvolumes if using Btrfs
+    if [ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]; then
+        create_btrfs_subvolumes "/mnt"
+    fi
+    
+    # Handle separate home partition if requested
+    if [ "$WANT_HOME_PARTITION" == "yes" ]; then
+        log_info "Creating separate home partition..."
+        
+        # Create home partition in remaining space
+        part_num=$((part_num + 1))
+        if [ "$BOOT_MODE" == "uefi" ]; then
+            sgdisk -n "$part_num:0:0" -t "$part_num:$LUKS_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create home LUKS partition."
+        else
+            printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create home LUKS partition."
+        fi
+        partprobe "$INSTALL_DISK"
+        local home_luks_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+        
+        # Set up LUKS encryption for home
+        log_info "Setting up LUKS encryption on home partition $home_luks_dev..."
+        cryptsetup luksFormat --batch-mode "$home_luks_dev" || error_exit "Failed to create home LUKS container."
+        cryptsetup open "$home_luks_dev" crypthome || error_exit "Failed to open home LUKS container."
+        
+        # Format and mount home
+        format_filesystem "/dev/mapper/crypthome" "$HOME_FILESYSTEM_TYPE"
+        capture_id_for_config "home" "/dev/mapper/crypthome" "UUID"
+        mkdir -p /mnt/home || error_exit "Failed to create /mnt/home."
+        safe_mount "/dev/mapper/crypthome" "/mnt/home"
+        
+        # Create Btrfs subvolumes if using Btrfs
+        if [ "$HOME_FILESYSTEM_TYPE" == "btrfs" ]; then
+            create_btrfs_subvolumes "/mnt/home"
+        fi
+    fi
+    
+    log_info "Auto simple LUKS partitioning with ESP + XBOOTLDR completed successfully."
 }
 
 do_auto_lvm_partitioning() {
@@ -753,94 +782,6 @@ mapfile -t             home_component_devices+ < <(get_partition_path "$disk" "$
     log_info "Auto RAID simple partitioning completed successfully."
 }
 
-do_auto_raid_lvm_partitioning() {
-    echo "=== PHASE 1: Disk Partitioning with Software RAID and LVM ==="
-    log_info "Starting auto RAID LVM partitioning for multiple disks (RAID Level: ${RAID_LEVEL:-raid1})..."
-
-    # Validate RAID requirements
-    if [ ${#RAID_DEVICES[@]} -lt 2 ]; then 
-        error_exit "RAID requires at least 2 disks. Current disks: ${RAID_DEVICES[*]}"
-    fi
-    
-    local raid_level="${RAID_LEVEL:-raid1}"
-    log_info "RAID level: $raid_level"
-    log_info "RAID devices: ${RAID_DEVICES[*]}"
-    
-    # Verify filesystem types are set by user
-    if [ -z "$ROOT_FILESYSTEM_TYPE" ]; then
-        error_exit "ROOT_FILESYSTEM_TYPE must be set in TUI configuration"
-    fi
-    if [ -z "$HOME_FILESYSTEM_TYPE" ]; then
-        error_exit "HOME_FILESYSTEM_TYPE must be set in TUI configuration"
-    fi
-
-    local efi_part_num=1
-    local boot_part_num=2
-    local lvm_part_num=3
-
-    # --- Phase 1: Partition all RAID member disks identically ---
-    for disk in "${RAID_DEVICES[@]}"; do
-        log_info "Partitioning RAID member disk: $disk"
-        wipe_disk "$disk"
-
-        local current_start_mib=1
-
-        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk."
-        partprobe "$disk"
-
-        # 1. EFI partition on each disk (if UEFI)
-        if [ "$BOOT_MODE" == "uefi" ]; then
-            local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-            sgdisk -n "$efi_part_num:0:+$efi_size_mb" -t "$efi_part_num:EF00" "$disk" || error_exit "Failed to create EFI partition on $disk."
-            current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
-        fi
-
-        # 2. /boot partition on each disk (will be part of RAID)
-        local boot_size_mb="${BOOT_PART_SIZE_MIB}M"
-        sgdisk -n "$boot_part_num:0:+$boot_size_mb" -t "$boot_part_num:8300" "$disk" || error_exit "Failed to create /boot partition on $disk."
-        current_start_mib=$((current_start_mib + BOOT_PART_SIZE_MIB))
-        
-        # 3. LVM partition on each disk (will be part of RAID, takes rest of disk)
-        sgdisk -n "$lvm_part_num:0:0" -t "$lvm_part_num:8E00" "$disk" || error_exit "Failed to create LVM partition on $disk."
-        partprobe "$disk"
-    done
-
-    # --- Phase 2: Assemble RAID Arrays ---
-    # Create RAID for /boot
-    local md_boot_dev="/dev/md0"
-    local boot_component_devices=()
-    for disk in "${RAID_DEVICES[@]}"; do
-mapfile -t         boot_component_devices+ < <(get_partition_path "$disk" "$boot_part_num")
-    done
-    setup_raid "$raid_level" "$md_boot_dev" "${boot_component_devices[@]}" || error_exit "RAID setup for /boot failed."
-    format_filesystem "$md_boot_dev" "ext4"
-    capture_id_for_config "boot" "$md_boot_dev" "UUID"
-    mkdir -p /mnt/boot || error_exit "Failed to create /mnt/boot."
-    safe_mount "$md_boot_dev" "/mnt/boot"
-
-    # Create RAID for LVM container
-    local md_lvm_dev="/dev/md1"
-    local lvm_component_devices=()
-    for disk in "${RAID_DEVICES[@]}"; do
-mapfile -t         lvm_component_devices+ < <(get_partition_path "$disk" "$lvm_part_num")
-    done
-    setup_raid "$raid_level" "$md_lvm_dev" "${lvm_component_devices[@]}" || error_exit "RAID setup for LVM container failed."
-
-    # --- Phase 3: Setup LVM on the RAID device ---
-    setup_lvm "$md_lvm_dev" "$VG_NAME"
-
-    # --- Phase 4: Mount EFI for initial install ---
-    if [ "$BOOT_MODE" == "uefi" ]; then
-        local first_efi_dev=$(get_partition_path "${RAID_DEVICES[0]}" "$efi_part_num")
-        format_filesystem "$first_efi_dev" "vfat"
-        capture_id_for_config "efi" "$first_efi_dev" "UUID"
-        capture_id_for_config "efi" "$first_efi_dev" "PARTUUID"
-        mkdir -p /mnt/boot/efi || error_exit "Failed to create /mnt/boot/efi."
-        safe_mount "$first_efi_dev" "/mnt/boot/efi"
-    fi
-
-    log_info "Auto RAID LVM partitioning completed successfully."
-}
 
 do_manual_partitioning_guided() {
     log_info "Starting manual partitioning using fdisk for $INSTALL_DISK"
