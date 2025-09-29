@@ -1,6 +1,7 @@
 // Integration tests for archinstall-tui
 
 use std::process::Command;
+use std::os::unix::fs::PermissionsExt;
 
 #[test]
 fn test_binary_exists() {
@@ -43,11 +44,6 @@ fn test_binary_runs_without_crashing() {
         .args(&["5s", "./archinstall-tui"])
         .output();
     
-    // timeout command may not be available on all systems, so we test the binary directly
-    let output = Command::new("./archinstall-tui")
-        .timeout(std::time::Duration::from_secs(5))
-        .output();
-    
     // The binary should either exit cleanly or with a TUI error (expected in non-TTY environments)
     match output {
         Ok(result) => {
@@ -75,6 +71,6 @@ fn test_config_structure() {
     
     // Check for essential options
     let option_names: Vec<&String> = config.options.iter().map(|opt| &opt.name).collect();
-    assert!(option_names.contains(&"Install Disk".to_string()), "Should have Install Disk option");
-    assert!(option_names.contains(&"Root Filesystem".to_string()), "Should have Root Filesystem option");
+    assert!(option_names.contains(&&"Disk".to_string()), "Should have Disk option");
+    assert!(option_names.contains(&&"Root Filesystem".to_string()), "Should have Root Filesystem option");
 }
