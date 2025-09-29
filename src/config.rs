@@ -105,10 +105,6 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    /// Create a new configuration with default options
-    pub fn new() -> Self {
-        Self::default()
-    }
 }
 
 impl Default for Configuration {
@@ -313,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_configuration_new() {
-        let config = Configuration::new();
+        let config = Configuration::default();
         assert!(!config.options.is_empty());
 
         // Check that essential options exist
@@ -341,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_environment_variable_mapping() {
-        let config = Configuration::new();
+        let config = Configuration::default();
         let env_vars = config.to_env_vars();
 
         // Check that some expected environment variables are present

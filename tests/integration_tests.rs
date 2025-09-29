@@ -66,7 +66,7 @@ fn test_config_structure() {
     // Test that we can load the configuration structure
     use archinstall_tui::config::Configuration;
     
-    let config = Configuration::new();
+    let config = Configuration::default();
     assert!(!config.options.is_empty(), "Configuration should have options");
     
     // Check for essential options
