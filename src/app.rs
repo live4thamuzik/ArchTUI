@@ -699,10 +699,18 @@ impl App {
         {
             let mut state = self.state.lock().unwrap();
             if current_step < state.config.options.len() {
-                state.config.options[current_step].value = value.clone();
+                // Parse disk selection to extract only device path
+                let parsed_value = if option_name == "Disk" {
+                    // Extract just the device path from "/dev/sda (128G)" -> "/dev/sda"
+                    value.split_whitespace().next().unwrap_or(&value).to_string()
+                } else {
+                    value.clone()
+                };
+                
+                state.config.options[current_step].value = parsed_value.clone();
                 state.status_message = format!(
                     "Set {} to: {}",
-                    state.config.options[current_step].name, value
+                    state.config.options[current_step].name, parsed_value
                 );
             }
         }
