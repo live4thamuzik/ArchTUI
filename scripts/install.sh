@@ -84,26 +84,15 @@ GIT_REPOSITORY="${GIT_REPOSITORY:-No}"
 
 # Note: Additional configuration variables are defined above to avoid duplication
 
-# --- Partitioning Constants ---
-# Set defaults if not already set by environment variables
-EFI_PARTITION_TYPE="${EFI_PARTITION_TYPE:-EF00}"
-LINUX_PARTITION_TYPE="${LINUX_PARTITION_TYPE:-8300}"
-SWAP_PARTITION_TYPE="${SWAP_PARTITION_TYPE:-8200}"
-XBOOTLDR_PARTITION_TYPE="${XBOOTLDR_PARTITION_TYPE:-EA00}"  # Extended Boot Loader Partition
-DEFAULT_SWAP_SIZE_MIB="${DEFAULT_SWAP_SIZE_MIB:-2048}"
-DEFAULT_ROOT_SIZE_MIB="${DEFAULT_ROOT_SIZE_MIB:-102400}"
-EFI_PART_SIZE_MIB="${EFI_PART_SIZE_MIB:-100}"  # 100MB sufficient for bootloader files only
-XBOOTLDR_PART_SIZE_MIB="${XBOOTLDR_PART_SIZE_MIB:-1024}"  # 1GB for kernel files
+# --- Source Disk Strategies ---
+# Load partitioning constants and functions from disk_strategies.sh
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+source "$SCRIPT_DIR/disk_strategies.sh"
 
-# Make them readonly after setting defaults
-readonly EFI_PARTITION_TYPE
-readonly LINUX_PARTITION_TYPE
-readonly SWAP_PARTITION_TYPE
-readonly XBOOTLDR_PARTITION_TYPE
-readonly DEFAULT_SWAP_SIZE_MIB
-readonly DEFAULT_ROOT_SIZE_MIB
-readonly EFI_PART_SIZE_MIB
-readonly XBOOTLDR_PART_SIZE_MIB
+# Additional partitioning constants specific to install.sh
+readonly XBOOTLDR_PARTITION_TYPE="EA00"  # Extended Boot Loader Partition
+readonly EFI_PART_SIZE_MIB=100  # 100MB sufficient for bootloader files only
+readonly XBOOTLDR_PART_SIZE_MIB=1024  # 1GB for kernel files
 
 # --- Main Installation Function ---
 main() {
