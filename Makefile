@@ -1,6 +1,6 @@
 # Makefile for archinstall-tui development and testing
 
-.PHONY: help build test clean install dev-setup docker-build docker-test
+.PHONY: help build test clean install dev-setup format lint deps dev quick ci
 
 # Default target
 help:
@@ -13,8 +13,6 @@ help:
 	@echo "  clean        - Clean build artifacts"
 	@echo "  install      - Install the binary to /usr/local/bin"
 	@echo "  dev-setup    - Set up development environment"
-	@echo "  docker-build - Build Docker image for testing"
-	@echo "  docker-test  - Run tests in Docker container"
 	@echo "  format       - Format Rust code"
 	@echo "  lint         - Run linter checks"
 	@echo "  deps         - Update dependencies"
@@ -47,12 +45,6 @@ dev-setup:
 	rustup component add rustfmt clippy
 	cargo install cargo-watch
 
-# Docker targets
-docker-build:
-	docker build -t archinstall-tui:dev .
-
-docker-test:
-	docker run --rm -v $(PWD):/workspace archinstall-tui:dev make test
 
 # Code quality
 format:
