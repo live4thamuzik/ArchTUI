@@ -1,220 +1,153 @@
-# 🐧 ArchInstall TUI
+# ArchInstall TUI
 
-> **The professional Arch Linux installer that senior developers actually want to use**
+A Rust/Bash implementation of the Arch Linux installer with a clean TUI interface.
 
-A complete ground-up rewrite of the Arch Linux installer with a focus on **clean code**, **modular architecture**, and **production-quality standards**. This isn't just another installer - it's a **professional-grade tool** built with Rust and Bash that follows Arch Wiki best practices.
+## Overview
 
-## 🚀 **Why This Installer?**
+This is a complete rewrite of the Arch Linux installer using:
+- **Rust TUI** frontend for user interaction
+- **Bash backend** following Arch Wiki installation guide
+- **Pre-compiled binary** for immediate use on live ISO
 
-### **Built for Professionals**
-- ✅ **Clean, maintainable codebase** that any senior dev would sign off on
-- ✅ **Modular architecture** with clear separation of concerns
-- ✅ **Comprehensive error handling** and validation
-- ✅ **Arch Wiki compliant** partitioning and configuration
-- ✅ **Production-ready** with proper testing and CI/CD
-
-### **Zero-Friction Experience**
-- 🔥 **Pre-compiled binary** - no build tools needed on live ISO
-- 🔥 **Instant execution** - just `git clone` and run
-- 🔥 **Real-time progress** with live installation feedback
-- 🔥 **Smart validation** prevents common configuration mistakes
-
-## 📋 **Quick Start**
+## Quick Start
 
 ```bash
-# Clone and run - it's that simple
 git clone https://github.com/your-username/archinstall.git
 cd archinstall
 sudo ./archinstall-tui
 ```
 
-**That's it!** No dependencies, no compilation, no hassle.
+## Features
 
-## 🎯 **Key Features**
+### Core Functionality
+- **40+ configuration options** covering all installation aspects
+- **Real-time progress** with live installation feedback
+- **Smart validation** to prevent configuration errors
+- **Zero dependencies** - pre-compiled binary included
 
-### **🏗️ Modern Architecture**
-- **Rust TUI Frontend**: Clean, responsive interface using `ratatui`
-- **Bash Backend**: Robust installation engine following Arch Wiki
-- **Modular Design**: Each component has a single responsibility
-- **Type Safety**: Rust ensures compile-time error prevention
+### Partitioning
+- **ESP + XBOOTLDR** setup (Arch Wiki recommended)
+- **Multiple filesystems**: ext4, xfs, btrfs
+- **LVM support** for complex partitioning
+- **LUKS encryption** support
+- **UUID-based** device management
 
-### **🔧 Comprehensive Configuration**
-- **40+ Installation Options** covering every aspect of system setup
-- **Smart Validation**: Prevents incompatible configurations
-- **Contextual Warnings**: Proactive guidance for complex setups
-- **Dynamic Dependencies**: Options automatically adjust based on selections
+### Package Management
+- **Interactive package selection** with terminal-like interface
+- **AUR integration** via API (no paru/yay required)
+- **Dependency checking** before installation
+- **Pacman package search** with real-time results
 
-### **💾 Advanced Partitioning**
-- **ESP + XBOOTLDR**: Arch Wiki recommended dual-boot friendly setup
-- **Multiple Filesystems**: ext4, xfs, btrfs support
-- **LVM Support**: Logical volume management for complex setups
-- **Encryption**: Full LUKS encryption support
-- **UUID Management**: Robust device identification
+### System Configuration
+- **Desktop environments**: GNOME, KDE, Hyprland, i3, XFCE
+- **Display managers** auto-configured based on DE selection
+- **Plymouth themes** and GRUB customization
+- **Network configuration** and locale setup
 
-### **📦 Package Management**
-- **Interactive Package Selection**: Terminal-like interface for Pacman packages
-- **AUR Integration**: Search and install AUR packages via API
-- **Dependency Resolution**: Automatic package dependency checking
-- **Clean Installation**: Proper package management following Arch standards
+## Architecture
 
-### **🖥️ Desktop Environment Support**
-- **Multiple DEs**: GNOME, KDE, Hyprland, i3, XFCE
-- **Auto-configured**: Display managers automatically set based on DE
-- **Theme Support**: Plymouth themes and GRUB customization
-- **Clean Integration**: Proper systemd service management
-
-## 🛠️ **Technical Excellence**
-
-### **Code Quality**
-```rust
-// Example: Clean, documented Rust code
-impl Configuration {
-    /// Create a new configuration with validation
-    pub fn new() -> Self {
-        Self::default()
-    }
-    
-    /// Export to environment variables for Bash backend
-    pub fn to_env_vars(&self) -> HashMap<String, String> {
-        // Robust mapping with error handling
-    }
-}
+```
+Frontend (Rust TUI)     Backend (Bash)
+┌─────────────────┐     ┌─────────────────┐
+│ User Interface  │────▶│ Installation    │
+│ Configuration   │     │ Scripts         │
+│ Validation      │     │ Arch Wiki       │
+│ Progress Display│     │ Compliance      │
+└─────────────────┘     └─────────────────┘
 ```
 
-### **Bash Best Practices**
+## Usage
+
+1. **Run the installer**: `sudo ./archinstall-tui`
+2. **Navigate**: Arrow keys to move, Enter to configure
+3. **Configure**: Set installation options through TUI dialogs
+4. **Install**: Press Space to start installation
+5. **Monitor**: Watch real-time progress and logs
+
+## Configuration Options
+
+### Boot Setup
+- Boot Mode (Auto/UEFI/BIOS)
+- Secure Boot (with UEFI validation)
+- Bootloader (GRUB/systemd-boot)
+
+### System Setup
+- Disk selection and partitioning
+- Filesystem selection (ext4/xfs/btrfs)
+- Encryption configuration
+- Swap and home partition options
+
+### Localization
+- Timezone and region selection
+- Locale configuration
+- Keymap selection
+
+### Software
+- Desktop environment selection
+- Display manager configuration
+- Additional packages (Pacman + AUR)
+- AUR helper installation
+
+## Technical Details
+
+### Rust Frontend
+- **ratatui** for TUI interface
+- **crossterm** for terminal control
+- **Modular design** with separate concerns
+- **Type-safe configuration** management
+
+### Bash Backend
+- **Arch Wiki compliant** installation process
+- **Error handling** with proper exit codes
+- **Logging** for troubleshooting
+- **Dependency management** for required packages
+
+### Validation & Safety
+- **UEFI detection** for boot mode validation
+- **Secure Boot warnings** for proper setup
+- **Dependency checking** before operations
+- **Configuration validation** before installation
+
+## Development
+
+### Project Structure
+```
+src/
+├── main.rs          # Application entry point
+├── app.rs           # Main application logic
+├── config.rs        # Configuration management
+├── input.rs         # User input handling
+├── ui.rs            # TUI rendering
+└── package_utils.rs # Package search utilities
+
+scripts/
+├── install.sh           # Main installation script
+├── install_wrapper.sh   # TUI-friendly wrapper
+├── utils.sh            # Utility functions
+└── disk_strategies.sh  # Partitioning strategies
+```
+
+### Building
 ```bash
-# Example: Proper error handling and logging
-set -euo pipefail
-
-format_filesystem() {
-    local device="$1"
-    local fs_type="$2"
-    
-    case "$fs_type" in
-        "ext4")
-            check_package_available "e2fsprogs" "mkfs.ext4" || return 1
-            mkfs.ext4 -F "$device"
-            ;;
-        # ... other filesystems with proper dependency checking
-    esac
-}
-```
-
-### **Testing & Quality Assurance**
-- **Unit Tests**: Comprehensive Rust test suite
-- **Integration Tests**: End-to-end functionality validation
-- **CI/CD Pipeline**: Automated testing and building
-- **Error Handling**: Graceful failure recovery
-
-## 📁 **Project Structure**
-
-```
-archinstall/
-├── archinstall-tui          # Pre-compiled binary (ready to run!)
-├── src/                     # Rust TUI source code
-│   ├── main.rs             # Application entry point
-│   ├── app.rs              # Main application logic
-│   ├── config.rs           # Configuration management
-│   ├── input.rs            # User input handling
-│   ├── ui.rs               # TUI rendering
-│   └── package_utils.rs    # Package search utilities
-├── scripts/                 # Bash installation backend
-│   ├── install.sh          # Main installation script
-│   ├── utils.sh            # Utility functions
-│   └── disk_strategies.sh  # Partitioning strategies
-├── Source/                  # Plymouth themes
-└── tests/                   # Comprehensive test suite
-```
-
-## 🎮 **Usage Examples**
-
-### **Basic Installation**
-```bash
-sudo ./archinstall-tui
-# Navigate with arrow keys
-# Press Enter to configure options
-# Press Space to start installation
-```
-
-### **Advanced Configuration**
-- **UEFI + Secure Boot**: Automatic validation and warnings
-- **Encrypted Installation**: Full LUKS setup with proper key management
-- **Custom Partitioning**: Manual partition layout with validation
-- **Package Selection**: Interactive terminal-like package management
-
-## 🔒 **Security & Validation**
-
-### **Proactive Warnings**
-- **Secure Boot**: Warns about UEFI requirements
-- **Encryption**: Validates LUKS configuration
-- **Boot Mode**: Checks system compatibility
-- **Dependencies**: Ensures required packages are available
-
-### **Arch Wiki Compliance**
-- **ESP Mounting**: Uses `/efi` + XBOOTLDR as recommended
-- **UUID Usage**: Robust device identification
-- **Package Management**: Proper pacman integration
-- **Systemd Integration**: Clean service management
-
-## 🚦 **Development**
-
-### **For Contributors**
-```bash
-# Development branch has all the tools
+# Development
 git checkout dev
-make dev-setup    # Install development dependencies
-make test         # Run test suite
-make build        # Build release binary
-```
+make build
 
-### **For Testing**
-```bash
-# Test branch has comprehensive test suite
+# Testing
 git checkout test
-cargo test        # Run Rust tests
-make docker-test  # Test in containerized environment
+cargo test
 ```
 
-## 📊 **What Makes This Different**
+## Requirements
 
-| Feature | This Installer | Others |
-|---------|---------------|---------|
-| **Code Quality** | Production-ready Rust + Bash | Often Python scripts |
-| **Architecture** | Modular, maintainable | Monolithic |
-| **Testing** | Comprehensive test suite | Minimal testing |
-| **Dependencies** | Zero (pre-compiled) | Requires build tools |
-| **Validation** | Proactive warnings | Basic validation |
-| **Partitioning** | Arch Wiki compliant | Often outdated methods |
-| **Error Handling** | Robust recovery | Basic error messages |
+- Arch Linux live ISO
+- Root privileges
+- Internet connection (for packages)
 
-## 🤝 **Contributing**
+## License
 
-This project follows professional development practices:
-
-1. **Main Branch**: Clean, production-ready code
-2. **Dev Branch**: Development infrastructure and tools
-3. **Test Branch**: Comprehensive testing framework
-4. **Pull Requests**: Required for all changes
-5. **Code Review**: All code must meet quality standards
-
-## 📄 **License**
-
-MIT License - Feel free to use, modify, and distribute.
-
-## 🙏 **Acknowledgments**
-
-- Built following [Arch Linux Installation Guide](https://wiki.archlinux.org/title/Installation_guide)
-- Inspired by the need for a professional, maintainable installer
-- Thanks to the Arch Linux community for excellent documentation
+MIT License
 
 ---
 
-**Ready to install Arch Linux the professional way?** 
-
-```bash
-git clone https://github.com/your-username/archinstall.git
-cd archinstall
-sudo ./archinstall-tui
-```
-
-*No build tools. No dependencies. No excuses.* 🚀
+**Simple, clean, and effective.** Just like Arch Linux itself.
