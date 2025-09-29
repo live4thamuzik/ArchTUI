@@ -654,7 +654,7 @@ configure_grub() {
     
     if [ "$BOOT_MODE" = "UEFI" ]; then
         # ESP is mounted at /efi (Arch Wiki recommended for dual-boot)
-        arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=GRUB
+        arch-chroot /mnt grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=grub_uefi --recheck
     else
         # BIOS mode
         arch-chroot /mnt grub-install --target=i386-pc "$INSTALL_DISK"
