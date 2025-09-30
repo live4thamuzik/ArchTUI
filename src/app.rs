@@ -12,6 +12,34 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+/// Tool parameter types for input dialogs
+#[derive(Debug, Clone)]
+pub enum ToolParameter {
+    Text(String),
+    Number(i32),
+    Boolean(bool),
+    Selection(Vec<String>, usize),
+}
+
+/// Tool parameter definition
+#[derive(Debug, Clone)]
+pub struct ToolParam {
+    pub name: String,
+    pub description: String,
+    pub param_type: ToolParameter,
+    pub required: bool,
+}
+
+/// Tool parameter collection state
+#[derive(Debug, Clone)]
+pub struct ToolDialogState {
+    pub tool_name: String,
+    pub parameters: Vec<ToolParam>,
+    pub current_param: usize,
+    pub param_values: Vec<String>,
+    pub is_executing: bool,
+}
+
 /// Main application state
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -35,6 +63,8 @@ pub struct AppState {
     pub current_tool: Option<String>,
     /// Tool execution output
     pub tool_output: Vec<String>,
+    /// Tool dialog state for parameter collection
+    pub tool_dialog: Option<ToolDialogState>,
 }
 
 /// Application operating modes
@@ -56,6 +86,10 @@ pub enum AppMode {
     UserTools,
     /// Network tools submenu
     NetworkTools,
+    /// Tool parameter input dialog
+    ToolDialog,
+    /// Tool execution in progress
+    ToolExecution,
     /// Installation phase - running the actual installation
     Installation,
     /// Installation complete
@@ -75,6 +109,7 @@ impl Default for AppState {
             tools_menu_selection: 0,
             current_tool: None,
             tool_output: Vec::new(),
+            tool_dialog: None,
         }
     }
 }
@@ -243,6 +278,13 @@ impl App {
                         state.tools_menu_selection -= 1;
                     }
                 }
+                AppMode::ToolDialog => {
+                    if let Some(ref mut dialog) = state.tool_dialog {
+                        if dialog.current_param > 0 {
+                            dialog.current_param -= 1;
+                        }
+                    }
+                }
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_up();
                 }
@@ -273,6 +315,13 @@ impl App {
                 AppMode::NetworkTools => {
                     if state.tools_menu_selection < 4 { // 5 items total (0-4)
                         state.tools_menu_selection += 1;
+                    }
+                }
+                AppMode::ToolDialog => {
+                    if let Some(ref mut dialog) = state.tool_dialog {
+                        if dialog.current_param < dialog.parameters.len() - 1 {
+                            dialog.current_param += 1;
+                        }
                     }
                 }
                 AppMode::GuidedInstaller => {
@@ -341,6 +390,12 @@ impl App {
             }
             AppMode::AutomatedInstall => {
                 self.handle_automated_install_enter()?;
+            }
+            AppMode::ToolDialog => {
+                self.handle_tool_dialog_enter()?;
+            }
+            AppMode::ToolExecution => {
+                // Tool execution in progress, no action needed
             }
             AppMode::Installation => {
                 // Installation is running, no action needed
@@ -460,33 +515,33 @@ impl App {
 
     /// Execute a specific tool
     fn execute_tool(&mut self, mode: &AppMode, selection: usize) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = self.lock_state_mut()?;
-        
         match mode {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk (Manual)
+                        // Partition Disk (Manual) - No parameters needed
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("partition_disk".to_string());
                         state.status_message = "Launching manual disk partitioner...".to_string();
+                        // For now, just show status - could integrate with cfdisk/fdisk
                     }
                     1 => {
-                        // Format Partition
-                        state.current_tool = Some("format_partition".to_string());
-                        state.status_message = "Format partition tool...".to_string();
+                        // Format Partition - Create dialog
+                        self.create_tool_dialog("format_partition")?;
                     }
                     2 => {
-                        // Wipe Disk
-                        state.current_tool = Some("wipe_disk".to_string());
-                        state.status_message = "Wipe disk tool...".to_string();
+                        // Wipe Disk - Create dialog
+                        self.create_tool_dialog("wipe_disk")?;
                     }
                     3 => {
                         // Check Disk Health
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("check_disk_health".to_string());
                         state.status_message = "Checking disk health...".to_string();
                     }
                     4 => {
                         // Mount/Unmount Partitions
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("mount_management".to_string());
                         state.status_message = "Mount management tool...".to_string();
                     }
@@ -496,27 +551,28 @@ impl App {
             AppMode::SystemTools => {
                 match selection {
                     0 => {
-                        // Install/Repair Bootloader
-                        state.current_tool = Some("install_bootloader".to_string());
-                        state.status_message = "Bootloader installation tool...".to_string();
+                        // Install/Repair Bootloader - Create dialog
+                        self.create_tool_dialog("install_bootloader")?;
                     }
                     1 => {
-                        // Generate fstab
-                        state.current_tool = Some("generate_fstab".to_string());
-                        state.status_message = "Generating fstab...".to_string();
+                        // Generate fstab - Create dialog
+                        self.create_tool_dialog("generate_fstab")?;
                     }
                     2 => {
                         // Chroot into System
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("chroot_system".to_string());
                         state.status_message = "Chroot into system...".to_string();
                     }
                     3 => {
                         // Enable/Disable Services
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("manage_services".to_string());
                         state.status_message = "Service management tool...".to_string();
                     }
                     4 => {
                         // System Information
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("system_info".to_string());
                         state.status_message = "Displaying system information...".to_string();
                     }
@@ -526,27 +582,30 @@ impl App {
             AppMode::UserTools => {
                 match selection {
                     0 => {
-                        // Add New User
-                        state.current_tool = Some("add_user".to_string());
-                        state.status_message = "Add new user tool...".to_string();
+                        // Add New User - Create dialog
+                        self.create_tool_dialog("add_user")?;
                     }
                     1 => {
                         // Reset Password
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("reset_password".to_string());
                         state.status_message = "Reset password tool...".to_string();
                     }
                     2 => {
                         // Manage User Groups
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("manage_groups".to_string());
                         state.status_message = "User group management tool...".to_string();
                     }
                     3 => {
                         // Configure SSH
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("configure_ssh".to_string());
                         state.status_message = "SSH configuration tool...".to_string();
                     }
                     4 => {
                         // Security Audit
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("security_audit".to_string());
                         state.status_message = "Security audit tool...".to_string();
                     }
@@ -557,21 +616,25 @@ impl App {
                 match selection {
                     0 => {
                         // Configure Network Interface
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("configure_network".to_string());
                         state.status_message = "Network configuration tool...".to_string();
                     }
                     1 => {
                         // Test Network Connectivity
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("test_network".to_string());
                         state.status_message = "Testing network connectivity...".to_string();
                     }
                     2 => {
                         // Configure Firewall
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("configure_firewall".to_string());
                         state.status_message = "Firewall configuration tool...".to_string();
                     }
                     3 => {
                         // Network Diagnostics
+                        let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("network_diagnostics".to_string());
                         state.status_message = "Network diagnostics tool...".to_string();
                     }
@@ -1570,6 +1633,217 @@ impl App {
                 state.config_scroll.update_visible_items(visible_height);
             }
         }
+        Ok(())
+    }
+
+    /// Get tool parameter definitions for a specific tool
+    fn get_tool_parameters(tool_name: &str) -> Vec<ToolParam> {
+        match tool_name {
+            "install_bootloader" => vec![
+                ToolParam {
+                    name: "type".to_string(),
+                    description: "Bootloader type (grub or systemd-boot)".to_string(),
+                    param_type: ToolParameter::Selection(vec!["grub".to_string(), "systemd-boot".to_string()], 0),
+                    required: true,
+                },
+                ToolParam {
+                    name: "disk".to_string(),
+                    description: "Target disk device (e.g., /dev/sda)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "efi_path".to_string(),
+                    description: "EFI partition path (optional)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "mode".to_string(),
+                    description: "Boot mode (uefi or bios)".to_string(),
+                    param_type: ToolParameter::Selection(vec!["uefi".to_string(), "bios".to_string()], 0),
+                    required: true,
+                },
+            ],
+            "generate_fstab" => vec![
+                ToolParam {
+                    name: "root".to_string(),
+                    description: "Root partition path (e.g., /mnt)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+            ],
+            "format_partition" => vec![
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Partition device (e.g., /dev/sda1)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "filesystem".to_string(),
+                    description: "Filesystem type".to_string(),
+                    param_type: ToolParameter::Selection(vec![
+                        "ext4".to_string(), "xfs".to_string(), "btrfs".to_string(),
+                        "f2fs".to_string(), "ntfs".to_string()
+                    ], 0),
+                    required: true,
+                },
+                ToolParam {
+                    name: "label".to_string(),
+                    description: "Partition label (optional)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+            ],
+            "wipe_disk" => vec![
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Disk device to wipe (e.g., /dev/sda)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "method".to_string(),
+                    description: "Wipe method".to_string(),
+                    param_type: ToolParameter::Selection(vec![
+                        "zero".to_string(), "random".to_string(), "secure".to_string()
+                    ], 0),
+                    required: true,
+                },
+                ToolParam {
+                    name: "confirm".to_string(),
+                    description: "Confirm destructive operation".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: true,
+                },
+            ],
+            "add_user" => vec![
+                ToolParam {
+                    name: "username".to_string(),
+                    description: "Username to create".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "full_name".to_string(),
+                    description: "Full name (optional)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "groups".to_string(),
+                    description: "Additional groups (comma-separated)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "shell".to_string(),
+                    description: "Default shell".to_string(),
+                    param_type: ToolParameter::Selection(vec![
+                        "/bin/bash".to_string(), "/bin/zsh".to_string(), "/bin/fish".to_string()
+                    ], 0),
+                    required: true,
+                },
+            ],
+            _ => vec![],
+        }
+    }
+
+    /// Handle tool dialog enter key
+    fn handle_tool_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let (tool_name, current_param, param_values) = {
+            let state = self.lock_state()?;
+            if let Some(ref dialog) = state.tool_dialog {
+                (dialog.tool_name.clone(), dialog.current_param, dialog.param_values.clone())
+            } else {
+                return Ok(());
+            }
+        };
+
+        {
+            let mut state = self.lock_state_mut()?;
+            if let Some(ref mut dialog) = state.tool_dialog {
+                if current_param < dialog.parameters.len() {
+                    // Move to next parameter or execute tool
+                    if current_param == dialog.parameters.len() - 1 {
+                        // All parameters collected, execute tool
+                        state.mode = AppMode::ToolExecution;
+                    } else {
+                        // Move to next parameter
+                        dialog.current_param += 1;
+                    }
+                }
+            }
+        }
+
+        // Execute tool outside of the state lock
+        if current_param == self.lock_state()?.tool_dialog.as_ref().map(|d| d.parameters.len() - 1).unwrap_or(0) {
+            self.execute_tool_with_params(&tool_name, &param_values)?;
+        }
+
+        Ok(())
+    }
+
+    /// Execute tool with collected parameters
+    fn execute_tool_with_params(&mut self, tool_name: &str, params: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = self.lock_state_mut()?;
+        
+        // Build command arguments
+        let mut args = vec![tool_name.to_string()];
+        let param_defs = Self::get_tool_parameters(tool_name);
+        
+        for (i, param_def) in param_defs.iter().enumerate() {
+            if i < params.len() && !params[i].is_empty() {
+                args.push(format!("--{}", param_def.name));
+                args.push(params[i].clone());
+            }
+        }
+
+        // Execute the tool
+        let output = std::process::Command::new("scripts/tools/install_bootloader.sh")
+            .args(&args[1..]) // Skip the tool name
+            .output()?;
+
+        // Store output
+        state.tool_output = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
+
+        if !output.stderr.is_empty() {
+            let stderr_lines: Vec<String> = String::from_utf8_lossy(&output.stderr)
+                .lines()
+                .map(|s| s.to_string())
+                .collect();
+            state.tool_output.extend(stderr_lines);
+        }
+
+        state.status_message = if output.status.success() {
+            "Tool executed successfully".to_string()
+        } else {
+            "Tool execution failed".to_string()
+        };
+
+        Ok(())
+    }
+
+    /// Create a tool dialog for parameter collection
+    fn create_tool_dialog(&mut self, tool_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let parameters = Self::get_tool_parameters(tool_name);
+        let param_values = vec![String::new(); parameters.len()];
+        
+        let mut state = self.lock_state_mut()?;
+        state.tool_dialog = Some(ToolDialogState {
+            tool_name: tool_name.to_string(),
+            parameters,
+            current_param: 0,
+            param_values,
+            is_executing: false,
+        });
+        state.mode = AppMode::ToolDialog;
+        state.status_message = format!("Configure parameters for {}", tool_name);
+        
         Ok(())
     }
 }

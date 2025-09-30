@@ -59,6 +59,12 @@ impl UiRenderer {
             crate::app::AppMode::NetworkTools => {
                 self.render_network_tools_menu(f, state);
             }
+            crate::app::AppMode::ToolDialog => {
+                self.render_tool_dialog(f, state);
+            }
+            crate::app::AppMode::ToolExecution => {
+                self.render_tool_execution(f, state);
+            }
             crate::app::AppMode::Installation => {
                 self.render_installation_ui(f, state);
             }
@@ -982,21 +988,128 @@ impl UiRenderer {
             "Press Enter to select config file, 'b' to go back",
         );
     }
-}
 
-// Helper trait for input types
-trait InputTypeHelper {
-    fn get_selected_index(&self) -> usize;
-}
-
-impl InputTypeHelper for crate::input::InputType {
-    fn get_selected_index(&self) -> usize {
-        match self {
-            crate::input::InputType::Selection { scroll_state, .. } => scroll_state.selected_index,
-            crate::input::InputType::DiskSelection { scroll_state, .. } => {
-                scroll_state.selected_index
+    /// Render tool parameter dialog
+    fn render_tool_dialog(&self, f: &mut Frame, state: &AppState) {
+        if let Some(ref dialog) = state.tool_dialog {
+            let area = f.area();
+            
+            // Create a centered dialog box
+            let dialog_width = (area.width * 3 / 4).min(80);
+            let dialog_height = (area.height * 3 / 4).min(20);
+            let dialog_x = (area.width - dialog_width) / 2;
+            let dialog_y = (area.height - dialog_height) / 2;
+            
+            let dialog_rect = ratatui::layout::Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
+            
+            // Draw dialog background
+            f.render_widget(
+                ratatui::widgets::Block::default()
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .title(format!("Configure {}", dialog.tool_name))
+                    .style(ratatui::style::Style::default().bg(ratatui::style::Color::DarkGray)),
+                dialog_rect,
+            );
+            
+            // Render parameter list
+            let param_area = ratatui::layout::Rect::new(
+                dialog_x + 2,
+                dialog_y + 2,
+                dialog_width - 4,
+                dialog_height - 6,
+            );
+            
+            let mut param_items = Vec::new();
+            for (i, param) in dialog.parameters.iter().enumerate() {
+                let style = if i == dialog.current_param {
+                    ratatui::style::Style::default().fg(ratatui::style::Color::Yellow)
+                } else {
+                    ratatui::style::Style::default()
+                };
+                
+                let value = if i < dialog.param_values.len() {
+                    &dialog.param_values[i]
+                } else {
+                    ""
+                };
+                
+                param_items.push(ratatui::widgets::ListItem::new(
+                    ratatui::text::Line::from(vec![
+                        ratatui::text::Span::styled(
+                            format!("{}: ", param.name),
+                            ratatui::style::Style::default().fg(ratatui::style::Color::Cyan),
+                        ),
+                        ratatui::text::Span::styled(
+                            value.to_string(),
+                            style,
+                        ),
+                    ])
+                ));
             }
-            _ => 0,
+            
+            let param_list = ratatui::widgets::List::new(param_items)
+                .highlight_style(ratatui::style::Style::default().fg(ratatui::style::Color::Yellow));
+            
+            f.render_widget(param_list, param_area);
+            
+            // Render instructions
+            let instruction_area = ratatui::layout::Rect::new(
+                dialog_x + 2,
+                dialog_y + dialog_height - 3,
+                dialog_width - 4,
+                1,
+            );
+            
+            f.render_widget(
+                ratatui::widgets::Paragraph::new("Enter: Next parameter | b: Back to tools")
+                    .style(ratatui::style::Style::default().fg(ratatui::style::Color::Gray)),
+                instruction_area,
+            );
         }
+    }
+
+    /// Render tool execution screen
+    fn render_tool_execution(&self, f: &mut Frame, state: &AppState) {
+        let area = f.area();
+        
+        // Title
+        let title_area = ratatui::layout::Rect::new(0, 0, area.width, 3);
+        f.render_widget(
+            ratatui::widgets::Paragraph::new("Tool Execution")
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::Yellow))
+                .alignment(ratatui::layout::Alignment::Center),
+            title_area,
+        );
+        
+        // Status message
+        let status_area = ratatui::layout::Rect::new(0, 3, area.width, 1);
+        f.render_widget(
+            ratatui::widgets::Paragraph::new(state.status_message.as_str())
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::Green)),
+            status_area,
+        );
+        
+        // Tool output
+        if !state.tool_output.is_empty() {
+            let output_area = ratatui::layout::Rect::new(2, 5, area.width - 4, area.height - 8);
+            let output_items: Vec<ratatui::widgets::ListItem> = state.tool_output
+                .iter()
+                .map(|line| ratatui::widgets::ListItem::new(line.as_str()))
+                .collect();
+            
+            let output_list = ratatui::widgets::List::new(output_items)
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
+            
+            f.render_widget(output_list, output_area);
+        }
+        
+        // Instructions
+        let instruction_area = ratatui::layout::Rect::new(0, area.height - 2, area.width, 1);
+        f.render_widget(
+            ratatui::widgets::Paragraph::new("b: Back to tools | q: Quit")
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::Gray))
+                .alignment(ratatui::layout::Alignment::Center),
+            instruction_area,
+        );
     }
 }

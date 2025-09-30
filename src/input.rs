@@ -565,6 +565,19 @@ impl InputDialog {
     }
 }
 
+impl InputType {
+    /// Get the selected index for input types that support selection
+    pub fn get_selected_index(&self) -> usize {
+        match self {
+            InputType::Selection { scroll_state, .. } => scroll_state.selected_index,
+            InputType::DiskSelection { scroll_state, .. } => scroll_state.selected_index,
+            InputType::MultiDiskSelection { scroll_state, .. } => scroll_state.selected_index,
+            InputType::PackageSelection { list_state, .. } => list_state.selected().unwrap_or(0),
+            _ => 0,
+        }
+    }
+}
+
 /// Result of input handling
 #[derive(Debug, Clone)]
 pub enum InputResult {
