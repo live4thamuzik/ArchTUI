@@ -35,8 +35,29 @@ impl UiRenderer {
         }
 
         match state.mode {
-            crate::app::AppMode::Configuration => {
+            crate::app::AppMode::MainMenu => {
+                self.render_main_menu(f, state);
+            }
+            crate::app::AppMode::GuidedInstaller => {
                 self.render_configuration_ui(f, state, input_handler);
+            }
+            crate::app::AppMode::AutomatedInstall => {
+                self.render_automated_install_ui(f, state);
+            }
+            crate::app::AppMode::ToolsMenu => {
+                self.render_tools_menu(f, state);
+            }
+            crate::app::AppMode::DiskTools => {
+                self.render_disk_tools_menu(f, state);
+            }
+            crate::app::AppMode::SystemTools => {
+                self.render_system_tools_menu(f, state);
+            }
+            crate::app::AppMode::UserTools => {
+                self.render_user_tools_menu(f, state);
+            }
+            crate::app::AppMode::NetworkTools => {
+                self.render_network_tools_menu(f, state);
             }
             crate::app::AppMode::Installation => {
                 self.render_installation_ui(f, state);
@@ -596,6 +617,370 @@ impl UiRenderer {
                 .style(Style::default().fg(Color::Cyan));
             f.render_widget(status, chunks[3]);
         }
+    }
+
+    /// Render the main menu
+    fn render_main_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Arch Linux Toolkit");
+
+        // Render main menu
+        let menu_items = vec![
+            " ▶ Guided Installer  (Recommended for new users)",
+            " ▶ Automated Install (Run from configuration file)",
+            " ▶ Arch Linux Tools  (System repair and administration)",
+            " ▶ Quit",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.main_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Main Menu"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'q' to quit",
+        );
+    }
+
+    /// Render the tools menu
+    fn render_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Arch Linux Tools");
+
+        // Render tools menu
+        let menu_items = vec![
+            " ▶ Disk & Filesystem Tools",
+            " ▶ System & Boot Tools",
+            " ▶ User & Security Tools",
+            " ▶ Network Tools",
+            " ▶ Back to Main Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Tools Menu"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render disk tools menu
+    fn render_disk_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Disk & Filesystem Tools");
+
+        // Render disk tools menu
+        let menu_items = vec![
+            " ▶ Partition Disk (Manual)",
+            " ▶ Format Partition",
+            " ▶ Wipe Disk",
+            " ▶ Check Disk Health",
+            " ▶ Mount/Unmount Partitions",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Disk Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render system tools menu
+    fn render_system_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "System & Boot Tools");
+
+        // Render system tools menu
+        let menu_items = vec![
+            " ▶ Install/Repair Bootloader",
+            " ▶ Generate fstab",
+            " ▶ Chroot into System",
+            " ▶ Enable/Disable Services",
+            " ▶ System Information",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("System Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render user tools menu
+    fn render_user_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "User & Security Tools");
+
+        // Render user tools menu
+        let menu_items = vec![
+            " ▶ Add New User",
+            " ▶ Reset Password",
+            " ▶ Manage User Groups",
+            " ▶ Configure SSH",
+            " ▶ Security Audit",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("User Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render network tools menu
+    fn render_network_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Network Tools");
+
+        // Render network tools menu
+        let menu_items = vec![
+            " ▶ Configure Network Interface",
+            " ▶ Test Network Connectivity",
+            " ▶ Configure Firewall",
+            " ▶ Network Diagnostics",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Network Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render automated install UI
+    fn render_automated_install_ui(&self, f: &mut Frame, _state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Content
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Automated Installation");
+
+        // Render content
+        let content = Paragraph::new("Automated installation from configuration file")
+            .block(Block::default().borders(Borders::ALL).title("Configuration"))
+            .alignment(Alignment::Center);
+        f.render_widget(content, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Press Enter to select config file, 'b' to go back",
+        );
     }
 }
 
