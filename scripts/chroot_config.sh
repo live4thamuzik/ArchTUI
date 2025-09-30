@@ -23,6 +23,61 @@ _log_debug() { _log_message "DEBUG" "$1"; }
 _log_success() { echo -e "\n\e[32;1m==================================================\e[0m\n\e[32;1m $* \e[0m\n\e[32;1m==================================================\e[0m\n"; }
 
 # =============================================================================
+# PACKAGE DEFINITIONS FOR MAINTAINABILITY
+# =============================================================================
+
+# Essential system packages
+ESSENTIAL_PACKAGES=(
+    "base"
+    "base-devel"
+    "linux"
+    "linux-firmware"
+    "networkmanager"
+    "openssh"
+    "vim"
+    "nano"
+    "git"
+    "curl"
+    "wget"
+    "htop"
+    "tree"
+    "unzip"
+    "zip"
+    "man-db"
+    "man-pages"
+)
+
+# Bootloader packages
+GRUB_EFI_PACKAGES=("grub" "efibootmgr")
+GRUB_BIOS_PACKAGES=("grub")
+
+# Display manager packages
+GDM_PACKAGES=("gdm")
+SDDM_PACKAGES=("sddm")
+LIGHTDM_PACKAGES=("lightdm" "lightdm-gtk-greeter")
+LXDM_PACKAGES=("lxdm")
+
+# GPU driver packages
+NVIDIA_PACKAGES=("nvidia" "nvidia-utils" "nvidia-settings")
+NVIDIA_LTS_PACKAGES=("nvidia-lts" "nvidia-utils" "nvidia-settings")
+AMD_PACKAGES=("mesa" "lib32-mesa" "xf86-video-amdgpu")
+INTEL_PACKAGES=("mesa" "lib32-mesa" "xf86-video-intel")
+NOUVEAU_PACKAGES=("mesa" "lib32-mesa" "xf86-video-nouveau")
+
+# Time synchronization packages
+NTP_PACKAGES=("ntp")
+CHRONY_PACKAGES=("chrony")
+
+# Plymouth packages
+PLYMOUTH_PACKAGES=("plymouth")
+
+# Flatpak packages
+FLATPAK_PACKAGES=("flatpak")
+
+# Numlock packages
+NUMLOCK_PACKAGES=("numlockx")
+
+# =============================================================================
 # MISSING FUNCTION IMPLEMENTATIONS
 # =============================================================================
 
@@ -69,37 +124,8 @@ install_microcode_chroot() {
 install_essential_extras_chroot() {
     _log_info "Installing essential extra packages..."
     
-    local essential_packages=(
-        "base-devel"
-        "git"
-        "vim"
-        "neovim"
-        "nano"
-        "man-db"
-        "man-pages"
-        "texinfo"
-        "sudo"
-        "which"
-        "file"
-        "less"
-        "openssh"
-        "rsync"
-        "wget"
-        "curl"
-        "unzip"
-        "p7zip"
-        "htop"
-        "tree"
-        "bash-completion"
-        "usbutils"
-        "pciutils"
-        "lshw"
-        "dmidecode"
-        "efibootmgr"
-        "os-prober"
-    )
-    
-    pacman -S --noconfirm "${essential_packages[@]}"
+    # Use the predefined package array for maintainability
+    pacman -S --noconfirm "${ESSENTIAL_PACKAGES[@]}"
     _log_success "Essential extra packages installed"
 }
 
@@ -123,10 +149,10 @@ install_time_sync_chroot() {
     
     case "$TIME_SYNC" in
         "ntpd")
-            pacman -S --noconfirm ntp
+            pacman -S --noconfirm "${NTP_PACKAGES[@]}"
             ;;
         "chrony")
-            pacman -S --noconfirm chrony
+            pacman -S --noconfirm "${CHRONY_PACKAGES[@]}"
             ;;
         "systemd-timesyncd")
             # Already included in systemd
@@ -225,11 +251,11 @@ install_bootloader_chroot() {
         "grub")
             if [[ "$BOOT_MODE" == "UEFI" ]]; then
                 _log_info "Installing GRUB for UEFI..."
-                pacman -S --noconfirm grub efibootmgr
+                pacman -S --noconfirm "${GRUB_EFI_PACKAGES[@]}"
                 grub-install --target=x86_64-efi --bootloader-id=grub_uefi --recheck --efi-directory=/efi
             else
                 _log_info "Installing GRUB for BIOS..."
-                pacman -S --noconfirm grub
+                pacman -S --noconfirm "${GRUB_BIOS_PACKAGES[@]}"
                 grub-install --target=i386-pc --recheck "${INSTALL_DISK}"
             fi
             ;;
@@ -264,7 +290,7 @@ configure_plymouth_chroot() {
     _log_info "Configuring Plymouth boot splash..."
     
     if [[ "$PLYMOUTH" == "Yes" ]]; then
-        pacman -S --noconfirm plymouth
+        pacman -S --noconfirm "${PLYMOUTH_PACKAGES[@]}"
         
         # Install theme (themes should already be copied by install.sh)
         if [[ -n "${PLYMOUTH_THEME:-}" && "$PLYMOUTH_THEME" != "None" ]]; then
@@ -388,16 +414,16 @@ install_display_manager_chroot() {
     
     case "$DISPLAY_MANAGER" in
         "gdm")
-            pacman -S --noconfirm gdm
+            pacman -S --noconfirm "${GDM_PACKAGES[@]}"
             ;;
         "sddm")
-            pacman -S --noconfirm sddm
+            pacman -S --noconfirm "${SDDM_PACKAGES[@]}"
             ;;
         "lightdm")
-            pacman -S --noconfirm lightdm lightdm-gtk-greeter
+            pacman -S --noconfirm "${LIGHTDM_PACKAGES[@]}"
             ;;
         "lxdm")
-            pacman -S --noconfirm lxdm
+            pacman -S --noconfirm "${LXDM_PACKAGES[@]}"
             ;;
         "none")
             _log_info "No display manager requested"
@@ -412,19 +438,19 @@ install_gpu_drivers_chroot() {
     
     case "$GPU_DRIVERS" in
         "nvidia")
-            pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
+            pacman -S --noconfirm "${NVIDIA_PACKAGES[@]}"
             ;;
         "nvidia-lts")
-            pacman -S --noconfirm nvidia-lts nvidia-utils nvidia-settings
+            pacman -S --noconfirm "${NVIDIA_LTS_PACKAGES[@]}"
             ;;
         "amd")
-            pacman -S --noconfirm mesa lib32-mesa xf86-video-amdgpu
+            pacman -S --noconfirm "${AMD_PACKAGES[@]}"
             ;;
         "intel")
-            pacman -S --noconfirm mesa lib32-mesa xf86-video-intel
+            pacman -S --noconfirm "${INTEL_PACKAGES[@]}"
             ;;
         "nouveau")
-            pacman -S --noconfirm mesa lib32-mesa xf86-video-nouveau
+            pacman -S --noconfirm "${NOUVEAU_PACKAGES[@]}"
             ;;
     esac
 }
@@ -459,7 +485,7 @@ install_aur_helper_chroot() {
 install_flatpak_chroot() {
     if [[ "$FLATPAK" == "Yes" ]]; then
         _log_info "Installing Flatpak..."
-        pacman -S --noconfirm flatpak
+        pacman -S --noconfirm "${FLATPAK_PACKAGES[@]}"
     fi
 }
 
@@ -494,7 +520,7 @@ install_custom_aur_packages_chroot() {
 configure_numlock_chroot() {
     if [[ "$NUMLOCK_ON_BOOT" == "Yes" ]]; then
         _log_info "Configuring numlock on boot..."
-        pacman -S --noconfirm numlockx
+        pacman -S --noconfirm "${NUMLOCK_PACKAGES[@]}"
         echo "numlockx on" >> /etc/xdg/openbox/autostart
     fi
 }
