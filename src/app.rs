@@ -62,6 +62,14 @@ pub struct App {
 }
 
 impl App {
+    /// Helper function to safely lock the state mutex
+    fn lock_state(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, AppState>, Box<dyn std::error::Error>> {
+        self.state
+            .lock()
+            .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)).into())
+    }
 
     /// Helper function to safely lock the state mutex mutably
     fn lock_state_mut(
@@ -71,7 +79,6 @@ impl App {
             .lock()
             .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)).into())
     }
-
 
     /// Create a new application instance
     pub fn new() -> Self {
@@ -414,7 +421,7 @@ impl App {
 
         if self.validate_configuration(&config) {
             // All validation passed - installation can proceed
-            return true;
+            true
         } else {
             let mut state = match self.lock_state_mut() {
                 Ok(state) => state,
@@ -560,7 +567,7 @@ impl App {
                 } else {
                     if let Ok(mut state) = self.lock_state_mut() {
                         state.status_message =
-                        "Swap size can only be configured when swap is enabled.".to_string();
+                            "Swap size can only be configured when swap is enabled.".to_string();
                     }
                 }
             }
@@ -654,9 +661,9 @@ impl App {
             "Disk" => {
                 // Check if we need multi-disk selection
                 let state = match self.lock_state() {
-                Ok(state) => state,
-                Err(_) => return Ok(()),
-            };
+                    Ok(state) => state,
+                    Err(_) => return Ok(()),
+                };
                 let partitioning_strategy = state
                     .config
                     .options
@@ -861,9 +868,9 @@ impl App {
             if value == "Yes, start partitioning" {
                 // User confirmed manual partitioning
                 let state = match self.lock_state() {
-                Ok(state) => state,
-                Err(_) => return Ok(()),
-            };
+                    Ok(state) => state,
+                    Err(_) => return Ok(()),
+                };
                 let disk_value = state
                     .config
                     .options
@@ -927,7 +934,6 @@ impl App {
             // If user chose "No, go back", just return (dialog will close)
             return Ok(());
         }
-        } // Close the match statement
 
         // Auto-set encryption based on partitioning strategy
         if option_name == "Partitioning Strategy" {
@@ -1013,10 +1019,10 @@ impl App {
                 if let Ok(mut state) = self.lock_state_mut() {
                     // Find display manager option by name
                     if let Some(display_manager_option) = state
-                    .config
-                    .options
-                    .iter_mut()
-                    .find(|opt| opt.name == "Display Manager")
+                        .config
+                        .options
+                        .iter_mut()
+                        .find(|opt| opt.name == "Display Manager")
                     {
                         display_manager_option.value = display_manager.to_string();
                         state.status_message = format!(
@@ -1038,137 +1044,137 @@ impl App {
         value: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(mut state) = self.lock_state_mut() {
+            match option_name {
+                "Swap" => {
+                    if value.to_lowercase() == "no" {
+                        // Disable swap size when swap is disabled
+                        if let Some(swap_size_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Swap Size")
+                        {
+                            swap_size_option.value = "N/A".to_string();
+                        }
+                    } else if value.to_lowercase() == "yes" {
+                        // Reset swap size to default when swap is enabled
+                        if let Some(swap_size_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Swap Size")
+                        {
+                            swap_size_option.value = "2GB".to_string();
+                        }
+                    }
+                }
+                "Btrfs Snapshots" => {
+                    if value.to_lowercase() == "no" {
+                        // Disable btrfs frequency, keep count, and assistant when snapshots are disabled
+                        if let Some(freq_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Btrfs Frequency")
+                        {
+                            freq_option.value = "N/A".to_string();
+                        }
+                        if let Some(keep_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Btrfs Keep Count")
+                        {
+                            keep_option.value = "N/A".to_string();
+                        }
+                        if let Some(assistant_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Btrfs Assistant")
+                        {
+                            assistant_option.value = "No".to_string();
+                        }
+                    } else if value.to_lowercase() == "yes" {
+                        // Reset btrfs options to defaults when snapshots are enabled
+                        if let Some(freq_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Btrfs Frequency")
+                        {
+                            freq_option.value = "weekly".to_string();
+                        }
+                        if let Some(keep_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Btrfs Keep Count")
+                        {
+                            keep_option.value = "3".to_string();
+                        }
+                    }
+                }
+                "Plymouth" => {
+                    if value.to_lowercase() == "no" {
+                        // Set plymouth theme to none when plymouth is disabled
+                        if let Some(theme_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Plymouth Theme")
+                        {
+                            theme_option.value = "none".to_string();
+                        }
+                    }
+                }
+                "GRUB Theme" => {
+                    if value.to_lowercase() == "no" {
+                        // Set GRUB theme selection to none when themes are disabled
+                        if let Some(theme_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "GRUB Theme Selection")
+                        {
+                            theme_option.value = "none".to_string();
+                        }
+                    }
+                }
+                "Timezone Region" => {
+                    // Reset timezone when region changes
+                    if let Some(timezone_option) = state
+                        .config
+                        .options
+                        .iter_mut()
+                        .find(|opt| opt.name == "Timezone")
+                    {
+                        timezone_option.value = "".to_string(); // Reset to empty to force selection
+                    }
 
-        match option_name {
-            "Swap" => {
-                if value.to_lowercase() == "no" {
-                    // Disable swap size when swap is disabled
-                    if let Some(swap_size_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Swap Size")
-                    {
-                        swap_size_option.value = "N/A".to_string();
-                    }
-                } else if value.to_lowercase() == "yes" {
-                    // Reset swap size to default when swap is enabled
-                    if let Some(swap_size_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Swap Size")
-                    {
-                        swap_size_option.value = "2GB".to_string();
-                    }
-                }
-            }
-            "Btrfs Snapshots" => {
-                if value.to_lowercase() == "no" {
-                    // Disable btrfs frequency, keep count, and assistant when snapshots are disabled
-                    if let Some(freq_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Btrfs Frequency")
-                    {
-                        freq_option.value = "N/A".to_string();
-                    }
-                    if let Some(keep_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Btrfs Keep Count")
-                    {
-                        keep_option.value = "N/A".to_string();
-                    }
-                    if let Some(assistant_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Btrfs Assistant")
-                    {
-                        assistant_option.value = "No".to_string();
-                    }
-                } else if value.to_lowercase() == "yes" {
-                    // Reset btrfs options to defaults when snapshots are enabled
-                    if let Some(freq_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Btrfs Frequency")
-                    {
-                        freq_option.value = "weekly".to_string();
-                    }
-                    if let Some(keep_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Btrfs Keep Count")
-                    {
-                        keep_option.value = "3".to_string();
-                    }
-                }
-            }
-            "Plymouth" => {
-                if value.to_lowercase() == "no" {
-                    // Set plymouth theme to none when plymouth is disabled
-                    if let Some(theme_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Plymouth Theme")
-                    {
-                        theme_option.value = "none".to_string();
-                    }
-                }
-            }
-            "GRUB Theme" => {
-                if value.to_lowercase() == "no" {
-                    // Set GRUB theme selection to none when themes are disabled
-                    if let Some(theme_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "GRUB Theme Selection")
-                    {
-                        theme_option.value = "none".to_string();
-                    }
-                }
-            }
-            "Timezone Region" => {
-                // Reset timezone when region changes
-                if let Some(timezone_option) = state
-                    .config
-                    .options
-                    .iter_mut()
-                    .find(|opt| opt.name == "Timezone")
-                {
-                    timezone_option.value = "".to_string(); // Reset to empty to force selection
-                }
+                    // Auto-select mirror country based on region for quality of life
+                    let mirror_country = match value {
+                        "US" => "United States",
+                        "Europe" => "Germany", // Default to Germany for Europe
+                        "Asia" => "Japan",     // Default to Japan for Asia
+                        "Australia" => "Australia",
+                        "America" => "United States", // For America region, default to US
+                        _ => "",                      // Don't auto-select for other regions
+                    };
 
-                // Auto-select mirror country based on region for quality of life
-                let mirror_country = match value {
-                    "US" => "United States",
-                    "Europe" => "Germany", // Default to Germany for Europe
-                    "Asia" => "Japan",     // Default to Japan for Asia
-                    "Australia" => "Australia",
-                    "America" => "United States", // For America region, default to US
-                    _ => "",                      // Don't auto-select for other regions
-                };
-
-                if !mirror_country.is_empty() {
-                    if let Some(mirror_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Mirror Country")
-                    {
-                        mirror_option.value = mirror_country.to_string();
+                    if !mirror_country.is_empty() {
+                        if let Some(mirror_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Mirror Country")
+                        {
+                            mirror_option.value = mirror_country.to_string();
+                        }
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
 
         Ok(())

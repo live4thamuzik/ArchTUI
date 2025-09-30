@@ -4,6 +4,40 @@
 
 set -euo pipefail
 
+# Cleanup function for unmounting on failure
+cleanup_on_exit() {
+    local exit_code=$?
+    echo "=== CLEANUP ON EXIT (Code: $exit_code) ==="
+    
+    # Try to unmount everything cleanly
+    if mountpoint -q /mnt/boot 2>/dev/null; then
+        echo "Unmounting /mnt/boot..."
+        umount /mnt/boot 2>/dev/null || true
+    fi
+    
+    if mountpoint -q /mnt/efi 2>/dev/null; then
+        echo "Unmounting /mnt/efi..."
+        umount /mnt/efi 2>/dev/null || true
+    fi
+    
+    if mountpoint -q /mnt 2>/dev/null; then
+        echo "Unmounting /mnt..."
+        umount /mnt 2>/dev/null || true
+    fi
+    
+    # Close any LUKS containers
+    if [[ -n "${LUKS_ROOT_UUID:-}" ]]; then
+        echo "Closing LUKS container..."
+        cryptsetup close arch_root 2>/dev/null || true
+    fi
+    
+    echo "=== CLEANUP COMPLETE ==="
+    exit $exit_code
+}
+
+# Set up exit trap
+trap cleanup_on_exit EXIT
+
 # Debug: Show script startup
 echo "=== INSTALLATION ENGINE STARTED ==="
 echo "Script: install.sh"
@@ -16,12 +50,62 @@ echo "=========================================="
 # Source utility functions and strategies
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/disk_strategies.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/config_loader.sh"
 
 # Initialize logging
 setup_logging
 
+# Set log level (can be overridden by environment variable)
+export LOG_LEVEL="${LOG_LEVEL:-INFO}"
+
+# Perform pre-flight checks
+perform_preflight_checks
+
+# Parse command line arguments
+CONFIG_FILE=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --config)
+            CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--config CONFIG_FILE]"
+            echo ""
+            echo "Options:"
+            echo "  --config FILE    Load configuration from JSON file"
+            echo "  --help, -h       Show this help message"
+            echo ""
+            echo "If no --config is provided, the installer expects environment variables"
+            echo "to be set by the TUI frontend."
+            exit 0
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# --- Configuration Loading ---
+# Load configuration from JSON file if provided, otherwise use environment variables
+if [[ -n "$CONFIG_FILE" ]]; then
+    log_info "Loading configuration from JSON file: $CONFIG_FILE"
+    load_config_from_json "$CONFIG_FILE"
+else
+    log_info "Using environment variables from TUI"
+    # Validate that we have the minimum required environment variables
+    if [[ -z "${INSTALL_DISK:-}" ]]; then
+        error_exit "INSTALL_DISK environment variable is required"
+    fi
+    if [[ -z "${PARTITIONING_STRATEGY:-}" ]]; then
+        error_exit "PARTITIONING_STRATEGY environment variable is required"
+    fi
+fi
+
 # --- Configuration Variables ---
-# These will be set from environment variables passed by the TUI
+# These are now loaded either from JSON or environment variables
 
 # Boot Configuration
 BOOT_MODE="${BOOT_MODE:-Auto}"
@@ -455,7 +539,7 @@ install_base_packages() {
     fi
     
     # Install packages
-    pacstrap /mnt $base_packages
+    pacstrap /mnt "$base_packages"
     
     echo "Base packages installed"
 }
@@ -492,7 +576,7 @@ install_additional_packages() {
     
     if [ -n "$ADDITIONAL_PACKAGES" ] && [ "$ADDITIONAL_PACKAGES" != "" ]; then
         echo "Installing additional packages: $ADDITIONAL_PACKAGES"
-        pacstrap /mnt $ADDITIONAL_PACKAGES
+        pacstrap /mnt "$ADDITIONAL_PACKAGES"
     else
         echo "No additional packages to install"
     fi
@@ -517,7 +601,7 @@ install_aur_packages() {
         # Install AUR packages if specified
         if [ -n "$ADDITIONAL_AUR_PACKAGES" ] && [ "$ADDITIONAL_AUR_PACKAGES" != "" ]; then
             echo "Installing AUR packages: $ADDITIONAL_AUR_PACKAGES"
-            arch-chroot /mnt $AUR_HELPER -S $ADDITIONAL_AUR_PACKAGES --noconfirm
+            arch-chroot /mnt "$AUR_HELPER" -S "$ADDITIONAL_AUR_PACKAGES" --noconfirm
         fi
     else
         echo "No AUR helper selected"
@@ -605,7 +689,7 @@ configure_timezone() {
     echo "Configuring timezone: $TIMEZONE_REGION/$TIMEZONE"
     
     # Set timezone
-    arch-chroot /mnt ln -sf /usr/share/zoneinfo/$TIMEZONE_REGION/$TIMEZONE /etc/localtime
+    arch-chroot /mnt ln -sf "/usr/share/zoneinfo/$TIMEZONE_REGION/$TIMEZONE" /etc/localtime
     arch-chroot /mnt hwclock --systohc
     
     # Configure NTP if enabled
@@ -834,9 +918,9 @@ configure_kde() {
     
     # Configure KDE settings
     arch-chroot /mnt bash -c "
-        sudo -u $MAIN_USERNAME mkdir -p /home/$MAIN_USERNAME/.config
-        echo '[General]' > "/home/$MAIN_USERNAME/.config/kdeglobals"
-        echo 'ColorScheme=Breeze' >> "/home/$MAIN_USERNAME/.config/kdeglobals"
+        sudo -u \"$MAIN_USERNAME\" mkdir -p \"/home/$MAIN_USERNAME/.config\"
+        echo '[General]' > \"/home/$MAIN_USERNAME/.config/kdeglobals\"
+        echo 'ColorScheme=Breeze' >> \"/home/$MAIN_USERNAME/.config/kdeglobals\"
     "
     
     echo "KDE configuration complete"

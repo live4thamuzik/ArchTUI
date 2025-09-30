@@ -1,0 +1,203 @@
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
+
+/// Installation configuration that can be saved/loaded
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallationConfig {
+    pub boot_mode: String,
+    pub install_disk: String,
+    pub partitioning_strategy: String,
+    pub root_filesystem: String,
+    pub home_filesystem: String,
+    pub separate_home: String,
+    pub encryption: String,
+    pub swap: String,
+    pub swap_size: String,
+    pub timezone_region: String,
+    pub timezone: String,
+    pub locale: String,
+    pub keymap: String,
+    pub hostname: String,
+    pub username: String,
+    pub user_password: String,
+    pub root_password: String,
+    pub mirror_country: String,
+    pub bootloader: String,
+    pub os_prober: String,
+    pub desktop_environment: String,
+    pub display_manager: String,
+    pub additional_packages: String,
+    pub additional_aur_packages: String,
+    pub aur_helper: String,
+    pub plymouth: String,
+    pub plymouth_theme: String,
+    pub grub_themes: String,
+    pub grub_theme_selection: String,
+    pub time_sync: String,
+    pub git_repository: String,
+    pub git_repository_url: String,
+    pub numlock_on_boot: String,
+    pub secure_boot: String,
+}
+
+impl InstallationConfig {
+    /// Create a new empty configuration
+    pub fn new() -> Self {
+        Self {
+            boot_mode: String::new(),
+            install_disk: String::new(),
+            partitioning_strategy: String::new(),
+            root_filesystem: String::new(),
+            home_filesystem: String::new(),
+            separate_home: String::new(),
+            encryption: String::new(),
+            swap: String::new(),
+            swap_size: String::new(),
+            timezone_region: String::new(),
+            timezone: String::new(),
+            locale: String::new(),
+            keymap: String::new(),
+            hostname: String::new(),
+            username: String::new(),
+            user_password: String::new(),
+            root_password: String::new(),
+            mirror_country: String::new(),
+            bootloader: String::new(),
+            os_prober: String::new(),
+            desktop_environment: String::new(),
+            display_manager: String::new(),
+            additional_packages: String::new(),
+            additional_aur_packages: String::new(),
+            aur_helper: String::new(),
+            plymouth: String::new(),
+            plymouth_theme: String::new(),
+            grub_themes: String::new(),
+            grub_theme_selection: String::new(),
+            time_sync: String::new(),
+            git_repository: String::new(),
+            git_repository_url: String::new(),
+            numlock_on_boot: String::new(),
+            secure_boot: String::new(),
+        }
+    }
+
+    /// Save configuration to a JSON file
+    #[allow(dead_code)]
+    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let json = serde_json::to_string_pretty(self)
+            .context("Failed to serialize configuration to JSON")?;
+
+        fs::write(&path, json)
+            .with_context(|| format!("Failed to write configuration to {:?}", path.as_ref()))?;
+
+        Ok(())
+    }
+
+    /// Load configuration from a JSON file
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content = fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read configuration from {:?}", path.as_ref()))?;
+
+        let config: Self =
+            serde_json::from_str(&content).context("Failed to parse configuration JSON")?;
+
+        Ok(config)
+    }
+
+    /// Validate the configuration
+    pub fn validate(&self) -> Result<()> {
+        // Basic validation - ensure required fields are not empty
+        if self.install_disk.trim().is_empty() {
+            anyhow::bail!("Install disk must be specified");
+        }
+
+        if self.partitioning_strategy.trim().is_empty() {
+            anyhow::bail!("Partitioning strategy must be specified");
+        }
+
+        if self.hostname.trim().is_empty() {
+            anyhow::bail!("Hostname must be specified");
+        }
+
+        if self.username.trim().is_empty() {
+            anyhow::bail!("Username must be specified");
+        }
+
+        if self.user_password.trim().is_empty() {
+            anyhow::bail!("User password must be specified");
+        }
+
+        if self.root_password.trim().is_empty() {
+            anyhow::bail!("Root password must be specified");
+        }
+
+        Ok(())
+    }
+
+    /// Convert to environment variables for Bash scripts
+    #[allow(dead_code)]
+    pub fn to_env_vars(&self) -> Vec<(String, String)> {
+        vec![
+            ("BOOT_MODE".to_string(), self.boot_mode.clone()),
+            ("INSTALL_DISK".to_string(), self.install_disk.clone()),
+            (
+                "PARTITIONING_STRATEGY".to_string(),
+                self.partitioning_strategy.clone(),
+            ),
+            ("ROOT_FILESYSTEM".to_string(), self.root_filesystem.clone()),
+            ("HOME_FILESYSTEM".to_string(), self.home_filesystem.clone()),
+            ("SEPARATE_HOME".to_string(), self.separate_home.clone()),
+            ("ENCRYPTION".to_string(), self.encryption.clone()),
+            ("SWAP".to_string(), self.swap.clone()),
+            ("SWAP_SIZE".to_string(), self.swap_size.clone()),
+            ("TIMEZONE_REGION".to_string(), self.timezone_region.clone()),
+            ("TIMEZONE".to_string(), self.timezone.clone()),
+            ("LOCALE".to_string(), self.locale.clone()),
+            ("KEYMAP".to_string(), self.keymap.clone()),
+            ("HOSTNAME".to_string(), self.hostname.clone()),
+            ("USERNAME".to_string(), self.username.clone()),
+            ("USER_PASSWORD".to_string(), self.user_password.clone()),
+            ("ROOT_PASSWORD".to_string(), self.root_password.clone()),
+            ("MIRROR_COUNTRY".to_string(), self.mirror_country.clone()),
+            ("BOOTLOADER".to_string(), self.bootloader.clone()),
+            ("OS_PROBER".to_string(), self.os_prober.clone()),
+            (
+                "DESKTOP_ENVIRONMENT".to_string(),
+                self.desktop_environment.clone(),
+            ),
+            ("DISPLAY_MANAGER".to_string(), self.display_manager.clone()),
+            (
+                "ADDITIONAL_PACKAGES".to_string(),
+                self.additional_packages.clone(),
+            ),
+            (
+                "ADDITIONAL_AUR_PACKAGES".to_string(),
+                self.additional_aur_packages.clone(),
+            ),
+            ("AUR_HELPER".to_string(), self.aur_helper.clone()),
+            ("PLYMOUTH".to_string(), self.plymouth.clone()),
+            ("PLYMOUTH_THEME".to_string(), self.plymouth_theme.clone()),
+            ("GRUB_THEMES".to_string(), self.grub_themes.clone()),
+            (
+                "GRUB_THEME_SELECTION".to_string(),
+                self.grub_theme_selection.clone(),
+            ),
+            ("TIME_SYNC".to_string(), self.time_sync.clone()),
+            ("GIT_REPOSITORY".to_string(), self.git_repository.clone()),
+            (
+                "GIT_REPOSITORY_URL".to_string(),
+                self.git_repository_url.clone(),
+            ),
+            ("NUMLOCK_ON_BOOT".to_string(), self.numlock_on_boot.clone()),
+            ("SECURE_BOOT".to_string(), self.secure_boot.clone()),
+        ]
+    }
+}
+
+impl Default for InstallationConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}

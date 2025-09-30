@@ -22,12 +22,28 @@ setup_logging() {
     }
 }
 
-# Log functions
+# Enhanced logging functions with levels
+log_debug() {
+    if [[ "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
+        local message="$1"
+        local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+        echo "[$timestamp] DEBUG: $message"
+        echo "[$timestamp] DEBUG: $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
 log_info() {
     local message="$1"
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo "[$timestamp] INFO: $message"
     echo "[$timestamp] INFO: $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+log_warn() {
+    local message="$1"
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo "[$timestamp] WARN: $message" >&2
+    echo "[$timestamp] WARN: $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 log_error() {
@@ -44,11 +60,144 @@ log_success() {
     echo "[$timestamp] SUCCESS: $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
+log_critical() {
+    local message="$1"
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo "[$timestamp] CRITICAL: $message" >&2
+    echo "[$timestamp] CRITICAL: $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
 # Error handling
 error_exit() {
     local message="$1"
-    log_error "$message"
+    local command="$2"
+    local script_name="$(basename "$0")"
+    local line_number="${BASH_LINENO[1]}"
+    
+    log_error "ERROR in $script_name at line $line_number: $message"
+    if [[ -n "$command" ]]; then
+        log_error "Failed command: $command"
+    fi
     exit 1
+}
+
+# Enhanced error handling with command context
+error_exit_with_command() {
+    local message="$1"
+    local command="$2"
+    error_exit "$message" "$command"
+}
+
+# Non-critical error handling (log and continue)
+log_and_continue() {
+    local message="$1"
+    local command="$2"
+    local script_name="$(basename "$0")"
+    local line_number="${BASH_LINENO[1]}"
+    
+    log_warn "NON-CRITICAL ERROR in $script_name at line $line_number: $message"
+    if [[ -n "$command" ]]; then
+        log_warn "Failed command: $command"
+    fi
+    log_warn "Continuing installation..."
+}
+
+# Critical vs non-critical command execution
+execute_critical() {
+    local description="$1"
+    shift
+    local command=("$@")
+    
+    log_info "Executing critical command: $description"
+    log_debug "Command: ${command[*]}"
+    
+    if ! "${command[@]}"; then
+        error_exit_with_command "Critical command failed: $description" "${command[*]}"
+    fi
+    
+    log_success "Critical command completed: $description"
+}
+
+execute_non_critical() {
+    local description="$1"
+    shift
+    local command=("$@")
+    
+    log_info "Executing non-critical command: $description"
+    log_debug "Command: ${command[*]}"
+    
+    if ! "${command[@]}"; then
+        log_and_continue "Non-critical command failed: $description" "${command[*]}"
+        return 1
+    fi
+    
+    log_success "Non-critical command completed: $description"
+    return 0
+}
+
+# Pre-flight system checks
+perform_preflight_checks() {
+    log_info "Performing pre-flight system checks..."
+    
+    # Check if running as root
+    if [[ $EUID -ne 0 ]]; then
+        error_exit "This script must be run as root"
+    fi
+    
+    # Check internet connectivity
+    log_info "Checking internet connectivity..."
+    if ! ping -c 1 archlinux.org >/dev/null 2>&1; then
+        error_exit "No internet connectivity. Please check your network connection."
+    fi
+    
+    # Wait for network time sync (like official archinstall)
+    log_info "Waiting for network time synchronization..."
+    local max_wait=60
+    local waited=0
+    while ! timedatectl show --property=NTPSynchronized --value | grep -q "yes"; do
+        if [[ $waited -ge $max_wait ]]; then
+            log_warn "Network time sync timeout after ${max_wait}s, continuing anyway..."
+            break
+        fi
+        log_info "Waiting for NTP sync... (${waited}/${max_wait}s)"
+        sleep 2
+        ((waited += 2))
+    done
+    
+    if timedatectl show --property=NTPSynchronized --value | grep -q "yes"; then
+        log_success "Network time synchronized"
+    else
+        log_warn "Network time not synchronized, but continuing..."
+    fi
+    
+    # Update mirrorlist
+    log_info "Updating mirrorlist..."
+    if execute_non_critical "Mirrorlist update" pacman -Sy; then
+        log_success "Mirrorlist updated successfully"
+    else
+        log_warn "Mirrorlist update failed, continuing with existing mirrors"
+    fi
+    
+    # Check available disk space
+    log_info "Checking available disk space..."
+    local available_space=$(df / | awk 'NR==2 {print $4}')
+    local min_space=$((2 * 1024 * 1024)) # 2GB in KB
+    
+    if [[ $available_space -lt $min_space ]]; then
+        log_warn "Low disk space: ${available_space}KB available (minimum: ${min_space}KB)"
+        log_warn "Installation may fail due to insufficient space"
+    else
+        log_success "Sufficient disk space available: ${available_space}KB"
+    fi
+    
+    # Check if we're in a live environment
+    if [[ -f "/etc/arch-release" ]] && [[ ! -d "/mnt" ]] || [[ -f "/run/archiso/bootmnt/arch/boot/x86_64/vmlinuz-linux" ]]; then
+        log_success "Running in Arch Linux live environment"
+    else
+        log_warn "Not running in Arch Linux live environment - proceed with caution"
+    fi
+    
+    log_success "Pre-flight checks completed"
 }
 
 # Validation functions
@@ -62,6 +211,28 @@ validate_disk() {
     if [ ! -b "$disk" ]; then
         log_error "Disk $disk does not exist or is not a block device"
         return 1
+    fi
+    
+    # Additional disk validation
+    log_debug "Validating disk: $disk"
+    
+    # Check if disk is mounted
+    if mountpoint -q "$disk" 2>/dev/null; then
+        error_exit "Disk $disk is currently mounted and cannot be used for installation"
+    fi
+    
+    # Check if any partitions on disk are mounted
+    local mounted_parts=$(lsblk -n -o MOUNTPOINT "$disk" 2>/dev/null | grep -v "^$" | wc -l)
+    if [[ $mounted_parts -gt 0 ]]; then
+        log_warn "Some partitions on $disk are mounted - proceeding anyway"
+    fi
+    
+    # Check disk size (minimum 8GB)
+    local disk_size_bytes=$(lsblk -b -d -n -o SIZE "$disk" 2>/dev/null)
+    local min_size_bytes=$((8 * 1024 * 1024 * 1024)) # 8GB
+    
+    if [[ -n "$disk_size_bytes" ]] && [[ $disk_size_bytes -lt $min_size_bytes ]]; then
+        log_warn "Disk $disk is small (${disk_size_bytes} bytes), minimum recommended is ${min_size_bytes} bytes"
     fi
     
     log_info "Disk $disk validated successfully"
