@@ -12,9 +12,13 @@ check_jq_available() {
     if ! command -v jq >/dev/null 2>&1; then
         log_error "jq is required for JSON configuration parsing but is not installed"
         log_info "Installing jq..."
-        pacman -Sy --noconfirm jq
-        if ! command -v jq >/dev/null 2>&1; then
-            error_exit "Failed to install jq"
+        if command -v pacman >/dev/null 2>&1; then
+            pacman -Sy --noconfirm jq
+            if ! command -v jq >/dev/null 2>&1; then
+                error_exit "Failed to install jq"
+            fi
+        else
+            error_exit "Error: 'jq' is not installed and pacman is not available. Please install jq manually."
         fi
     fi
 }
