@@ -3,6 +3,7 @@
 //! Handles the main application lifecycle, event processing, and state transitions.
 
 use crate::config::Configuration;
+use crate::error;
 use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::ui::UiRenderer;
@@ -61,6 +62,17 @@ pub struct App {
 }
 
 impl App {
+
+    /// Helper function to safely lock the state mutex mutably
+    fn lock_state_mut(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, AppState>, Box<dyn std::error::Error>> {
+        self.state
+            .lock()
+            .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)).into())
+    }
+
+
     /// Create a new application instance
     pub fn new() -> Self {
         Self {
@@ -95,7 +107,10 @@ impl App {
 
             // Check if installation is complete
             {
-                let state = self.state.lock().unwrap();
+                let state = self
+                    .state
+                    .lock()
+                    .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)))?;
                 if state.mode == AppMode::Complete {
                     break;
                 }
@@ -103,7 +118,14 @@ impl App {
 
             // Render UI
             terminal.draw(|f| {
-                let mut state = self.state.lock().unwrap();
+                let mut state = match self.state.lock() {
+                    Ok(state) => state,
+                    Err(_) => {
+                        // If mutex is poisoned, we can't continue safely
+                        eprintln!("Fatal error: Mutex poisoned, cannot continue");
+                        std::process::exit(1);
+                    }
+                };
                 // Update scroll state with actual available space for config options
                 if state.mode == AppMode::Configuration {
                     // Calculate the config area height (total height minus reserved space)
@@ -169,56 +191,62 @@ impl App {
 
     /// Navigate to previous configuration option
     fn navigate_up(&self) {
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            state.config_scroll.move_up();
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                state.config_scroll.move_up();
+            }
         }
     }
 
     /// Navigate to next configuration option
     fn navigate_down(&self) {
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            state.config_scroll.move_down();
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                state.config_scroll.move_down();
+            }
         }
     }
 
     /// Page up in configuration list
     fn page_up(&self) {
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            state.config_scroll.page_up();
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                state.config_scroll.page_up();
+            }
         }
     }
 
     /// Page down in configuration list
     fn page_down(&self) {
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            state.config_scroll.page_down();
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                state.config_scroll.page_down();
+            }
         }
     }
 
     /// Move to first configuration option
     fn move_to_first(&self) {
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            state.config_scroll.move_to_first();
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                state.config_scroll.move_to_first();
+            }
         }
     }
 
     /// Move to last configuration option
     fn move_to_last(&self) {
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            state.config_scroll.move_to_last();
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                state.config_scroll.move_to_last();
+            }
         }
     }
 
     /// Handle Enter key press
     fn handle_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (should_open_input, should_start_installation) = {
-            let state = self.state.lock().unwrap();
+            let state = self.lock_state()?;
             match state.mode {
                 AppMode::Configuration => {
                     // Check if we're on the green button (one step past the last config option)
@@ -248,8 +276,9 @@ impl App {
         if should_start_installation {
             if self.validate_configuration_for_installation() {
                 {
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message = "Validation passed. Starting installation...".to_string();
+                    let mut state = self.lock_state_mut()?;
+                    state.status_message =
+                        "Validation passed. Starting installation...".to_string();
                 }
                 self.start_installation()?;
             } else {
@@ -359,7 +388,10 @@ impl App {
     /// Validate configuration for installation (with user feedback)
     fn validate_configuration_for_installation(&mut self) -> bool {
         let config = {
-            let state = self.state.lock().unwrap();
+            let state = match self.lock_state() {
+                Ok(state) => state,
+                Err(_) => return false, // If we can't lock the state, validation fails
+            };
             state.config.clone()
         };
 
@@ -384,14 +416,20 @@ impl App {
             // All validation passed - installation can proceed
             return true;
         } else {
-            let mut state = self.state.lock().unwrap();
+            let mut state = match self.lock_state_mut() {
+                Ok(state) => state,
+                Err(_) => return false, // If we can't lock the state, validation fails
+            };
             let errors = self.get_validation_errors(&config);
 
             if errors.len() == 1 {
                 state.status_message = format!("❌ Cannot start installation: {}", errors[0]);
             } else {
-                state.status_message =
-                    format!("❌ Cannot start installation: {} (and {} more errors)", errors[0], errors.len() - 1);
+                state.status_message = format!(
+                    "❌ Cannot start installation: {} (and {} more errors)",
+                    errors[0],
+                    errors.len() - 1
+                );
             }
             false
         }
@@ -401,14 +439,14 @@ impl App {
     fn start_installation(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Update state to installation mode
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.lock_state_mut()?;
             state.mode = AppMode::Installation;
             state.status_message = "Starting installation...".to_string();
         }
 
         // Create installer with current configuration
         let config = {
-            let state = self.state.lock().unwrap();
+            let state = self.lock_state()?;
             state.config.clone()
         };
 
@@ -425,7 +463,7 @@ impl App {
     /// Open input dialog for the current configuration option
     fn open_input_dialog(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let option = {
-            let state = self.state.lock().unwrap();
+            let state = self.lock_state()?;
             let current_step = state.config_scroll.selected_index;
             state.config.options[current_step].clone()
         };
@@ -475,7 +513,10 @@ impl App {
             "Encryption" => {
                 // Only allow encryption Yes/No for manual partitioning
                 let partitioning_strategy = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()), // If we can't lock the state, skip this option
+                    };
                     state
                         .config
                         .options
@@ -491,14 +532,18 @@ impl App {
                         .start_selection(option.name.clone(), options, option.value);
                 } else {
                     // Show message that encryption is auto-set for non-manual strategies
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message = "Encryption is auto-set based on partitioning strategy. Use manual partitioning to control encryption.".to_string();
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message = "Encryption is auto-set based on partitioning strategy. Use manual partitioning to control encryption.".to_string();
+                    }
                 }
             }
             "Swap Size" => {
                 // Only allow swap size configuration if swap is enabled
                 let swap_enabled = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
                     state
                         .config
                         .options
@@ -513,15 +558,19 @@ impl App {
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
                 } else {
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message =
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
                         "Swap size can only be configured when swap is enabled.".to_string();
+                    }
                 }
             }
             "Btrfs Frequency" | "Btrfs Keep Count" | "Btrfs Assistant" => {
                 // Only allow btrfs configuration if snapshots are enabled
                 let snapshots_enabled = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
                     state
                         .config
                         .options
@@ -536,17 +585,21 @@ impl App {
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
                 } else {
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message = format!(
-                        "{} can only be configured when Btrfs snapshots are enabled.",
-                        option.name
-                    );
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message = format!(
+                            "{} can only be configured when Btrfs snapshots are enabled.",
+                            option.name
+                        );
+                    }
                 }
             }
             "GRUB Theme Selection" => {
                 // Only allow theme selection if GRUB themes are enabled
                 let themes_enabled = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
                     state
                         .config
                         .options
@@ -561,16 +614,20 @@ impl App {
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
                 } else {
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message =
-                        "GRUB theme selection is only available when GRUB themes are enabled."
-                            .to_string();
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "GRUB theme selection is only available when GRUB themes are enabled."
+                                .to_string();
+                    }
                 }
             }
             "Git Repository URL" => {
                 // Only allow URL input if git repository is enabled
                 let git_enabled = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
                     state
                         .config
                         .options
@@ -587,14 +644,38 @@ impl App {
                         "Enter git repository URL".to_string(),
                     );
                 } else {
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message =
-                        "Git repository URL can only be configured when git repository is enabled."
-                            .to_string();
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "Git repository URL can only be configured when git repository is enabled."
+                                .to_string();
+                    }
                 }
             }
             "Disk" => {
-                self.input_handler.start_disk_selection(option.value);
+                // Check if we need multi-disk selection
+                let state = match self.lock_state() {
+                Ok(state) => state,
+                Err(_) => return Ok(()),
+            };
+                let partitioning_strategy = state
+                    .config
+                    .options
+                    .iter()
+                    .find(|opt| opt.name == "Partitioning Strategy")
+                    .map(|opt| opt.value.clone())
+                    .unwrap_or_default();
+                drop(state); // Release the lock
+
+                match partitioning_strategy.as_str() {
+                    "auto_raid" | "auto_raid_luks" | "auto_raid_lvm" | "auto_raid_lvm_luks"
+                    | "manual" => {
+                        self.input_handler
+                            .start_multi_disk_selection(&partitioning_strategy);
+                    }
+                    _ => {
+                        self.input_handler.start_disk_selection(option.value);
+                    }
+                }
             }
             "Username" | "Hostname" => {
                 let placeholder = match option.name.as_str() {
@@ -633,7 +714,10 @@ impl App {
             "Timezone" => {
                 // Get timezone options based on selected region
                 let timezone_region = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
                     state
                         .config
                         .options
@@ -648,14 +732,18 @@ impl App {
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
                 } else {
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message = "Please select a timezone region first.".to_string();
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message = "Please select a timezone region first.".to_string();
+                    }
                 }
             }
             "Display Manager" => {
                 // Check if desktop environment is set to something other than "none"
                 let desktop_env = {
-                    let state = self.state.lock().unwrap();
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
                     state
                         .config
                         .options
@@ -667,10 +755,11 @@ impl App {
 
                 if desktop_env != "none" && !desktop_env.is_empty() {
                     // Desktop environment is selected, display manager should be auto-set
-                    let mut state = self.state.lock().unwrap();
-                    state.status_message =
-                        "Display Manager is auto-set based on Desktop Environment selection."
-                            .to_string();
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "Display Manager is auto-set based on Desktop Environment selection."
+                                .to_string();
+                    }
                 } else {
                     // No desktop environment or "none" selected, allow manual selection
                     let options = InputHandler::get_predefined_options(&option.name);
@@ -695,7 +784,13 @@ impl App {
         value: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (current_step, option_name) = {
-            let state = self.state.lock().unwrap();
+            let state = self
+                .state
+                .lock()
+                .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)))?;
+            if state.config_scroll.selected_index >= state.config.options.len() {
+                return Err(error::general_error("Invalid configuration option index").into());
+            }
             (
                 state.config_scroll.selected_index,
                 state.config.options[state.config_scroll.selected_index]
@@ -706,16 +801,49 @@ impl App {
 
         // Update the configuration value
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)))?;
             if current_step < state.config.options.len() {
                 // Parse disk selection to extract only device path
                 let parsed_value = if option_name == "Disk" {
-                    // Extract just the device path from "/dev/sda (128G)" -> "/dev/sda"
-                    value
-                        .split_whitespace()
-                        .next()
-                        .unwrap_or(&value)
-                        .to_string()
+                    // Check if this is multi-disk selection (contains commas)
+                    if value.contains(',') {
+                        // Multi-disk selection - extract all disk paths
+                        let disk_paths: Vec<String> = value
+                            .split(',')
+                            .map(|d| d.split_whitespace().next().unwrap_or("").to_string())
+                            .filter(|d| !d.is_empty())
+                            .collect();
+
+                        // Check if this is manual partitioning
+                        let partitioning_strategy = state
+                            .config
+                            .options
+                            .iter()
+                            .find(|opt| opt.name == "Partitioning Strategy")
+                            .map(|opt| opt.value.as_str())
+                            .unwrap_or("");
+
+                        if partitioning_strategy == "manual" {
+                            // For manual partitioning, show confirmation dialog
+                            drop(state); // Release the lock
+                            self.input_handler
+                                .start_manual_partitioning_confirmation(&disk_paths);
+                            return Ok(());
+                        } else {
+                            // For RAID strategies, join with commas
+                            disk_paths.join(",")
+                        }
+                    } else {
+                        // Single disk selection - extract just the device path from "/dev/sda (128G)" -> "/dev/sda"
+                        value
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or(&value)
+                            .to_string()
+                    }
                 } else {
                     value.clone()
                 };
@@ -727,6 +855,79 @@ impl App {
                 );
             }
         }
+
+        // Handle manual partitioning confirmation
+        if option_name == "manual_partitioning_confirm" {
+            if value == "Yes, start partitioning" {
+                // User confirmed manual partitioning
+                let state = match self.lock_state() {
+                Ok(state) => state,
+                Err(_) => return Ok(()),
+            };
+                let disk_value = state
+                    .config
+                    .options
+                    .iter()
+                    .find(|opt| opt.name == "Disk")
+                    .map(|opt| opt.value.clone())
+                    .unwrap_or_default();
+                drop(state);
+
+                // Extract disk paths
+                let disk_paths: Vec<String> = disk_value
+                    .split(',')
+                    .map(|d| d.split_whitespace().next().unwrap_or("").to_string())
+                    .filter(|d| !d.is_empty())
+                    .collect();
+
+                // Launch partitioning tool
+                if let Err(e) = self.input_handler.launch_partitioning_tool(&disk_paths) {
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message = format!("Partitioning failed: {}", e);
+                        return Ok(());
+                    }
+                }
+
+                // Validate partitioning after user finishes
+                let boot_mode = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Boot Mode")
+                        .map(|opt| opt.value.as_str())
+                        .unwrap_or("BIOS")
+                        .to_string()
+                };
+
+                match self
+                    .input_handler
+                    .validate_manual_partitioning(&disk_paths, &boot_mode)
+                {
+                    Ok(layout) => {
+                        if let Ok(mut state) = self.lock_state_mut() {
+                            state.status_message = format!(
+                                "Manual partitioning validated successfully! Found {} partitions with {} table",
+                                layout.partitions.len(),
+                                layout.table_type
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        if let Ok(mut state) = self.lock_state_mut() {
+                            state.status_message = format!("Partitioning validation failed: {}", e);
+                        }
+                    }
+                }
+            }
+            // If user chose "No, go back", just return (dialog will close)
+            return Ok(());
+        }
+        } // Close the match statement
 
         // Auto-set encryption based on partitioning strategy
         if option_name == "Partitioning Strategy" {
@@ -753,15 +954,16 @@ impl App {
 
         // Move to next step
         {
-            let mut state = self.state.lock().unwrap();
-            if state.config_scroll.selected_index < state.config.options.len() - 1 {
-                let next_index = state.config_scroll.selected_index + 1;
-                state.config_scroll.set_selected(next_index);
+            if let Ok(mut state) = self.lock_state_mut() {
+                if state.config_scroll.selected_index < state.config.options.len() - 1 {
+                    let next_index = state.config_scroll.selected_index + 1;
+                    state.config_scroll.set_selected(next_index);
+                }
             }
         }
 
         Ok(())
-    }
+    } // Close the update_configuration_value function
 
     /// Auto-set encryption based on partitioning strategy
     fn auto_set_encryption(
@@ -777,14 +979,15 @@ impl App {
             };
 
             {
-                let mut state = self.state.lock().unwrap();
-                // Find encryption option (index 6)
-                if state.config.options.len() > 6 {
-                    state.config.options[6].value = encryption_value.to_string();
-                    state.status_message = format!(
-                        "Auto-set Encryption to: {} (based on partitioning strategy)",
-                        encryption_value
-                    );
+                if let Ok(mut state) = self.lock_state_mut() {
+                    // Find encryption option (index 6)
+                    if state.config.options.len() > 6 {
+                        state.config.options[6].value = encryption_value.to_string();
+                        state.status_message = format!(
+                            "Auto-set Encryption to: {} (based on partitioning strategy)",
+                            encryption_value
+                        );
+                    }
                 }
             }
         }
@@ -807,19 +1010,20 @@ impl App {
 
         if !display_manager.is_empty() {
             {
-                let mut state = self.state.lock().unwrap();
-                // Find display manager option by name
-                if let Some(display_manager_option) = state
+                if let Ok(mut state) = self.lock_state_mut() {
+                    // Find display manager option by name
+                    if let Some(display_manager_option) = state
                     .config
                     .options
                     .iter_mut()
                     .find(|opt| opt.name == "Display Manager")
-                {
-                    display_manager_option.value = display_manager.to_string();
-                    state.status_message = format!(
-                        "Auto-set Display Manager to: {} (based on desktop environment)",
-                        display_manager
-                    );
+                    {
+                        display_manager_option.value = display_manager.to_string();
+                        state.status_message = format!(
+                            "Auto-set Display Manager to: {} (based on desktop environment)",
+                            display_manager
+                        );
+                    }
                 }
             }
         }
@@ -833,7 +1037,7 @@ impl App {
         option_name: &str,
         value: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut state = self.state.lock().unwrap();
+        if let Ok(mut state) = self.lock_state_mut() {
 
         match option_name {
             "Swap" => {
@@ -977,14 +1181,15 @@ impl App {
         height: u16,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Update scroll state with new visible height
-        let mut state = self.state.lock().unwrap();
-        if state.mode == AppMode::Configuration {
-            // Calculate available height for config list
-            // Header(7) + Title(3) + Instructions(3) + Start Button(3) = 16 lines reserved
-            let available_height = (height as usize).saturating_sub(16);
-            // Use most of the available space, with a minimum of 5 lines
-            let visible_height = available_height.max(5);
-            state.config_scroll.update_visible_items(visible_height);
+        if let Ok(mut state) = self.lock_state_mut() {
+            if state.mode == AppMode::Configuration {
+                // Calculate available height for config list
+                // Header(7) + Title(3) + Instructions(3) + Start Button(3) = 16 lines reserved
+                let available_height = (height as usize).saturating_sub(16);
+                // Use most of the available space, with a minimum of 5 lines
+                let visible_height = available_height.max(5);
+                state.config_scroll.update_visible_items(visible_height);
+            }
         }
         Ok(())
     }

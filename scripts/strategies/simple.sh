@@ -1,5 +1,6 @@
 #!/bin/bash
 # simple.sh - Simple partitioning strategy with ESP + XBOOTLDR (UEFI) or boot partition (BIOS)
+set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"

@@ -1,5 +1,6 @@
 #!/bin/bash
 # manual.sh - Manual partitioning strategy with guided setup
+set -euo pipefail
 
 # Source common utilities
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"

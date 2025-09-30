@@ -548,6 +548,45 @@ impl UiRenderer {
                         .style(Style::default().fg(Color::Green));
                     f.render_widget(input_widget, chunks[2]);
                 }
+                crate::input::InputType::MultiDiskSelection {
+                    selected_disks,
+                    available_disks,
+                    scroll_state,
+                    min_disks,
+                    max_disks,
+                    ..
+                } => {
+                    // Create list items with selection status
+                    let items: Vec<ListItem> = available_disks
+                        .iter()
+                        .enumerate()
+                        .map(|(i, disk)| {
+                            let is_selected = selected_disks.contains(disk);
+                            let status = if is_selected { "[X]" } else { "[ ]" };
+                            let item_text = format!("{} {}", status, disk);
+
+                            ListItem::new(item_text).style(if i == scroll_state.selected_index {
+                                Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                            } else if is_selected {
+                                Style::default().fg(Color::Green)
+                            } else {
+                                Style::default().fg(Color::White)
+                            })
+                        })
+                        .collect();
+
+                    let list = List::new(items)
+                        .block(Block::default().borders(Borders::ALL).title(format!(
+                            "Selected: {}/{} (Min: {}, Max: {})",
+                            selected_disks.len(),
+                            max_disks,
+                            min_disks,
+                            max_disks
+                        )))
+                        .highlight_style(Style::default().fg(Color::Yellow).bg(Color::DarkGray));
+
+                    f.render_widget(list, chunks[2]);
+                }
             }
 
             // Status/buttons

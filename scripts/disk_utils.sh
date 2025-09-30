@@ -1,6 +1,8 @@
 #!/bin/bash
 # disk_utils.sh - Common utilities and constants for disk partitioning strategies
 
+set -euo pipefail
+
 # Source utility functions
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 source "$SCRIPT_DIR/utils.sh"

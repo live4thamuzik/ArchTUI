@@ -60,14 +60,24 @@ impl ConfigOption {
         match self.name.as_str() {
             "Username" | "Hostname" => {
                 let value = self.get_value();
-                value
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-                    && !value.starts_with('-')
+                value.len() >= 3
                     && value.len() <= 32
+                    && value.chars().next().map_or(false, |c| c.is_alphabetic())
+                    && value.chars().all(|c| c.is_alphanumeric() || c == '_')
             }
-            "User Password" | "Root Password" => !self.get_value().trim().is_empty(),
+            "User Password" | "Root Password" => {
+                let value = self.get_value();
+                !value.is_empty() && !value.contains(char::is_whitespace)
+            }
             "Disk" => self.get_value().starts_with("/dev/"),
+            "Git Repository URL" => {
+                let value = self.get_value().trim();
+                value.is_empty()
+                    || value.starts_with("http://")
+                    || value.starts_with("https://")
+                    || value.starts_with("git://")
+                    || value.starts_with("ssh://")
+            }
             _ => true, // Default: any non-empty value is valid
         }
     }
@@ -80,13 +90,16 @@ impl ConfigOption {
             } else {
                 match self.name.as_str() {
                     "Username" | "Hostname" => {
-                        Some(format!("{} must contain only alphanumeric characters, hyphens, and underscores, and be 32 characters or less", self.name))
+                        Some(format!("{} must contain only alphanumeric characters and underscores, start with a letter, and be 3-32 characters", self.name))
                     }
                     "User Password" | "Root Password" => {
-                        Some(format!("{} must be set", self.name))
+                        Some(format!("{} cannot be empty or contain whitespace", self.name))
                     }
                     "Disk" => {
                         Some(format!("{} must be a valid device path (e.g., /dev/sda)", self.name))
+                    }
+                    "Git Repository URL" => {
+                        Some(format!("{} must be a valid URL (http://, https://, git://, or ssh://)", self.name))
                     }
                     _ => Some(format!("{} has an invalid value", self.name))
                 }
