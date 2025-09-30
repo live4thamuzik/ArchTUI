@@ -100,20 +100,21 @@ fn run_installer_with_config(
     println!("✓ Configuration loaded and validated");
     println!("🚀 Starting installation with configuration file...");
 
-    // Run the Bash installer with the config file
-    let output = std::process::Command::new("bash")
+    // Run the Bash installer with the config file (real-time output)
+    let mut child = std::process::Command::new("bash")
         .arg("scripts/install.sh")
         .arg("--config")
         .arg(config_path)
-        .output()?;
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()?;
 
-    // Print output in real-time (for now, just show final result)
-    if output.status.success() {
+    let status = child.wait()?;
+
+    if status.success() {
         println!("✓ Installation completed successfully!");
     } else {
-        eprintln!("✗ Installation failed");
-        eprintln!("STDOUT: {}", String::from_utf8_lossy(&output.stdout));
-        eprintln!("STDERR: {}", String::from_utf8_lossy(&output.stderr));
+        eprintln!("✗ Installation failed with exit code: {:?}", status.code());
         std::process::exit(1);
     }
 
@@ -134,9 +135,12 @@ fn run_tui_installer_with_save(
         save_path.display()
     );
 
-    // For now, just run the normal TUI
-    // TODO: Implement configuration saving in the TUI
-    run_tui_installer()?;
+    // For now, run the normal TUI and show instructions for manual config saving
+    // TODO: Implement proper config saving from TUI state
+    println!("⚠️  Note: Config saving from TUI is not yet fully implemented.");
+    println!("   The TUI will run, but you'll need to manually create a config file.");
+    println!("   See the examples in the repository for config file format.");
+    println!();
 
-    Ok(())
+    run_tui_installer()
 }

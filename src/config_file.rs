@@ -117,20 +117,69 @@ impl InstallationConfig {
             anyhow::bail!("Partitioning strategy must be specified");
         }
 
-        if self.hostname.trim().is_empty() {
+        // Validate hostname (3-32 chars, start with letter, alphanumeric + underscore)
+        let hostname = self.hostname.trim();
+        if hostname.is_empty() {
             anyhow::bail!("Hostname must be specified");
         }
-
-        if self.username.trim().is_empty() {
-            anyhow::bail!("Username must be specified");
+        if hostname.len() < 3 || hostname.len() > 32 {
+            anyhow::bail!("Hostname must be 3-32 characters long");
+        }
+        if !hostname.chars().next().unwrap().is_ascii_alphabetic() {
+            anyhow::bail!("Hostname must start with a letter");
+        }
+        if !hostname
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            anyhow::bail!("Hostname can only contain letters, numbers, and underscores");
         }
 
+        // Validate username (3-32 chars, start with letter, alphanumeric + underscore)
+        let username = self.username.trim();
+        if username.is_empty() {
+            anyhow::bail!("Username must be specified");
+        }
+        if username.len() < 3 || username.len() > 32 {
+            anyhow::bail!("Username must be 3-32 characters long");
+        }
+        if !username.chars().next().unwrap().is_ascii_alphabetic() {
+            anyhow::bail!("Username must start with a letter");
+        }
+        if !username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            anyhow::bail!("Username can only contain letters, numbers, and underscores");
+        }
+
+        // Validate passwords (non-empty, no whitespace)
         if self.user_password.trim().is_empty() {
             anyhow::bail!("User password must be specified");
+        }
+        if self.user_password.contains(char::is_whitespace) {
+            anyhow::bail!("User password cannot contain whitespace");
         }
 
         if self.root_password.trim().is_empty() {
             anyhow::bail!("Root password must be specified");
+        }
+        if self.root_password.contains(char::is_whitespace) {
+            anyhow::bail!("Root password cannot contain whitespace");
+        }
+
+        // Validate Git repository URL format
+        if !self.git_repository_url.trim().is_empty() {
+            let url = self.git_repository_url.trim();
+            if !url.starts_with("http://")
+                && !url.starts_with("https://")
+                && !url.starts_with("git://")
+                && !url.starts_with("ssh://")
+            {
+                anyhow::bail!(
+                    "Git repository URL must start with http://, https://, git://, or ssh://"
+                );
+            }
         }
 
         Ok(())
