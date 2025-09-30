@@ -35,8 +35,35 @@ impl UiRenderer {
         }
 
         match state.mode {
-            crate::app::AppMode::Configuration => {
+            crate::app::AppMode::MainMenu => {
+                self.render_main_menu(f, state);
+            }
+            crate::app::AppMode::GuidedInstaller => {
                 self.render_configuration_ui(f, state, input_handler);
+            }
+            crate::app::AppMode::AutomatedInstall => {
+                self.render_automated_install_ui(f, state);
+            }
+            crate::app::AppMode::ToolsMenu => {
+                self.render_tools_menu(f, state);
+            }
+            crate::app::AppMode::DiskTools => {
+                self.render_disk_tools_menu(f, state);
+            }
+            crate::app::AppMode::SystemTools => {
+                self.render_system_tools_menu(f, state);
+            }
+            crate::app::AppMode::UserTools => {
+                self.render_user_tools_menu(f, state);
+            }
+            crate::app::AppMode::NetworkTools => {
+                self.render_network_tools_menu(f, state);
+            }
+            crate::app::AppMode::ToolDialog => {
+                self.render_tool_dialog(f, state);
+            }
+            crate::app::AppMode::ToolExecution => {
+                self.render_tool_execution(f, state);
             }
             crate::app::AppMode::Installation => {
                 self.render_installation_ui(f, state);
@@ -597,21 +624,492 @@ impl UiRenderer {
             f.render_widget(status, chunks[3]);
         }
     }
-}
 
-// Helper trait for input types
-trait InputTypeHelper {
-    fn get_selected_index(&self) -> usize;
-}
+    /// Render the main menu
+    fn render_main_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
 
-impl InputTypeHelper for crate::input::InputType {
-    fn get_selected_index(&self) -> usize {
-        match self {
-            crate::input::InputType::Selection { scroll_state, .. } => scroll_state.selected_index,
-            crate::input::InputType::DiskSelection { scroll_state, .. } => {
-                scroll_state.selected_index
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Arch Linux Toolkit");
+
+        // Render main menu
+        let menu_items = vec![
+            " ▶ Guided Installer  (Recommended for new users)",
+            " ▶ Automated Install (Run from configuration file)",
+            " ▶ Arch Linux Tools  (System repair and administration)",
+            " ▶ Quit",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.main_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Main Menu"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'q' to quit",
+        );
+    }
+
+    /// Render the tools menu
+    fn render_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Arch Linux Tools");
+
+        // Render tools menu
+        let menu_items = vec![
+            " ▶ Disk & Filesystem Tools",
+            " ▶ System & Boot Tools",
+            " ▶ User & Security Tools",
+            " ▶ Network Tools",
+            " ▶ Back to Main Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Tools Menu"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render disk tools menu
+    fn render_disk_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Disk & Filesystem Tools");
+
+        // Render disk tools menu
+        let menu_items = vec![
+            " ▶ Partition Disk (Manual)",
+            " ▶ Format Partition",
+            " ▶ Wipe Disk",
+            " ▶ Check Disk Health",
+            " ▶ Mount/Unmount Partitions",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Disk Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render system tools menu
+    fn render_system_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "System & Boot Tools");
+
+        // Render system tools menu
+        let menu_items = vec![
+            " ▶ Install/Repair Bootloader",
+            " ▶ Generate fstab",
+            " ▶ Chroot into System",
+            " ▶ Enable/Disable Services",
+            " ▶ System Information",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("System Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render user tools menu
+    fn render_user_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "User & Security Tools");
+
+        // Render user tools menu
+        let menu_items = vec![
+            " ▶ Add New User",
+            " ▶ Reset Password",
+            " ▶ Manage User Groups",
+            " ▶ Configure SSH",
+            " ▶ Security Audit",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("User Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render network tools menu
+    fn render_network_tools_menu(&self, f: &mut Frame, state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Menu
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Network Tools");
+
+        // Render network tools menu
+        let menu_items = vec![
+            " ▶ Configure Network Interface",
+            " ▶ Test Network Connectivity",
+            " ▶ Configure Firewall",
+            " ▶ Network Diagnostics",
+            " ▶ Back to Tools Menu",
+        ];
+
+        let menu_items: Vec<ListItem> = menu_items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let style = if index == state.tools_menu_selection {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                ListItem::new(*item).style(style)
+            })
+            .collect();
+
+        let menu = List::new(menu_items)
+            .block(Block::default().borders(Borders::ALL).title("Network Tools"))
+            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_symbol(">> ");
+
+        f.render_widget(menu, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back",
+        );
+    }
+
+    /// Render automated install UI
+    fn render_automated_install_ui(&self, f: &mut Frame, _state: &AppState) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(7), // Header
+                Constraint::Length(3), // Title
+                Constraint::Min(10),   // Content
+                Constraint::Length(3), // Instructions
+            ])
+            .split(f.area());
+
+        // Render header
+        self.render_header(f, chunks[0]);
+
+        // Render title
+        self.render_title(f, chunks[1], "Automated Installation");
+
+        // Render content
+        let content = Paragraph::new("Automated installation from configuration file")
+            .block(Block::default().borders(Borders::ALL).title("Configuration"))
+            .alignment(Alignment::Center);
+        f.render_widget(content, chunks[2]);
+
+        // Render instructions
+        self.render_instructions(
+            f,
+            chunks[3],
+            "Press Enter to select config file, 'b' to go back",
+        );
+    }
+
+    /// Render tool parameter dialog
+    fn render_tool_dialog(&self, f: &mut Frame, state: &AppState) {
+        if let Some(ref dialog) = state.tool_dialog {
+            let area = f.area();
+            
+            // Create a centered dialog box
+            let dialog_width = (area.width * 3 / 4).min(80);
+            let dialog_height = (area.height * 3 / 4).min(20);
+            let dialog_x = (area.width - dialog_width) / 2;
+            let dialog_y = (area.height - dialog_height) / 2;
+            
+            let dialog_rect = ratatui::layout::Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
+            
+            // Draw dialog background
+            f.render_widget(
+                ratatui::widgets::Block::default()
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .title(format!("Configure {}", dialog.tool_name))
+                    .style(ratatui::style::Style::default().bg(ratatui::style::Color::DarkGray)),
+                dialog_rect,
+            );
+            
+            // Render parameter list
+            let param_area = ratatui::layout::Rect::new(
+                dialog_x + 2,
+                dialog_y + 2,
+                dialog_width - 4,
+                dialog_height - 6,
+            );
+            
+            let mut param_items = Vec::new();
+            for (i, param) in dialog.parameters.iter().enumerate() {
+                let style = if i == dialog.current_param {
+                    ratatui::style::Style::default().fg(ratatui::style::Color::Yellow)
+                } else {
+                    ratatui::style::Style::default()
+                };
+                
+                let value = if i < dialog.param_values.len() {
+                    &dialog.param_values[i]
+                } else {
+                    ""
+                };
+                
+                param_items.push(ratatui::widgets::ListItem::new(
+                    ratatui::text::Line::from(vec![
+                        ratatui::text::Span::styled(
+                            format!("{}: ", param.name),
+                            ratatui::style::Style::default().fg(ratatui::style::Color::Cyan),
+                        ),
+                        ratatui::text::Span::styled(
+                            value.to_string(),
+                            style,
+                        ),
+                    ])
+                ));
             }
-            _ => 0,
+            
+            let param_list = ratatui::widgets::List::new(param_items)
+                .highlight_style(ratatui::style::Style::default().fg(ratatui::style::Color::Yellow));
+            
+            f.render_widget(param_list, param_area);
+            
+            // Render instructions
+            let instruction_area = ratatui::layout::Rect::new(
+                dialog_x + 2,
+                dialog_y + dialog_height - 3,
+                dialog_width - 4,
+                1,
+            );
+            
+            f.render_widget(
+                ratatui::widgets::Paragraph::new("Enter: Next parameter | b: Back to tools")
+                    .style(ratatui::style::Style::default().fg(ratatui::style::Color::Gray)),
+                instruction_area,
+            );
         }
+    }
+
+    /// Render tool execution screen
+    fn render_tool_execution(&self, f: &mut Frame, state: &AppState) {
+        let area = f.area();
+        
+        // Title
+        let title_area = ratatui::layout::Rect::new(0, 0, area.width, 3);
+        f.render_widget(
+            ratatui::widgets::Paragraph::new("Tool Execution")
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::Yellow))
+                .alignment(ratatui::layout::Alignment::Center),
+            title_area,
+        );
+        
+        // Status message
+        let status_area = ratatui::layout::Rect::new(0, 3, area.width, 1);
+        f.render_widget(
+            ratatui::widgets::Paragraph::new(state.status_message.as_str())
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::Green)),
+            status_area,
+        );
+        
+        // Tool output
+        if !state.tool_output.is_empty() {
+            let output_area = ratatui::layout::Rect::new(2, 5, area.width - 4, area.height - 8);
+            let output_items: Vec<ratatui::widgets::ListItem> = state.tool_output
+                .iter()
+                .map(|line| ratatui::widgets::ListItem::new(line.as_str()))
+                .collect();
+            
+            let output_list = ratatui::widgets::List::new(output_items)
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
+            
+            f.render_widget(output_list, output_area);
+        }
+        
+        // Instructions
+        let instruction_area = ratatui::layout::Rect::new(0, area.height - 2, area.width, 1);
+        f.render_widget(
+            ratatui::widgets::Paragraph::new("b: Back to tools | q: Quit")
+                .style(ratatui::style::Style::default().fg(ratatui::style::Color::Gray))
+                .alignment(ratatui::layout::Alignment::Center),
+            instruction_area,
+        );
     }
 }
