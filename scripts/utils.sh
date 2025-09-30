@@ -261,3 +261,36 @@ check_package_available() {
     
     return 0
 }
+
+# Format filesystem based on type
+format_filesystem() {
+    local device="$1"
+    local fs_type="$2"
+    
+    case "$fs_type" in
+        "ext4")
+            check_package_available "e2fsprogs" "mkfs.ext4" || return 1
+            mkfs.ext4 -F "$device"
+            ;;
+        "xfs")
+            check_package_available "xfsprogs" "mkfs.xfs" || return 1
+            mkfs.xfs -f "$device"
+            ;;
+        "btrfs")
+            check_package_available "btrfs-progs" "mkfs.btrfs" || return 1
+            mkfs.btrfs -f "$device"
+            ;;
+        "vfat")
+            check_package_available "dosfstools" "mkfs.fat" || return 1
+            check_package_available "exfatprogs" "exFAT/FAT32 utilities" || return 1
+            mkfs.fat -F32 "$device"
+            ;;
+        "swap")
+            mkswap "$device"
+            ;;
+        *)
+            log_error "Unknown filesystem type: $fs_type"
+            return 1
+            ;;
+    esac
+}

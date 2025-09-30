@@ -38,7 +38,23 @@ ENCRYPTION="${ENCRYPTION:-No}"
 ROOT_FILESYSTEM="${ROOT_FILESYSTEM:-ext4}"
 SEPARATE_HOME="${SEPARATE_HOME:-No}"
 HOME_FILESYSTEM="${HOME_FILESYSTEM:-ext4}"
+SWAP="${SWAP:-Yes}"
 SWAP_SIZE="${SWAP_SIZE:-2GB}"
+
+# Convert TUI variables to internal Bash variables (required by modular strategies)
+ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
+HOME_FILESYSTEM_TYPE="$HOME_FILESYSTEM"
+
+# Convert Yes/No to yes/no for internal use (required by modular strategies)
+WANT_HOME_PARTITION="$(echo "$SEPARATE_HOME" | tr '[:upper:]' '[:lower:]')"
+WANT_SWAP="$(echo "${SWAP:-Yes}" | tr '[:upper:]' '[:lower:]')"
+
+# BIOS always needs separate boot partition, UEFI uses ESP+XBOOTLDR
+if [ "$BOOT_MODE" = "BIOS" ]; then
+    WANT_SEPARATE_BOOT="yes"
+else
+    WANT_SEPARATE_BOOT="no"  # UEFI uses ESP+XBOOTLDR approach
+fi
 BTRFS_SNAPSHOTS="${BTRFS_SNAPSHOTS:-No}"
 BTRFS_FREQUENCY="${BTRFS_FREQUENCY:-weekly}"
 BTRFS_KEEP_COUNT="${BTRFS_KEEP_COUNT:-3}"
@@ -71,6 +87,7 @@ FLATPAK="${FLATPAK:-No}"
 BOOTLOADER="${BOOTLOADER:-grub}"
 OS_PROBER="${OS_PROBER:-Yes}"
 GRUB_THEME="${GRUB_THEME:-No}"
+GRUB_THEME_SELECTION="${GRUB_THEME_SELECTION:-arch}"
 
 # Desktop Environment
 DESKTOP_ENVIRONMENT="${DESKTOP_ENVIRONMENT:-KDE}"
@@ -81,6 +98,7 @@ PLYMOUTH="${PLYMOUTH:-Yes}"
 PLYMOUTH_THEME="${PLYMOUTH_THEME:-arch-glow}"
 NUMLOCK_ON_BOOT="${NUMLOCK_ON_BOOT:-Yes}"
 GIT_REPOSITORY="${GIT_REPOSITORY:-No}"
+GIT_REPOSITORY_URL="${GIT_REPOSITORY_URL:-}"
 
 # Note: Additional configuration variables are defined above to avoid duplication
 
@@ -327,7 +345,7 @@ partition_disk() {
             strategy="do_auto_raid_luks_partitioning"
             ;;
         "auto_raid_lvm")
-            strategy="do_auto_raid_lvm_partitioning_efi_xbootldr"  # Use ESP + XBOOTLDR (Arch Wiki recommended)
+            strategy="do_auto_raid_lvm_partitioning"  # RAID + LVM partitioning
             ;;
         "auto_raid_lvm_luks")
             strategy="do_auto_raid_lvm_luks_partitioning"
@@ -362,12 +380,31 @@ configure_chroot() {
     export SYSTEM_HOSTNAME TIMEZONE_REGION TIMEZONE LOCALE KEYMAP
     export DESKTOP_ENVIRONMENT DISPLAY_MANAGER GPU_DRIVERS
     export AUR_HELPER ADDITIONAL_AUR_PACKAGES FLATPAK
-    export PLYMOUTH PLYMOUTH_THEME NUMLOCK_ON_BOOT GIT_REPOSITORY
+    export PLYMOUTH PLYMOUTH_THEME NUMLOCK_ON_BOOT GIT_REPOSITORY GIT_REPOSITORY_URL
     export ROOT_FILESYSTEM HOME_FILESYSTEM BTRFS_SNAPSHOTS
-    export BOOT_MODE SECURE_BOOT PARTITIONING_STRATEGY ENCRYPTION
-    export SEPARATE_HOME SWAP_SIZE SWAP_SIZE BTRFS_FREQUENCY BTRFS_KEEP_COUNT BTRFS_ASSISTANT
+    export BOOT_MODE SECURE_BOOT PARTITIONING_STRATEGY ENCRYPTION INSTALL_DISK
+    export SEPARATE_HOME SWAP SWAP_SIZE BTRFS_FREQUENCY BTRFS_KEEP_COUNT BTRFS_ASSISTANT
+    export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP WANT_SEPARATE_BOOT
     export TIME_SYNC MIRROR_COUNTRY KERNEL MULTILIB ADDITIONAL_PACKAGES
-    export BOOTLOADER OS_PROBER GRUB_THEME
+    export BOOTLOADER OS_PROBER GRUB_THEME GRUB_THEME_SELECTION
+    
+    # Set PASSED_ variables for chroot script
+    export PASSED_MAIN_USERNAME="$MAIN_USERNAME"
+    export PASSED_MAIN_USER_PASSWORD="$MAIN_USER_PASSWORD"
+    export PASSED_ROOT_PASSWORD="$ROOT_PASSWORD"
+    export PASSED_SYSTEM_HOSTNAME="$SYSTEM_HOSTNAME"
+    export PASSED_TIMEZONE="$TIMEZONE"
+    export PASSED_LOCALE="$LOCALE"
+    export PASSED_KEYMAP="$KEYMAP"
+    export PASSED_DESKTOP_ENVIRONMENT="$DESKTOP_ENVIRONMENT"
+    export PASSED_DISPLAY_MANAGER="$DISPLAY_MANAGER"
+    export PASSED_AUR_HELPER="$AUR_HELPER"
+    export PASSED_ADDITIONAL_AUR_PACKAGES="$ADDITIONAL_AUR_PACKAGES"
+    export PASSED_FLATPAK="$FLATPAK"
+    export PASSED_PLYMOUTH="$PLYMOUTH"
+    export PASSED_PLYMOUTH_THEME="$PLYMOUTH_THEME"
+    export PASSED_NUMLOCK_ON_BOOT="$NUMLOCK_ON_BOOT"
+    export PASSED_GIT_REPOSITORY="$GIT_REPOSITORY"
     
     # Execute chroot configuration
     arch-chroot /mnt bash /chroot_config.sh
@@ -909,429 +946,21 @@ clone_git_repository() {
     echo "Cloning git repository..."
     
     # Clone the installation repository
-    arch-chroot /mnt bash -c "
-        cd /home/$MAIN_USERNAME
-        sudo -u $MAIN_USERNAME git clone https://github.com/your-repo/archinstall.git
-    "
+    if [ -n "$GIT_REPOSITORY_URL" ]; then
+        arch-chroot /mnt bash -c "
+            cd /home/$MAIN_USERNAME
+            sudo -u $MAIN_USERNAME git clone $GIT_REPOSITORY_URL
+        "
+    else
+        echo "No git repository URL specified"
+    fi
     
     echo "Git repository cloning complete"
 }
 
-# --- EFI + XBOOTLDR Partitioning Functions ---
-auto_simple_partitioning_efi_xbootldr() {
-    echo "=== PHASE 1: Disk Partitioning (ESP + XBOOTLDR) ==="
-    echo "Starting EFI + XBOOTLDR partitioning for $INSTALL_DISK..."
-    
-    # Wipe disk
-    wipefs -a "$INSTALL_DISK"
-    
-    local current_start_mib=1
-    local part_num=1
-    
-    # Create GPT partition table
-    sgdisk -Z "$INSTALL_DISK" || error_exit "Failed to create GPT label on $INSTALL_DISK."
-    partprobe "$INSTALL_DISK"
-    
-    # EFI System Partition (ESP) - mounted to /efi
-    echo "Creating EFI System Partition (${EFI_PART_SIZE_MIB}MiB)..."
-    local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-    sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local efi_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "EFI System Partition created at: $efi_part"
-    format_filesystem "$efi_part" "vfat"
-    capture_device_info "efi" "$efi_part"
-    mkdir -p /mnt/efi
-        safe_mount "$efi_part" "/mnt/efi"
-    current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-    
-    # Extended Boot Loader Partition (XBOOTLDR) - mounted to /boot
-    echo "Creating Extended Boot Loader Partition (${XBOOTLDR_PART_SIZE_MIB}MiB)..."
-    local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
-    sgdisk -n "$part_num:$current_start_mib:+$xbootldr_size_mb" -t "$part_num:$XBOOTLDR_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local xbootldr_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "Extended Boot Loader Partition created at: $xbootldr_part"
-    format_filesystem "$xbootldr_part" "ext4"  # XBOOTLDR always ext4 for reliability
-    capture_device_info "xbootldr" "$xbootldr_part"
-    mkdir -p /mnt/boot
-    safe_mount "$xbootldr_part" "/mnt/boot"
-    current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-    
-    # Swap partition (if requested)
-    if [ "$SWAP_SIZE" != "No" ]; then
-        echo "Creating swap partition..."
-        local swap_size_mib
-        case "$SWAP_SIZE" in
-            "2GB") swap_size_mib=2048 ;;
-            "4GB") swap_size_mib=4096 ;;
-            "8GB") swap_size_mib=8192 ;;
-            "16GB") swap_size_mib=16384 ;;
-            *) swap_size_mib=$DEFAULT_SWAP_SIZE_MIB ;;
-        esac
-        
-        local swap_size_mb="${swap_size_mib}M"
-        sgdisk -n "$part_num:$current_start_mib:+$swap_size_mb" -t "$part_num:$SWAP_PARTITION_TYPE" "$INSTALL_DISK"
-        partprobe "$INSTALL_DISK"
-        local swap_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        
-        echo "Swap partition created at: $swap_part"
-        format_filesystem "$swap_part" "swap"
-        capture_device_info "swap" "$swap_part"
-        swapon "$swap_part"
-        current_start_mib=$((current_start_mib + swap_size_mib))
-        part_num=$((part_num + 1))
-    fi
-    
-    # Root partition
-    echo "Creating root partition..."
-    sgdisk -n "$part_num:$current_start_mib:0" -t "$part_num:$LINUX_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local root_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "Root partition created at: $root_part"
-    format_filesystem "$root_part" "$ROOT_FILESYSTEM"
-    capture_device_info "root" "$root_part"
-    safe_mount "$root_part" "/mnt"
-    
-    # Separate home partition (if requested)
-    if [ "$SEPARATE_HOME" = "Yes" ]; then
-        echo "Creating separate home partition..."
-        part_num=$((part_num + 1))
-        sgdisk -n "$part_num:$current_start_mib:0" -t "$part_num:$LINUX_PARTITION_TYPE" "$INSTALL_DISK"
-        partprobe "$INSTALL_DISK"
-        local home_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-        
-        echo "Home partition created at: $home_part"
-        format_filesystem "$home_part" "$HOME_FILESYSTEM"
-        capture_device_info "home" "$home_part"
-        mkdir -p /mnt/home
-        safe_mount "$home_part" "/mnt/home"
-    fi
-    
-    echo "ESP + XBOOTLDR partitioning complete"
-    echo "ESP mounted at: /mnt/efi"
-    echo "XBOOTLDR mounted at: /mnt/boot"
-}
-
-auto_btrfs_partitioning_efi_xbootldr() {
-    echo "=== PHASE 1: Btrfs Partitioning (ESP + XBOOTLDR) ==="
-    echo "Starting Btrfs EFI + XBOOTLDR partitioning for $INSTALL_DISK..."
-    
-    # Wipe disk
-    wipefs -a "$INSTALL_DISK"
-    
-    local current_start_mib=1
-    local part_num=1
-    
-    # Create GPT partition table
-    sgdisk -Z "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    
-    # EFI System Partition (ESP) - mounted to /efi
-    echo "Creating EFI System Partition (${EFI_PART_SIZE_MIB}MiB)..."
-    local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-    sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local efi_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "EFI System Partition created at: $efi_part"
-    format_filesystem "$efi_part" "vfat"
-    capture_device_info "efi" "$efi_part"
-    mkdir -p /mnt/efi
-        safe_mount "$efi_part" "/mnt/efi"
-    current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-    
-    # Extended Boot Loader Partition (XBOOTLDR) - mounted to /boot
-    echo "Creating Extended Boot Loader Partition (${XBOOTLDR_PART_SIZE_MIB}MiB)..."
-    local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
-    sgdisk -n "$part_num:$current_start_mib:+$xbootldr_size_mb" -t "$part_num:$XBOOTLDR_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local xbootldr_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "Extended Boot Loader Partition created at: $xbootldr_part"
-    format_filesystem "$xbootldr_part" "ext4"  # XBOOTLDR always ext4 for reliability
-    capture_device_info "xbootldr" "$xbootldr_part"
-    mkdir -p /mnt/boot
-    safe_mount "$xbootldr_part" "/mnt/boot"
-    current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-    
-    # Btrfs root partition
-    echo "Creating Btrfs root partition..."
-    sgdisk -n "$part_num:$current_start_mib:0" -t "$part_num:$LINUX_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local root_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "Btrfs root partition created at: $root_part"
-    format_filesystem "$root_part" "btrfs"
-    capture_device_info "root" "$root_part"
-    safe_mount "$root_part" "/mnt"
-    
-    # Create Btrfs subvolumes
-    cd /mnt
-    btrfs subvolume create @
-    btrfs subvolume create @home
-    btrfs subvolume create @var
-    btrfs subvolume create @snapshots
-    cd /
-    
-    # Unmount and remount with subvolumes
-    umount /mnt
-    safe_mount -o subvol=@ "$root_part" "/mnt"
-    mkdir -p /mnt/{home,var,.snapshots}
-    safe_mount -o subvol=@home "$root_part" "/mnt/home"
-    safe_mount -o subvol=@var "$root_part" "/mnt/var"
-    safe_mount -o subvol=@snapshots "$root_part" "/mnt/.snapshots"
-    
-    echo "Btrfs ESP + XBOOTLDR partitioning complete"
-}
-
-auto_lvm_partitioning_efi_xbootldr() {
-    echo "=== PHASE 1: LVM Partitioning (ESP + XBOOTLDR) ==="
-    echo "Starting LVM EFI + XBOOTLDR partitioning for $INSTALL_DISK..."
-    
-    # Wipe disk
-    wipefs -a "$INSTALL_DISK"
-    
-    local current_start_mib=1
-    local part_num=1
-    
-    # Create GPT partition table
-    sgdisk -Z "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    
-    # EFI System Partition (ESP) - mounted to /efi
-    echo "Creating EFI System Partition (${EFI_PART_SIZE_MIB}MiB)..."
-    local efi_size_mb="${EFI_PART_SIZE_MIB}M"
-    sgdisk -n "$part_num:0:+$efi_size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local efi_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "EFI System Partition created at: $efi_part"
-    format_filesystem "$efi_part" "vfat"
-    capture_device_info "efi" "$efi_part"
-    mkdir -p /mnt/efi
-        safe_mount "$efi_part" "/mnt/efi"
-    current_start_mib=$((current_start_mib + EFI_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-    
-    # Extended Boot Loader Partition (XBOOTLDR) - mounted to /boot
-    echo "Creating Extended Boot Loader Partition (${XBOOTLDR_PART_SIZE_MIB}MiB)..."
-    local xbootldr_size_mb="${XBOOTLDR_PART_SIZE_MIB}M"
-    sgdisk -n "$part_num:$current_start_mib:+$xbootldr_size_mb" -t "$part_num:$XBOOTLDR_PARTITION_TYPE" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local xbootldr_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    echo "Extended Boot Loader Partition created at: $xbootldr_part"
-    format_filesystem "$xbootldr_part" "ext4"  # XBOOTLDR always ext4 for reliability
-    capture_device_info "xbootldr" "$xbootldr_part"
-    mkdir -p /mnt/boot
-    safe_mount "$xbootldr_part" "/mnt/boot"
-    current_start_mib=$((current_start_mib + XBOOTLDR_PART_SIZE_MIB))
-    part_num=$((part_num + 1))
-    
-    # LVM partition
-    echo "Creating LVM partition..."
-    sgdisk -n "$part_num:$current_start_mib:0" -t "$part_num:8E00" "$INSTALL_DISK"
-    partprobe "$INSTALL_DISK"
-    local lvm_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
-    
-    # Create LVM setup
-    pvcreate "$lvm_part"
-    vgcreate arch "$lvm_part"
-    
-    # Create logical volumes
-    lvcreate -L 20G -n root arch
-    lvcreate -L 8G -n swap arch
-    lvcreate -l 100%FREE -n home arch
-    
-    # Format logical volumes
-    format_filesystem "/dev/arch/root" "$ROOT_FILESYSTEM"
-    format_filesystem "/dev/arch/swap" "swap"
-    format_filesystem "/dev/arch/home" "$HOME_FILESYSTEM"
-    
-    # Mount logical volumes
-    safe_mount "/dev/arch/root" "/mnt"
-    mkdir -p /mnt/home
-    safe_mount "/dev/arch/home" "/mnt/home"
-    swapon "/dev/arch/swap"
-    
-    echo "LVM ESP + XBOOTLDR partitioning complete"
-}
-
-# --- Helper Functions ---
-get_partition_path() {
-    local disk="$1"
-    local part_num="$2"
-    
-    if [[ "$disk" =~ nvme ]]; then
-        echo "${disk}p${part_num}"
-    else
-        echo "${disk}${part_num}"
-    fi
-}
-
-format_filesystem() {
-    local device="$1"
-    local fs_type="$2"
-    
-    case "$fs_type" in
-        "ext4")
-            check_package_available "e2fsprogs" "mkfs.ext4" || return 1
-            mkfs.ext4 -F "$device"
-            ;;
-        "xfs")
-            check_package_available "xfsprogs" "mkfs.xfs" || return 1
-            mkfs.xfs -f "$device"
-            ;;
-        "btrfs")
-            check_package_available "btrfs-progs" "mkfs.btrfs" || return 1
-            mkfs.btrfs -f "$device"
-            ;;
-        "vfat")
-            check_package_available "dosfstools" "mkfs.fat" || return 1
-            check_package_available "exfatprogs" "exFAT/FAT32 utilities" || return 1
-            mkfs.fat -F32 "$device"
-            ;;
-        "swap")
-            mkswap "$device"
-            ;;
-        *)
-            log_error "Unknown filesystem type: $fs_type"
-            return 1
-            ;;
-    esac
-}
-
-safe_mount() {
-    local device="$1"
-    local mountpoint="$2"
-    local options="${3:-}"
-    
-    mkdir -p "$mountpoint"
-    if [ -n "$options" ]; then
-        mount -o "$options" "$device" "$mountpoint"
-    else
-        mount "$device" "$mountpoint"
-    fi
-}
-
-# --- Base System Installation ---
-install_base_system() {
-    echo "Installing base system..."
-    
-    # Install base packages
-    local packages="base base-devel linux linux-firmware"
-    
-    # Add kernel variant
-    case "$KERNEL" in
-        "linux-lts")
-            packages="$packages linux-lts"
-            ;;
-        "linux-zen")
-            packages="$packages linux-zen"
-            ;;
-        *)
-            packages="$packages linux"
-            ;;
-    esac
-    
-    # Add essential packages
-    packages="$packages grub efibootmgr networkmanager"
-    
-    # Add GPU drivers
-    case "$GPU_DRIVERS" in
-        "NVIDIA")
-            packages="$packages nvidia nvidia-utils"
-            ;;
-        "AMD")
-            packages="$packages mesa xf86-video-amdgpu"
-            ;;
-        "Intel")
-            packages="$packages mesa xf86-video-intel"
-            ;;
-    esac
-    
-    # Install packages
-    pacstrap /mnt $packages
-    
-    echo "Base system installed"
-}
-
-# --- System Configuration ---
-configure_system() {
-    echo "Configuring system..."
-    
-    # Generate fstab
-    genfstab -U /mnt >> /mnt/etc/fstab
-    
-    # Set hostname
-    echo "$SYSTEM_HOSTNAME" > /mnt/etc/hostname
-    
-    # Set timezone
-    ln -sf /usr/share/zoneinfo/$TIMEZONE_REGION/$TIMEZONE /mnt/etc/localtime
-    
-    # Configure locale
-    echo "en_US.UTF-8 UTF-8" > /mnt/etc/locale.gen
-    echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
-    
-    # Configure keymap
-    echo "KEYMAP=$KEYMAP" > /mnt/etc/vconsole.conf
-    
-    # Configure hosts
-    cat > /mnt/etc/hosts << EOF
-127.0.0.1	localhost
-::1		localhost
-127.0.1.1	$SYSTEM_HOSTNAME.localdomain	$SYSTEM_HOSTNAME
-EOF
-    
-    # Enable time sync
-    if [ "$TIME_SYNC" = "Yes" ]; then
-        arch-chroot /mnt systemctl enable systemd-timesyncd
-    fi
-    
-    echo "System configured"
-}
-
-# --- Package Installation ---
-install_packages() {
-    echo "Installing additional packages..."
-    
-    # Install additional pacman packages
-    if [ -n "$ADDITIONAL_PACKAGES" ]; then
-        echo "Installing additional pacman packages: $ADDITIONAL_PACKAGES"
-        arch-chroot /mnt pacman -S --noconfirm $ADDITIONAL_PACKAGES
-    fi
-    
-    echo "Additional packages installed"
-}
-
-# AUR helper installation is now handled in chroot_config.sh
-
-# Duplicate functions removed - using the enhanced versions defined earlier
-
-# --- User Setup ---
-setup_users() {
-    echo "Setting up users..."
-    
-    # Set root password
-    echo "root:$ROOT_PASSWORD" | arch-chroot /mnt chpasswd
-    
-    # Create user
-    arch-chroot /mnt useradd -m -G wheel,audio,video,optical,storage "$MAIN_USERNAME"
-    echo "$MAIN_USERNAME:$MAIN_USER_PASSWORD" | arch-chroot /mnt chpasswd
-    
-    # Configure sudo
-    echo "%wheel ALL=(ALL) ALL" >> /mnt/etc/sudoers
-    
-    echo "Users configured"
-}
+# --- Partitioning functions are now in modular scripts/strategies/ ---
+# See scripts/disk_strategies.sh for the main dispatcher
+# Individual strategies are in scripts/strategies/*.sh
 
 # --- Service Configuration ---
 configure_services() {
