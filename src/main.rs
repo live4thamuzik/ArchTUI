@@ -14,7 +14,6 @@ mod scrolling;
 mod ui;
 
 use crossterm::{
-    execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -163,7 +162,7 @@ fn run_tui_installer_with_save(
     println!();
 
     // Run TUI with save path
-    run_tui_installer_with_save_path(save_path)?;
+    run_tui_installer_with_save_path(save_path)
 }
 
 /// Run TUI installer with save path
