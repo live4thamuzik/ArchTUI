@@ -27,13 +27,35 @@ pub struct AppState {
     pub installer_output: Vec<String>,
     /// Installation progress percentage
     pub installation_progress: u8,
+    /// Main menu selection state
+    pub main_menu_selection: usize,
+    /// Tools menu selection state
+    pub tools_menu_selection: usize,
+    /// Current tool being executed
+    pub current_tool: Option<String>,
+    /// Tool execution output
+    pub tool_output: Vec<String>,
 }
 
 /// Application operating modes
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppMode {
-    /// Configuration phase - user setting up installation options
-    Configuration,
+    /// Main menu - entry point for all functionality
+    MainMenu,
+    /// Guided installer - step-by-step configuration
+    GuidedInstaller,
+    /// Automated install - run from configuration file
+    AutomatedInstall,
+    /// Tools menu - system administration tools
+    ToolsMenu,
+    /// Disk tools submenu
+    DiskTools,
+    /// System tools submenu
+    SystemTools,
+    /// User tools submenu
+    UserTools,
+    /// Network tools submenu
+    NetworkTools,
     /// Installation phase - running the actual installation
     Installation,
     /// Installation complete
@@ -43,12 +65,16 @@ pub enum AppMode {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            mode: AppMode::Configuration,
+            mode: AppMode::MainMenu,
             config: Configuration::default(),
             config_scroll: crate::scrolling::ScrollState::new(42, 30), // 42 config options, default 30 visible
-            status_message: "Configure installation options".to_string(),
+            status_message: "Welcome to Arch Linux Toolkit".to_string(),
             installer_output: Vec::new(),
             installation_progress: 0,
+            main_menu_selection: 0,
+            tools_menu_selection: 0,
+            current_tool: None,
+            tool_output: Vec::new(),
         }
     }
 }
@@ -136,7 +162,7 @@ impl App {
                     }
                 };
                 // Update scroll state with actual available space for config options
-                if state.mode == AppMode::Configuration {
+                if state.mode == AppMode::GuidedInstaller {
                     // Calculate the config area height (total height minus reserved space)
                     let config_area_height = f.area().height.saturating_sub(16); // 16 lines reserved
                     let visible_items = config_area_height.saturating_sub(2); // Account for borders
@@ -171,6 +197,10 @@ impl App {
                 // Exit application
                 return Ok(true);
             }
+            KeyCode::Char('b') => {
+                // Go back in menu system
+                self.handle_back_key()?;
+            }
             KeyCode::Up => {
                 self.navigate_up();
             }
@@ -198,20 +228,57 @@ impl App {
         Ok(false)
     }
 
-    /// Navigate to previous configuration option
+    /// Navigate to previous option
     fn navigate_up(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
-                state.config_scroll.move_up();
+            match state.mode {
+                AppMode::MainMenu => {
+                    if state.main_menu_selection > 0 {
+                        state.main_menu_selection -= 1;
+                    }
+                }
+                AppMode::ToolsMenu | AppMode::DiskTools | AppMode::SystemTools | 
+                AppMode::UserTools | AppMode::NetworkTools => {
+                    if state.tools_menu_selection > 0 {
+                        state.tools_menu_selection -= 1;
+                    }
+                }
+                AppMode::GuidedInstaller => {
+                    state.config_scroll.move_up();
+                }
+                _ => {}
             }
         }
     }
 
-    /// Navigate to next configuration option
+    /// Navigate to next option
     fn navigate_down(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
-                state.config_scroll.move_down();
+            match state.mode {
+                AppMode::MainMenu => {
+                    if state.main_menu_selection < 3 { // 4 items total (0-3)
+                        state.main_menu_selection += 1;
+                    }
+                }
+                AppMode::ToolsMenu => {
+                    if state.tools_menu_selection < 4 { // 5 items total (0-4)
+                        state.tools_menu_selection += 1;
+                    }
+                }
+                AppMode::DiskTools | AppMode::SystemTools | AppMode::UserTools => {
+                    if state.tools_menu_selection < 5 { // 6 items total (0-5)
+                        state.tools_menu_selection += 1;
+                    }
+                }
+                AppMode::NetworkTools => {
+                    if state.tools_menu_selection < 4 { // 5 items total (0-4)
+                        state.tools_menu_selection += 1;
+                    }
+                }
+                AppMode::GuidedInstaller => {
+                    state.config_scroll.move_down();
+                }
+                _ => {}
             }
         }
     }
@@ -219,7 +286,7 @@ impl App {
     /// Page up in configuration list
     fn page_up(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
+            if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.page_up();
             }
         }
@@ -228,7 +295,7 @@ impl App {
     /// Page down in configuration list
     fn page_down(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
+            if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.page_down();
             }
         }
@@ -237,7 +304,7 @@ impl App {
     /// Move to first configuration option
     fn move_to_first(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
+            if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.move_to_first();
             }
         }
@@ -246,7 +313,7 @@ impl App {
     /// Move to last configuration option
     fn move_to_last(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
+            if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.move_to_last();
             }
         }
@@ -254,25 +321,277 @@ impl App {
 
     /// Handle Enter key press
     fn handle_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let current_mode = {
+            let state = self.lock_state()?;
+            state.mode.clone()
+        };
+
+        match current_mode {
+            AppMode::MainMenu => {
+                self.handle_main_menu_selection()?;
+            }
+            AppMode::ToolsMenu => {
+                self.handle_tools_menu_selection()?;
+            }
+            AppMode::DiskTools | AppMode::SystemTools | AppMode::UserTools | AppMode::NetworkTools => {
+                self.handle_tool_selection()?;
+            }
+            AppMode::GuidedInstaller => {
+                self.handle_guided_installer_enter()?;
+            }
+            AppMode::AutomatedInstall => {
+                self.handle_automated_install_enter()?;
+            }
+            AppMode::Installation => {
+                // Installation is running, no action needed
+            }
+            AppMode::Complete => {
+                // Installation complete, no action needed
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle main menu selection
+    fn handle_main_menu_selection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let selection = {
+            let state = self.lock_state()?;
+            state.main_menu_selection
+        };
+
+        let mut state = self.lock_state_mut()?;
+        match selection {
+            0 => {
+                // Guided Installer
+                state.mode = AppMode::GuidedInstaller;
+                state.status_message = "Starting guided installation...".to_string();
+            }
+            1 => {
+                // Automated Install
+                state.mode = AppMode::AutomatedInstall;
+                state.status_message = "Select configuration file for automated installation...".to_string();
+            }
+            2 => {
+                // Arch Linux Tools
+                state.mode = AppMode::ToolsMenu;
+                state.tools_menu_selection = 0;
+                state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+            }
+            3 => {
+                // Quit
+                return Ok(());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Handle tools menu selection
+    fn handle_tools_menu_selection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let selection = {
+            let state = self.lock_state()?;
+            state.tools_menu_selection
+        };
+
+        let mut state = self.lock_state_mut()?;
+        match selection {
+            0 => {
+                // Disk & Filesystem Tools
+                state.mode = AppMode::DiskTools;
+                state.tools_menu_selection = 0;
+                state.status_message = "Disk & Filesystem Tools".to_string();
+            }
+            1 => {
+                // System & Boot Tools
+                state.mode = AppMode::SystemTools;
+                state.tools_menu_selection = 0;
+                state.status_message = "System & Boot Tools".to_string();
+            }
+            2 => {
+                // User & Security Tools
+                state.mode = AppMode::UserTools;
+                state.tools_menu_selection = 0;
+                state.status_message = "User & Security Tools".to_string();
+            }
+            3 => {
+                // Network Tools
+                state.mode = AppMode::NetworkTools;
+                state.tools_menu_selection = 0;
+                state.status_message = "Network Tools".to_string();
+            }
+            4 => {
+                // Back to Main Menu
+                state.mode = AppMode::MainMenu;
+                state.main_menu_selection = 0;
+                state.status_message = "Welcome to Arch Linux Toolkit".to_string();
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Handle tool selection within a category
+    fn handle_tool_selection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let (current_mode, selection) = {
+            let state = self.lock_state()?;
+            (state.mode.clone(), state.tools_menu_selection)
+        };
+        
+        // Check if user selected "Back" option (last item in each menu)
+        let is_back_option = match current_mode {
+            AppMode::DiskTools | AppMode::SystemTools | AppMode::UserTools => selection == 5,
+            AppMode::NetworkTools => selection == 4,
+            _ => false,
+        };
+
+        if is_back_option {
+            // Go back to tools menu
+            let mut state = self.lock_state_mut()?;
+            state.mode = AppMode::ToolsMenu;
+            state.tools_menu_selection = 0;
+            state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+        } else {
+            // Execute the selected tool
+            self.execute_tool(&current_mode, selection)?;
+        }
+        Ok(())
+    }
+
+    /// Execute a specific tool
+    fn execute_tool(&mut self, mode: &AppMode, selection: usize) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = self.lock_state_mut()?;
+        
+        match mode {
+            AppMode::DiskTools => {
+                match selection {
+                    0 => {
+                        // Partition Disk (Manual)
+                        state.current_tool = Some("partition_disk".to_string());
+                        state.status_message = "Launching manual disk partitioner...".to_string();
+                    }
+                    1 => {
+                        // Format Partition
+                        state.current_tool = Some("format_partition".to_string());
+                        state.status_message = "Format partition tool...".to_string();
+                    }
+                    2 => {
+                        // Wipe Disk
+                        state.current_tool = Some("wipe_disk".to_string());
+                        state.status_message = "Wipe disk tool...".to_string();
+                    }
+                    3 => {
+                        // Check Disk Health
+                        state.current_tool = Some("check_disk_health".to_string());
+                        state.status_message = "Checking disk health...".to_string();
+                    }
+                    4 => {
+                        // Mount/Unmount Partitions
+                        state.current_tool = Some("mount_management".to_string());
+                        state.status_message = "Mount management tool...".to_string();
+                    }
+                    _ => {}
+                }
+            }
+            AppMode::SystemTools => {
+                match selection {
+                    0 => {
+                        // Install/Repair Bootloader
+                        state.current_tool = Some("install_bootloader".to_string());
+                        state.status_message = "Bootloader installation tool...".to_string();
+                    }
+                    1 => {
+                        // Generate fstab
+                        state.current_tool = Some("generate_fstab".to_string());
+                        state.status_message = "Generating fstab...".to_string();
+                    }
+                    2 => {
+                        // Chroot into System
+                        state.current_tool = Some("chroot_system".to_string());
+                        state.status_message = "Chroot into system...".to_string();
+                    }
+                    3 => {
+                        // Enable/Disable Services
+                        state.current_tool = Some("manage_services".to_string());
+                        state.status_message = "Service management tool...".to_string();
+                    }
+                    4 => {
+                        // System Information
+                        state.current_tool = Some("system_info".to_string());
+                        state.status_message = "Displaying system information...".to_string();
+                    }
+                    _ => {}
+                }
+            }
+            AppMode::UserTools => {
+                match selection {
+                    0 => {
+                        // Add New User
+                        state.current_tool = Some("add_user".to_string());
+                        state.status_message = "Add new user tool...".to_string();
+                    }
+                    1 => {
+                        // Reset Password
+                        state.current_tool = Some("reset_password".to_string());
+                        state.status_message = "Reset password tool...".to_string();
+                    }
+                    2 => {
+                        // Manage User Groups
+                        state.current_tool = Some("manage_groups".to_string());
+                        state.status_message = "User group management tool...".to_string();
+                    }
+                    3 => {
+                        // Configure SSH
+                        state.current_tool = Some("configure_ssh".to_string());
+                        state.status_message = "SSH configuration tool...".to_string();
+                    }
+                    4 => {
+                        // Security Audit
+                        state.current_tool = Some("security_audit".to_string());
+                        state.status_message = "Security audit tool...".to_string();
+                    }
+                    _ => {}
+                }
+            }
+            AppMode::NetworkTools => {
+                match selection {
+                    0 => {
+                        // Configure Network Interface
+                        state.current_tool = Some("configure_network".to_string());
+                        state.status_message = "Network configuration tool...".to_string();
+                    }
+                    1 => {
+                        // Test Network Connectivity
+                        state.current_tool = Some("test_network".to_string());
+                        state.status_message = "Testing network connectivity...".to_string();
+                    }
+                    2 => {
+                        // Configure Firewall
+                        state.current_tool = Some("configure_firewall".to_string());
+                        state.status_message = "Firewall configuration tool...".to_string();
+                    }
+                    3 => {
+                        // Network Diagnostics
+                        state.current_tool = Some("network_diagnostics".to_string());
+                        state.status_message = "Network diagnostics tool...".to_string();
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Handle guided installer enter (original logic)
+    fn handle_guided_installer_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (should_open_input, should_start_installation) = {
             let state = self.lock_state()?;
-            match state.mode {
-                AppMode::Configuration => {
-                    // Check if we're on the green button (one step past the last config option)
-                    if state.config_scroll.selected_index == state.config.options.len() {
-                        (false, true) // Start installation
-                    } else {
-                        (true, false) // Open input dialog
-                    }
-                }
-                AppMode::Installation => {
-                    // Installation is running, no action needed
-                    (false, false)
-                }
-                AppMode::Complete => {
-                    // Installation complete, no action needed
-                    (false, false)
-                }
+            // Check if we're on the green button (one step past the last config option)
+            if state.config_scroll.selected_index == state.config.options.len() {
+                (false, true) // Start installation
+            } else {
+                (true, false) // Open input dialog
             }
         };
 
@@ -296,6 +615,48 @@ impl App {
             }
         }
 
+        Ok(())
+    }
+
+    /// Handle automated install enter
+    fn handle_automated_install_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // TODO: Implement file selection dialog for config file
+        let mut state = self.lock_state_mut()?;
+        state.status_message = "Automated install - config file selection not yet implemented".to_string();
+        Ok(())
+    }
+
+    /// Handle back key navigation
+    fn handle_back_key(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let current_mode = {
+            let state = self.lock_state()?;
+            state.mode.clone()
+        };
+
+        let mut state = self.lock_state_mut()?;
+        match current_mode {
+            AppMode::ToolsMenu => {
+                // Go back to main menu
+                state.mode = AppMode::MainMenu;
+                state.main_menu_selection = 0;
+                state.status_message = "Welcome to Arch Linux Toolkit".to_string();
+            }
+            AppMode::DiskTools | AppMode::SystemTools | AppMode::UserTools | AppMode::NetworkTools => {
+                // Go back to tools menu
+                state.mode = AppMode::ToolsMenu;
+                state.tools_menu_selection = 0;
+                state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+            }
+            AppMode::AutomatedInstall => {
+                // Go back to main menu
+                state.mode = AppMode::MainMenu;
+                state.main_menu_selection = 0;
+                state.status_message = "Welcome to Arch Linux Toolkit".to_string();
+            }
+            _ => {
+                // For other modes, do nothing (or could go to main menu)
+            }
+        }
         Ok(())
     }
 
@@ -1200,7 +1561,7 @@ impl App {
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Update scroll state with new visible height
         if let Ok(mut state) = self.lock_state_mut() {
-            if state.mode == AppMode::Configuration {
+            if state.mode == AppMode::GuidedInstaller {
                 // Calculate available height for config list
                 // Header(7) + Title(3) + Instructions(3) + Start Button(3) = 16 lines reserved
                 let available_height = (height as usize).saturating_sub(16);
