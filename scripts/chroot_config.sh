@@ -467,7 +467,9 @@ install_flatpak_chroot() {
 install_custom_packages_chroot() {
     if [[ -n "${ADDITIONAL_PACKAGES:-}" ]]; then
         _log_info "Installing custom packages: $ADDITIONAL_PACKAGES"
-        pacman -S --noconfirm ${ADDITIONAL_PACKAGES}
+        # Convert space-separated string to array for safe execution
+        IFS=' ' read -ra PACKAGES <<< "$ADDITIONAL_PACKAGES"
+        pacman -S --noconfirm "${PACKAGES[@]}"
     fi
 }
 
@@ -475,12 +477,14 @@ install_custom_packages_chroot() {
 install_custom_aur_packages_chroot() {
     if [[ -n "${ADDITIONAL_AUR_PACKAGES:-}" && "$AUR_HELPER" != "None" ]]; then
         _log_info "Installing custom AUR packages: $ADDITIONAL_AUR_PACKAGES"
+        # Convert space-separated string to array for safe execution
+        IFS=' ' read -ra AUR_PACKAGES <<< "$ADDITIONAL_AUR_PACKAGES"
         case "$AUR_HELPER" in
             "paru")
-                sudo -u "$MAIN_USERNAME" paru -S --noconfirm ${ADDITIONAL_AUR_PACKAGES}
+                sudo -u "$MAIN_USERNAME" paru -S --noconfirm "${AUR_PACKAGES[@]}"
                 ;;
             "yay")
-                sudo -u "$MAIN_USERNAME" yay -S --noconfirm ${ADDITIONAL_AUR_PACKAGES}
+                sudo -u "$MAIN_USERNAME" yay -S --noconfirm "${AUR_PACKAGES[@]}"
                 ;;
         esac
     fi

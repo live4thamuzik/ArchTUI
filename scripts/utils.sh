@@ -1,6 +1,8 @@
 #!/bin/bash
 # utils.sh - Utility functions for Arch Linux installer
 
+set -euo pipefail
+
 # Logging configuration
 LOG_FILE="/tmp/archinstall.log"
 

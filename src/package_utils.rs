@@ -3,6 +3,18 @@ use std::process::Command;
 
 /// Search for pacman packages using pacman -Ss
 pub fn search_pacman_packages(search_term: &str) -> Result<Vec<Package>, String> {
+    // Validate search term to prevent command injection
+    if search_term.contains(";")
+        || search_term.contains("|")
+        || search_term.contains("&")
+        || search_term.contains("$")
+        || search_term.contains("`")
+        || search_term.contains("\"")
+        || search_term.contains("'")
+    {
+        return Err("Invalid characters in search term".to_string());
+    }
+
     let output = Command::new("pacman")
         .args(["-Ss", search_term])
         .output()
@@ -66,6 +78,19 @@ pub fn search_pacman_packages(search_term: &str) -> Result<Vec<Package>, String>
 
 /// Search for AUR packages using curl and AUR RPC API
 pub fn search_aur_packages(search_term: &str) -> Result<Vec<Package>, String> {
+    // Validate search term to prevent URL injection
+    if search_term.contains(";")
+        || search_term.contains("|")
+        || search_term.contains("&")
+        || search_term.contains("$")
+        || search_term.contains("`")
+        || search_term.contains("\"")
+        || search_term.contains("'")
+        || search_term.contains(" ")
+    {
+        return Err("Invalid characters in search term".to_string());
+    }
+
     let url = format!(
         "https://aur.archlinux.org/rpc/?v=5&type=search&arg={}",
         search_term

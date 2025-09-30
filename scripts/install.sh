@@ -835,8 +835,8 @@ configure_kde() {
     # Configure KDE settings
     arch-chroot /mnt bash -c "
         sudo -u $MAIN_USERNAME mkdir -p /home/$MAIN_USERNAME/.config
-        echo '[General]' > /home/$MAIN_USERNAME/.config/kdeglobals
-        echo 'ColorScheme=Breeze' >> /home/$MAIN_USERNAME/.config/kdeglobals
+        echo '[General]' > "/home/$MAIN_USERNAME/.config/kdeglobals"
+        echo 'ColorScheme=Breeze' >> "/home/$MAIN_USERNAME/.config/kdeglobals"
     "
     
     echo "KDE configuration complete"
@@ -865,8 +865,8 @@ configure_i3() {
     
     # Create basic i3 config
     arch-chroot /mnt bash -c "
-        sudo -u $MAIN_USERNAME mkdir -p /home/$MAIN_USERNAME/.config/i3
-        sudo -u $MAIN_USERNAME mkdir -p /home/$MAIN_USERNAME/.config/i3status
+        sudo -u "$MAIN_USERNAME" mkdir -p "/home/$MAIN_USERNAME/.config/i3"
+        sudo -u "$MAIN_USERNAME" mkdir -p "/home/$MAIN_USERNAME/.config/i3status"
     "
     
     echo "i3 configuration complete"
@@ -936,7 +936,7 @@ configure_flatpak() {
     
     # Configure Flatpak for user
     arch-chroot /mnt bash -c "
-        sudo -u $MAIN_USERNAME flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+        sudo -u "$MAIN_USERNAME" flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
     "
     
     echo "Flatpak configuration complete"
@@ -948,8 +948,8 @@ clone_git_repository() {
     # Clone the installation repository
     if [ -n "$GIT_REPOSITORY_URL" ]; then
         arch-chroot /mnt bash -c "
-            cd /home/$MAIN_USERNAME
-            sudo -u $MAIN_USERNAME git clone $GIT_REPOSITORY_URL
+            cd "/home/$MAIN_USERNAME"
+            sudo -u "$MAIN_USERNAME" git clone "$GIT_REPOSITORY_URL"
         "
     else
         echo "No git repository URL specified"

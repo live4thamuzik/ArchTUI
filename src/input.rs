@@ -5,6 +5,23 @@
 use crate::config::Package;
 use ratatui::widgets::ListState;
 
+/// Information about a partition
+#[derive(Debug, Clone)]
+pub struct PartitionInfo {
+    pub name: String,
+    pub size: String,
+}
+
+/// Layout information for manually partitioned disks
+#[derive(Debug, Clone)]
+pub struct PartitionLayout {
+    pub partitions: Vec<PartitionInfo>,
+    pub table_type: String,
+    pub has_esp: bool,
+    pub has_boot: bool,
+    pub has_root: bool,
+}
+
 /// Types of input dialogs
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputType {
@@ -25,6 +42,14 @@ pub enum InputType {
         current_value: String,
         available_disks: Vec<String>,
         scroll_state: crate::scrolling::ScrollState,
+    },
+    /// Multi-disk selection for RAID and manual partitioning
+    MultiDiskSelection {
+        selected_disks: Vec<String>,
+        available_disks: Vec<String>,
+        scroll_state: crate::scrolling::ScrollState,
+        min_disks: usize,
+        max_disks: usize,
     },
     /// Package selection (for additional packages)
     PackageSelection {
@@ -145,6 +170,55 @@ impl InputDialog {
                     return InputResult::Confirm(
                         available_disks[scroll_state.selected_index].clone(),
                     );
+                }
+                crossterm::event::KeyCode::Esc => {
+                    return InputResult::Cancel;
+                }
+                _ => {}
+            },
+            InputType::MultiDiskSelection {
+                selected_disks,
+                available_disks,
+                scroll_state,
+                min_disks,
+                max_disks,
+                ..
+            } => match key_event.code {
+                crossterm::event::KeyCode::Up => {
+                    scroll_state.move_up();
+                }
+                crossterm::event::KeyCode::Down => {
+                    scroll_state.move_down();
+                }
+                crossterm::event::KeyCode::Char(' ') => {
+                    // Toggle selection
+                    let selected_disk = &available_disks[scroll_state.selected_index];
+                    if selected_disks.contains(selected_disk) {
+                        selected_disks.retain(|d| d != selected_disk);
+                    } else {
+                        if selected_disks.len() < *max_disks {
+                            selected_disks.push(selected_disk.clone());
+                        }
+                    }
+                }
+                crossterm::event::KeyCode::Enter => {
+                    // Validate selection
+                    if selected_disks.len() < *min_disks {
+                        // Show error - need more disks
+                        return InputResult::Continue;
+                    }
+
+                    // For RAID strategies, validate disk compatibility
+                    // Note: We'll pass partitioning strategy through the dialog context
+                    // For now, we'll validate based on the number of disks selected
+                    if selected_disks.len() >= 2 {
+                        if let Err(_error) = InputHandler::validate_raid_disks(selected_disks) {
+                            // Show RAID validation error - disks not compatible
+                            return InputResult::Continue;
+                        }
+                    }
+
+                    return InputResult::Confirm(selected_disks.join(","));
                 }
                 crossterm::event::KeyCode::Esc => {
                     return InputResult::Cancel;
@@ -458,6 +532,17 @@ impl InputDialog {
                 .get(scroll_state.selected_index)
                 .cloned()
                 .unwrap_or_default(),
+            InputType::MultiDiskSelection { selected_disks, .. } => {
+                if selected_disks.is_empty() {
+                    "No disks selected".to_string()
+                } else {
+                    format!(
+                        "{} disk(s) selected: {}",
+                        selected_disks.len(),
+                        selected_disks.join(", ")
+                    )
+                }
+            }
             InputType::PackageSelection { package_list, .. } => package_list.clone(),
             InputType::Warning { .. } => "Press Enter to acknowledge".to_string(),
             InputType::PasswordInput {
@@ -1325,18 +1410,37 @@ impl InputHandler {
 
         let mut disks = Vec::new();
 
-        // Try to use lsblk to get disk information
+        // Try to use lsblk to get disk information with more details
         if let Ok(output) = Command::new("lsblk")
-            .args(["-d", "-n", "-o", "NAME,SIZE,TYPE"])
+            .args(["-d", "-n", "-o", "NAME,SIZE,TYPE,RO,TRAN"])
             .output()
         {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for line in output_str.lines() {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 3 && parts[2] == "disk" {
+                if parts.len() >= 5 && parts[2] == "disk" {
                     let disk_name = format!("/dev/{}", parts[0]);
                     let disk_size = parts[1];
-                    disks.push(format!("{} ({})", disk_name, disk_size));
+                    let is_readonly = parts[3] == "1";
+                    let transport = parts[4];
+
+                    // Safety check: Skip read-only disks (likely live ISO)
+                    if is_readonly {
+                        continue;
+                    }
+
+                    // Safety check: Skip removable media (USB, CD-ROM)
+                    if transport == "usb"
+                        || transport == "sata"
+                            && disk_size.parse::<u64>().unwrap_or(0) < 1_073_741_824
+                    {
+                        // Skip disks smaller than 1GB (likely live ISO)
+                        continue;
+                    }
+
+                    // Get additional disk info for RAID compatibility
+                    let disk_info = Self::get_disk_info(&disk_name);
+                    disks.push(format!("{} ({}) {}", disk_name, disk_size, disk_info));
                 }
             }
         }
@@ -1358,11 +1462,377 @@ impl InputHandler {
 
             for disk in common_disks {
                 if std::path::Path::new(disk).exists() {
-                    disks.push(disk.to_string());
+                    let disk_info = Self::get_disk_info(disk);
+                    disks.push(format!("{} {}", disk, disk_info));
                 }
             }
         }
 
         disks
+    }
+
+    /// Start multi-disk selection for RAID or manual partitioning
+    pub fn start_multi_disk_selection(&mut self, partitioning_strategy: &str) {
+        let available_disks = Self::detect_available_disks();
+
+        // Determine disk requirements based on partitioning strategy
+        let (min_disks, max_disks, title) = match partitioning_strategy {
+            "auto_raid" | "auto_raid_luks" | "auto_raid_lvm" | "auto_raid_lvm_luks" => {
+                // RAID requires minimum 2 disks
+                (2, 8, "Select Disks for RAID Configuration")
+            }
+            "manual" => {
+                // Manual partitioning can use 1+ disks
+                (1, 8, "Select Disks for Manual Partitioning")
+            }
+            _ => {
+                // Default to single disk
+                (1, 1, "Select Disk")
+            }
+        };
+
+        // Validate we have enough disks
+        if available_disks.len() < min_disks {
+            self.current_dialog = Some(InputDialog::new(
+                InputType::Selection {
+                    field_name: "error".to_string(),
+                    options: vec![format!(
+                        "ERROR: Need at least {} disk(s) for {} partitioning, but only {} available",
+                        min_disks, partitioning_strategy, available_disks.len()
+                    )],
+                    scroll_state: crate::scrolling::ScrollState::new(1, 1),
+                },
+                "Insufficient Disks".to_string(),
+                "Press Esc to return".to_string(),
+            ));
+            return;
+        }
+
+        let scroll_state = crate::scrolling::ScrollState::new(available_disks.len(), 10);
+
+        let input_type = InputType::MultiDiskSelection {
+            selected_disks: Vec::new(),
+            available_disks,
+            scroll_state,
+            min_disks,
+            max_disks,
+        };
+
+        self.current_dialog = Some(InputDialog::new(
+            input_type,
+            title.to_string(),
+            "Use ↑↓ to navigate, Space to select/deselect, Enter to confirm, Esc to cancel"
+                .to_string(),
+        ));
+    }
+
+    /// Validate RAID disk compatibility
+    fn validate_raid_disks(disks: &[String]) -> Result<(), String> {
+        if disks.len() < 2 {
+            return Err("RAID requires at least 2 disks".to_string());
+        }
+
+        // Extract disk paths from the formatted strings
+        let disk_paths: Vec<&str> = disks
+            .iter()
+            .map(|d| d.split(' ').next().unwrap_or(""))
+            .filter(|&d| !d.is_empty())
+            .collect();
+
+        // Check disk sizes for RAID compatibility
+        let mut disk_sizes = Vec::new();
+        for disk in &disk_paths {
+            if let Ok(output) = std::process::Command::new("lsblk")
+                .args(["-d", "-n", "-o", "SIZE", disk])
+                .output()
+            {
+                let size_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                disk_sizes.push(size_str);
+            }
+        }
+
+        // Check if all disks have similar sizes (within 10% tolerance)
+        if disk_sizes.len() >= 2 {
+            let first_size = Self::parse_disk_size(&disk_sizes[0]);
+            for size_str in &disk_sizes[1..] {
+                let size = Self::parse_disk_size(size_str);
+                let tolerance = (first_size as f64 * 0.1) as u64; // 10% tolerance
+                if (size as i64 - first_size as i64).abs() > tolerance as i64 {
+                    return Err(format!(
+                        "RAID disks should be similar sizes. Found: {} vs {}",
+                        disk_sizes[0], size_str
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parse disk size string to bytes for comparison
+    fn parse_disk_size(size_str: &str) -> u64 {
+        let size_str = size_str.trim();
+        let (number, unit) = if size_str.ends_with("G") {
+            (&size_str[..size_str.len() - 1], "G")
+        } else if size_str.ends_with("M") {
+            (&size_str[..size_str.len() - 1], "M")
+        } else if size_str.ends_with("T") {
+            (&size_str[..size_str.len() - 1], "T")
+        } else {
+            (size_str, "")
+        };
+
+        if let Ok(num) = number.parse::<f64>() {
+            match unit {
+                "T" => (num * 1_000_000_000_000.0) as u64,
+                "G" => (num * 1_000_000_000.0) as u64,
+                "M" => (num * 1_000_000.0) as u64,
+                _ => num as u64,
+            }
+        } else {
+            0
+        }
+    }
+
+    /// Launch partitioning tool for manual partitioning
+    pub fn launch_partitioning_tool(&mut self, disks: &[String]) -> Result<(), String> {
+        use std::process::{Command, Stdio};
+        
+        // Extract disk paths from the formatted strings
+        let disk_paths: Vec<String> = disks
+            .iter()
+            .map(|d| d.split(' ').next().unwrap_or("").to_string())
+            .filter(|d| !d.is_empty())
+            .collect();
+        
+        if disk_paths.is_empty() {
+            return Err("No valid disks selected".to_string());
+        }
+        
+        // Validate disk paths to prevent command injection
+        for disk in &disk_paths {
+            if !disk.starts_with("/dev/") || disk.contains("..") || disk.contains(" ") {
+                return Err(format!("Invalid disk path: {}", disk));
+            }
+        }
+        
+        // For single disk, use cfdisk (more user-friendly than fdisk)
+        // For multiple disks, we'll launch cfdisk for each disk sequentially
+        for disk in &disk_paths {
+            println!("Launching cfdisk for {}", disk);
+            println!("Please partition this disk according to your needs.");
+            println!("Press Enter when you're done with {}", disk);
+            
+            // Launch cfdisk in interactive mode
+            let status = Command::new("cfdisk")
+                .arg(disk)
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status();
+            
+            match status {
+                Ok(exit_status) => {
+                    if !exit_status.success() {
+                        return Err(format!("cfdisk failed for {}", disk));
+                    }
+                }
+                Err(e) => {
+                    return Err(format!("Failed to launch cfdisk for {}: {}", disk, e));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Start manual partitioning confirmation dialog
+    pub fn start_manual_partitioning_confirmation(&mut self, disks: &[String]) {
+        let disk_list = disks.join("\n");
+        let message = format!(
+            "You have selected {} disk(s) for manual partitioning:\n\n{}\n\nThis will launch cfdisk for each disk.\n\nProceed with manual partitioning?",
+            disks.len(),
+            disk_list
+        );
+
+        let options = vec![
+            "Yes, start partitioning".to_string(),
+            "No, go back to disk selection".to_string(),
+        ];
+
+        let scroll_state = crate::scrolling::ScrollState::new(options.len(), 10);
+
+        self.current_dialog = Some(InputDialog::new(
+            InputType::Selection {
+                field_name: "manual_partitioning_confirm".to_string(),
+                options,
+                scroll_state,
+            },
+            "Manual Partitioning Confirmation".to_string(),
+            message,
+        ));
+    }
+
+    /// Validate manual partitioning setup
+    pub fn validate_manual_partitioning(
+        &self,
+        disks: &[String],
+        boot_mode: &str,
+    ) -> Result<PartitionLayout, String> {
+        use std::process::Command;
+
+        // Extract disk paths
+        let disk_paths: Vec<String> = disks
+            .iter()
+            .map(|d| d.split(' ').next().unwrap_or("").to_string())
+            .filter(|d| !d.is_empty())
+            .collect();
+
+        let mut partitions = Vec::new();
+        let mut has_root = false;
+        let mut has_esp = false;
+        let mut has_boot = false;
+
+        // Scan all partitions on selected disks
+        for disk in &disk_paths {
+            if let Ok(output) = Command::new("lsblk")
+                .args(["-n", "-o", "NAME,TYPE,SIZE", disk])
+                .output()
+            {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                for line in output_str.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 && parts[1] == "part" {
+                        let partition_name = format!("/dev/{}", parts[0]);
+                        let partition_size = if parts.len() > 2 { parts[2] } else { "unknown" };
+                        partitions.push(PartitionInfo {
+                            name: partition_name,
+                            size: partition_size.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Validate required partitions based on boot mode
+        if boot_mode.to_lowercase() == "uefi" {
+            // Check for GPT partition table and ESP partition
+            for disk in &disk_paths {
+                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                    let output_str = String::from_utf8_lossy(&output.stdout);
+                    if output_str.contains("GPT") {
+                        // Good, GPT partition table
+                    } else if output_str.contains("MBR") || output_str.contains("DOS") {
+                        return Err(format!("UEFI requires GPT partition table on {}", disk));
+                    }
+                }
+            }
+
+            // Check for ESP partition (EF00 type)
+            for disk in &disk_paths {
+                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                    let output_str = String::from_utf8_lossy(&output.stdout);
+                    if output_str.contains("EF00") || output_str.contains("EFI System") {
+                        has_esp = true;
+                        break;
+                    }
+                }
+            }
+
+            if !has_esp {
+                return Err(
+                    "UEFI requires an EFI System Partition (ESP) with type EF00".to_string()
+                );
+            }
+        } else {
+            // BIOS mode - check for MBR or GPT with BIOS Boot Partition
+            for disk in &disk_paths {
+                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                    let output_str = String::from_utf8_lossy(&output.stdout);
+                    if output_str.contains("MBR") || output_str.contains("DOS") {
+                        has_boot = true; // MBR has boot sector
+                        break;
+                    } else if output_str.contains("GPT") && output_str.contains("EF02") {
+                        has_boot = true; // GPT with BIOS Boot Partition
+                        break;
+                    }
+                }
+            }
+
+            if !has_boot {
+                return Err(
+                    "BIOS requires MBR partition table or GPT with BIOS Boot Partition".to_string(),
+                );
+            }
+        }
+
+        // Check for root partition (Linux filesystem)
+        for disk in &disk_paths {
+            if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                if output_str.contains("8300") || output_str.contains("Linux filesystem") {
+                    has_root = true;
+                    break;
+                }
+            }
+        }
+
+        if !has_root {
+            return Err("No Linux filesystem partition found. You need at least one root partition (type 8300)".to_string());
+        }
+
+        Ok(PartitionLayout {
+            partitions,
+            table_type: if boot_mode.to_lowercase() == "uefi" {
+                "GPT".to_string()
+            } else {
+                "MBR".to_string()
+            },
+            has_esp,
+            has_boot,
+            has_root,
+        })
+    }
+
+    /// Get additional disk information for RAID compatibility
+    fn get_disk_info(disk: &str) -> String {
+        use std::process::Command;
+
+        let mut info_parts = Vec::<String>::new();
+
+        // Check if disk is mounted (safety check)
+        if let Ok(output) = Command::new("mount").output() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            if output_str.contains(disk) {
+                info_parts.push("MOUNTED".to_string());
+            }
+        }
+
+        // Get disk model for RAID compatibility
+        if let Ok(output) = Command::new("lsblk")
+            .args(["-d", "-n", "-o", "MODEL", disk])
+            .output()
+        {
+            let model = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !model.is_empty() && model != "disk" {
+                info_parts.push(model);
+            }
+        }
+
+        // Get sector size for RAID compatibility
+        if let Ok(output) = Command::new("blockdev").args(["--getss", disk]).output() {
+            if let Ok(sector_size) = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse::<u32>()
+            {
+                info_parts.push(format!("{}B", sector_size));
+            }
+        }
+
+        if info_parts.is_empty() {
+            "OK".to_string()
+        } else {
+            info_parts.join(", ")
+        }
     }
 }
