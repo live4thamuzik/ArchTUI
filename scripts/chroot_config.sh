@@ -23,6 +23,34 @@ _log_debug() { _log_message "DEBUG" "$1"; }
 _log_success() { echo -e "\n\e[32;1m==================================================\e[0m\n\e[32;1m $* \e[0m\n\e[32;1m==================================================\e[0m\n"; }
 
 # =============================================================================
+# PACKAGE DEFINITIONS
+# =============================================================================
+
+# Desktop Environment Package Lists
+KDE_PACKAGES="plasma kde-applications"
+GNOME_PACKAGES="gnome gnome-extra"
+XFCE_PACKAGES="xfce4 xfce4-goodies"
+I3_PACKAGES="i3-wm i3status i3lock"
+HYPRLAND_PACKAGES="hyprland waybar swaylock swayidle wlogout wlroots"
+
+# Display Manager Package Lists
+GDM_PACKAGES="gdm"
+SDDM_PACKAGES="sddm"
+LIGHTDM_PACKAGES="lightdm lightdm-gtk-greeter"
+LXDM_PACKAGES="lxdm"
+
+# GPU Driver Package Lists
+NVIDIA_PACKAGES="nvidia nvidia-utils nvidia-settings"
+NVIDIA_LTS_PACKAGES="nvidia-lts nvidia-utils nvidia-settings"
+AMD_PACKAGES="mesa lib32-mesa xf86-video-amdgpu"
+INTEL_PACKAGES="mesa lib32-mesa xf86-video-intel"
+NOUVEAU_PACKAGES="mesa lib32-mesa xf86-video-nouveau"
+
+# AUR Helper Package Lists
+PARU_PACKAGES="paru"
+YAY_PACKAGES="yay"
+
+# =============================================================================
 # MISSING FUNCTION IMPLEMENTATIONS
 # =============================================================================
 
@@ -388,16 +416,16 @@ install_display_manager_chroot() {
     
     case "$DISPLAY_MANAGER" in
         "gdm")
-            pacman -S --noconfirm gdm
+            pacman -S --noconfirm $GDM_PACKAGES
             ;;
         "sddm")
-            pacman -S --noconfirm sddm
+            pacman -S --noconfirm $SDDM_PACKAGES
             ;;
         "lightdm")
-            pacman -S --noconfirm lightdm lightdm-gtk-greeter
+            pacman -S --noconfirm $LIGHTDM_PACKAGES
             ;;
         "lxdm")
-            pacman -S --noconfirm lxdm
+            pacman -S --noconfirm $LXDM_PACKAGES
             ;;
         "none")
             _log_info "No display manager requested"
@@ -412,19 +440,19 @@ install_gpu_drivers_chroot() {
     
     case "$GPU_DRIVERS" in
         "nvidia")
-            pacman -S --noconfirm nvidia nvidia-utils nvidia-settings
+            pacman -S --noconfirm $NVIDIA_PACKAGES
             ;;
         "nvidia-lts")
-            pacman -S --noconfirm nvidia-lts nvidia-utils nvidia-settings
+            pacman -S --noconfirm $NVIDIA_LTS_PACKAGES
             ;;
         "amd")
-            pacman -S --noconfirm mesa lib32-mesa xf86-video-amdgpu
+            pacman -S --noconfirm $AMD_PACKAGES
             ;;
         "intel")
-            pacman -S --noconfirm mesa lib32-mesa xf86-video-intel
+            pacman -S --noconfirm $INTEL_PACKAGES
             ;;
         "nouveau")
-            pacman -S --noconfirm mesa lib32-mesa xf86-video-nouveau
+            pacman -S --noconfirm $NOUVEAU_PACKAGES
             ;;
     esac
 }
@@ -644,19 +672,19 @@ main() {
     _log_info "Installing Desktop Environment: ${DESKTOP_ENVIRONMENT:-none}..."
     case "${DESKTOP_ENVIRONMENT:-none}" in
         "gnome")
-            install_packages_chroot gnome gnome-extra || _log_error "Desktop Environment packages installation failed."
+            install_packages_chroot $GNOME_PACKAGES || _log_error "Desktop Environment packages installation failed."
             ;;
         "kde")
-            install_packages_chroot plasma kde-applications || _log_error "Desktop Environment packages installation failed."
+            install_packages_chroot $KDE_PACKAGES || _log_error "Desktop Environment packages installation failed."
             ;;
         "xfce")
-            install_packages_chroot xfce4 xfce4-goodies || _log_error "Desktop Environment packages installation failed."
+            install_packages_chroot $XFCE_PACKAGES || _log_error "Desktop Environment packages installation failed."
             ;;
         "i3")
-            install_packages_chroot i3-wm i3status i3lock || _log_error "Desktop Environment packages installation failed."
+            install_packages_chroot $I3_PACKAGES || _log_error "Desktop Environment packages installation failed."
             ;;
         "hyprland")
-            install_packages_chroot hyprland waybar swaylock swayidle wlogout wlroots || _log_error "Desktop Environment packages installation failed."
+            install_packages_chroot $HYPRLAND_PACKAGES || _log_error "Desktop Environment packages installation failed."
             ;;
         "none")
             _log_info "No desktop environment requested"

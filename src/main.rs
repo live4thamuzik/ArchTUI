@@ -79,7 +79,7 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| error::general_error(format!("Failed to create terminal: {}", e)))?;
 
     // Create and run application
-    let mut app = app::App::new();
+    let mut app = app::App::new(None);
     let result = app.run(&mut terminal);
 
     // Cleanup terminal (always attempt cleanup, even if app failed)
@@ -93,6 +93,9 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
 fn run_installer_with_config(
     config_path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
     // Load and validate configuration
     let config = InstallationConfig::load_from_file(config_path)?;
     config.validate()?;
@@ -100,20 +103,37 @@ fn run_installer_with_config(
     println!("✓ Configuration loaded and validated");
     println!("🚀 Starting installation with configuration file...");
 
-    // Run the Bash installer with the config file
-    let output = std::process::Command::new("bash")
-        .arg("scripts/install.sh")
+    let script_path = "./scripts/install.sh";
+    let mut child = Command::new("bash")
+        .arg(script_path)
         .arg("--config")
         .arg(config_path)
-        .output()?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn installer script");
 
-    // Print output in real-time (for now, just show final result)
+    // Capture and print stdout in real-time
+    if let Some(stdout) = child.stdout.take() {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            println!("{}", line?);
+        }
+    }
+
+    // Capture and print stderr after the process finishes
+    let output = child.wait_with_output()?;
+
     if output.status.success() {
-        println!("✓ Installation completed successfully!");
+        println!("\n✓ Installation completed successfully!");
     } else {
-        eprintln!("✗ Installation failed");
-        eprintln!("STDOUT: {}", String::from_utf8_lossy(&output.stdout));
-        eprintln!("STDERR: {}", String::from_utf8_lossy(&output.stderr));
+        eprintln!("\n✗ Installation failed");
+        // Print any remaining stderr
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            eprintln!("--- Errors ---");
+            eprintln!("{}", stderr);
+        }
         std::process::exit(1);
     }
 
@@ -134,9 +154,34 @@ fn run_tui_installer_with_save(
         save_path.display()
     );
 
-    // For now, just run the normal TUI
-    // TODO: Implement configuration saving in the TUI
-    run_tui_installer()?;
+    // Run TUI with save path
+    run_tui_installer_with_save_path(save_path)?;
 
     Ok(())
+}
+
+/// Run TUI installer with save path
+fn run_tui_installer_with_save_path(
+    save_path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize terminal
+    enable_raw_mode()
+        .map_err(|e| error::general_error(format!("Failed to enable raw mode: {}", e)))?;
+    crossterm::execute!(stdout(), crossterm::terminal::EnterAlternateScreen)
+        .map_err(|e| error::general_error(format!("Failed to enter alternate screen: {}", e)))?;
+
+    // Create terminal backend
+    let backend = CrosstermBackend::new(stdout());
+    let mut terminal = Terminal::new(backend)
+        .map_err(|e| error::general_error(format!("Failed to create terminal: {}", e)))?;
+
+    // Create and run application with save path
+    let mut app = app::App::new(Some(save_path.to_path_buf()));
+    let result = app.run(&mut terminal);
+
+    // Cleanup terminal (always attempt cleanup, even if app failed)
+    let _ = disable_raw_mode();
+    let _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
+
+    result
 }
