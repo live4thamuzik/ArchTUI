@@ -7,6 +7,14 @@ set -euo pipefail
 # Source utility functions
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 
+# Pre-flight check: Ensure jq is available
+if ! command -v jq >/dev/null 2>&1; then
+    echo "❌ Error: 'jq' is required for JSON configuration parsing but is not installed."
+    echo "   Please install jq: pacman -S jq"
+    echo "   Or run this installer with the TUI mode instead."
+    exit 1
+fi
+
 # Check if jq is available
 check_jq_available() {
     if ! command -v jq >/dev/null 2>&1; then

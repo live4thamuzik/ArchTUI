@@ -250,3 +250,55 @@ impl Default for InstallationConfig {
         Self::new()
     }
 }
+
+/// Elegant conversion from TUI Configuration to InstallationConfig
+impl From<&crate::config::Configuration> for InstallationConfig {
+    fn from(config: &crate::config::Configuration) -> Self {
+        let mut new_config = InstallationConfig::new();
+
+        // Helper function to get option value or default
+        let get_value = |name: &str, default: &str| -> String {
+            config
+                .options
+                .iter()
+                .find(|opt| opt.name == name)
+                .map(|opt| opt.get_value())
+                .unwrap_or_else(|| default.to_string())
+        };
+
+        // Map all configuration options
+        new_config.boot_mode = get_value("Boot Mode", "Auto");
+        new_config.install_disk = get_value("Disk", "");
+        new_config.partitioning_strategy = get_value("Partitioning Strategy", "auto_simple");
+        new_config.root_filesystem = get_value("Root Filesystem", "ext4");
+        new_config.home_filesystem = get_value("Home Filesystem", "ext4");
+        new_config.separate_home = get_value("Separate Home", "No");
+        new_config.swap = get_value("Swap", "No");
+        new_config.swap_size = get_value("Swap Size", "4G");
+        new_config.timezone_region = get_value("Timezone Region", "America");
+        new_config.timezone = get_value("Timezone", "New_York");
+        new_config.locale = get_value("Locale", "en_US.UTF-8");
+        new_config.keymap = get_value("Keymap", "us");
+        new_config.hostname = get_value("Hostname", "archlinux");
+        new_config.username = get_value("Username", "archuser");
+        new_config.user_password = get_value("User Password", "");
+        new_config.root_password = get_value("Root Password", "");
+        new_config.bootloader = get_value("Bootloader", "grub");
+        new_config.grub_theme_selection = get_value("GRUB Theme Selection", "arch-glow");
+        new_config.desktop_environment = get_value("Desktop Environment", "none");
+        new_config.display_manager = get_value("Display Manager", "none");
+        new_config.plymouth = get_value("Plymouth", "No");
+        new_config.plymouth_theme = get_value("Plymouth Theme", "none");
+        new_config.additional_packages = get_value("Additional Packages", "");
+        new_config.aur_helper = get_value("AUR Helper", "paru");
+        new_config.additional_aur_packages = get_value("Additional AUR Packages", "");
+        new_config.git_repository_url = get_value("Git Repository URL", "");
+        new_config.mirror_country = get_value("Mirror Country", "US");
+        new_config.time_sync = get_value("Time Sync", "systemd-timesyncd");
+        new_config.numlock_on_boot = get_value("Numlock on Boot", "No");
+        new_config.os_prober = get_value("OS Prober", "No");
+        new_config.secure_boot = get_value("Secure Boot", "No");
+
+        new_config
+    }
+}
