@@ -47,6 +47,13 @@ ESSENTIAL_PACKAGES=(
     "man-pages"
 )
 
+# Desktop Environment Package Lists
+KDE_PACKAGES=("plasma" "kde-applications")
+GNOME_PACKAGES=("gnome" "gnome-extra")
+XFCE_PACKAGES=("xfce4" "xfce4-goodies")
+I3_PACKAGES=("i3-wm" "i3status" "i3lock")
+HYPRLAND_PACKAGES=("hyprland" "waybar" "swaylock" "swayidle" "wlogout" "wlroots")
+
 # Bootloader packages
 GRUB_EFI_PACKAGES=("grub" "efibootmgr")
 GRUB_BIOS_PACKAGES=("grub")
@@ -76,6 +83,10 @@ FLATPAK_PACKAGES=("flatpak")
 
 # Numlock packages
 NUMLOCK_PACKAGES=("numlockx")
+
+# AUR Helper Package Lists
+PARU_PACKAGES=("paru")
+YAY_PACKAGES=("yay")
 
 # =============================================================================
 # MISSING FUNCTION IMPLEMENTATIONS
