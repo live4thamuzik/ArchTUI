@@ -13,7 +13,10 @@ mod package_utils;
 mod scrolling;
 mod ui;
 
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::{
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::stdout;
 
@@ -79,7 +82,7 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| error::general_error(format!("Failed to create terminal: {}", e)))?;
 
     // Create and run application
-    let mut app = app::App::new();
+    let mut app = app::App::new(None);
     let result = app.run(&mut terminal);
 
     // Cleanup terminal (always attempt cleanup, even if app failed)
@@ -95,7 +98,6 @@ fn run_installer_with_config(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio};
-    use std::thread;
 
     // Load and validate configuration
     let config = InstallationConfig::load_from_file(config_path)?;
@@ -104,42 +106,37 @@ fn run_installer_with_config(
     println!("✓ Configuration loaded and validated");
     println!("🚀 Starting installation with configuration file...");
 
-    // Launch the installation script with proper output redirection
+    let script_path = "./scripts/install.sh";
     let mut child = Command::new("bash")
-        .arg("scripts/install.sh")
+        .arg(script_path)
         .arg("--config")
         .arg(config_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdin(Stdio::null()) // Prevent any interactive prompts
-        .spawn()?;
+        .spawn()
+        .expect("Failed to spawn installer script");
 
-    // Handle stdout in separate thread for real-time output
+    // Capture and print stdout in real-time
     if let Some(stdout) = child.stdout.take() {
-        thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(Result::ok) {
-                println!("{}", line);
-            }
-        });
+        let reader = BufReader::new(stdout);
+        for line in reader.lines() {
+            println!("{}", line?);
+        }
     }
 
-    // Handle stderr in separate thread for real-time error output
-    if let Some(stderr) = child.stderr.take() {
-        thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
-                eprintln!("{}", line);
-            }
-        });
-    }
+    // Capture and print stderr after the process finishes
+    let output = child.wait_with_output()?;
 
-    let status = child.wait()?;
-
-    if status.success() {
-        println!("✓ Installation completed successfully!");
+    if output.status.success() {
+        println!("\n✓ Installation completed successfully!");
     } else {
-        eprintln!("✗ Installation failed with exit code: {:?}", status.code());
+        eprintln!("\n✗ Installation failed");
+        // Print any remaining stderr
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            eprintln!("--- Errors ---");
+            eprintln!("{}", stderr);
+        }
         std::process::exit(1);
     }
 
@@ -154,20 +151,32 @@ fn run_tui_installer_with_save(
         "🎯 TUI installer will save configuration to: {}",
         save_path.display()
     );
-    println!("Configure your installation, then the config will be saved and you can run:");
+    println!("Configure your installation, then the config will be saved automatically!");
     println!(
-        "  ./archinstall-tui install --config {}",
+        "After saving, you can run: ./archinstall-tui install --config {}",
         save_path.display()
     );
     println!();
 
-    // TODO: Enhanced save-config integration coming soon!
-    // For now, we'll run the normal TUI and show instructions
-    println!("⚠️  Enhanced save-config integration coming soon!");
-    println!("   For now, please use the TUI to configure, then manually create a config file.");
-    println!("   See examples in the repository for the JSON config format.");
-    println!("   The From trait implementation is ready for future integration.");
-    println!();
+    // Create app with save path
+    let mut app = app::App::new(Some(save_path.to_path_buf()));
 
-    run_tui_installer()
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+
+    // Run the app
+    let result = app.run(&mut terminal);
+
+    // Restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    result
 }

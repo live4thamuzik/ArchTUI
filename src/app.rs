@@ -59,6 +59,7 @@ pub struct App {
     installer: Option<Installer>,
     ui_renderer: UiRenderer,
     input_handler: InputHandler,
+    save_config_path: Option<std::path::PathBuf>,
 }
 
 impl App {
@@ -81,12 +82,13 @@ impl App {
     }
 
     /// Create a new application instance
-    pub fn new() -> Self {
+    pub fn new(save_config_path: Option<std::path::PathBuf>) -> Self {
         Self {
             state: Arc::new(Mutex::new(AppState::default())),
             installer: None,
             ui_renderer: UiRenderer::new(),
             input_handler: InputHandler::new(),
+            save_config_path,
         }
     }
 
@@ -444,6 +446,21 @@ impl App {
 
     /// Start the installation process
     fn start_installation(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Before starting, check if we need to save the config
+        if let Some(save_path) = &self.save_config_path {
+            let state = self.lock_state()?;
+            let file_config = crate::config_file::InstallationConfig::from(&state.config);
+            file_config.save_to_file(save_path)?;
+
+            // Update status message to show config was saved
+            let mut state_mut = self.lock_state_mut()?;
+            state_mut.status_message = format!("✓ Config saved to {}", save_path.display());
+            drop(state_mut);
+
+            // Give user a moment to see the save message
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+        }
+
         // Update state to installation mode
         {
             let mut state = self.lock_state_mut()?;
