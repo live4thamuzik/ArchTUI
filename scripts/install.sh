@@ -25,10 +25,32 @@ cleanup_on_exit() {
         umount /mnt 2>/dev/null || true
     fi
     
-    # Close any LUKS containers
-    if [[ -n "${LUKS_ROOT_UUID:-}" ]]; then
-        echo "Closing LUKS container..."
+    # Enhanced LVM cleanup - deactivate volume groups
+    if command -v vgchange >/dev/null 2>&1; then
+        echo "Deactivating volume groups..."
+        vgchange -an 2>/dev/null || true
+    fi
+    
+    # Enhanced LUKS cleanup - close all LUKS containers
+    if command -v cryptsetup >/dev/null 2>&1; then
+        echo "Closing LUKS containers..."
+        # Close any known LUKS containers
         cryptsetup close arch_root 2>/dev/null || true
+        cryptsetup close arch_home 2>/dev/null || true
+        cryptsetup close arch_swap 2>/dev/null || true
+        
+        # Close any other LUKS containers that might be open
+        for device in $(cryptsetup list | grep -E '^[^[:space:]]+.*active' | cut -d' ' -f1); do
+            if [[ "$device" != "cryptswap" ]]; then  # Don't close system swap
+                cryptsetup close "$device" 2>/dev/null || true
+            fi
+        done
+    fi
+    
+    # Enhanced RAID cleanup - stop arrays if needed
+    if command -v mdadm >/dev/null 2>&1; then
+        echo "Stopping RAID arrays..."
+        mdadm --stop --scan 2>/dev/null || true
     fi
     
     echo "=== CLEANUP COMPLETE ==="
