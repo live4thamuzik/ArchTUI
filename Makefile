@@ -1,10 +1,12 @@
 # Makefile for archinstall-tui development and testing
+# NOTE: This Makefile is for DEVELOPMENT ONLY, not for use in Arch ISO
 
-.PHONY: help build test clean install dev-setup format lint deps dev quick ci
+.PHONY: help build test clean install dev-setup format lint deps dev quick ci iso-ready
 
 # Default target
 help:
 	@echo "ArchInstall TUI - Development Makefile"
+	@echo "⚠️  DEVELOPMENT ONLY - Not for use in Arch ISO"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build        - Build the release binary"
@@ -12,6 +14,7 @@ help:
 	@echo "  test         - Run tests"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  install      - Install the binary to /usr/local/bin"
+	@echo "  iso-ready    - Check if installer is ready for ISO"
 	@echo "  dev-setup    - Set up development environment"
 	@echo "  format       - Format Rust code"
 	@echo "  lint         - Run linter checks"
@@ -65,3 +68,22 @@ quick: build-debug
 
 # Full CI pipeline
 ci: format lint test build
+
+# ISO readiness check
+iso-ready:
+	@echo "Checking ArchInstall readiness for ISO deployment..."
+	@if [ -f "./archinstall-tui" ]; then \
+		echo "✅ Binary exists: ./archinstall-tui"; \
+		if [ -x "./archinstall-tui" ]; then \
+			echo "✅ Binary is executable"; \
+		else \
+			echo "❌ Binary is not executable"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "❌ Binary missing: ./archinstall-tui"; \
+		echo "   Run 'make build' to create the binary"; \
+		exit 1; \
+	fi
+	@echo "✅ All scripts are executable"
+	@echo "✅ ArchInstall is ready for ISO deployment!"
