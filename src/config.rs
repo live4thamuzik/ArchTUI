@@ -241,6 +241,7 @@ impl Configuration {
                 "Root Filesystem" => "ROOT_FILESYSTEM",
                 "Separate Home Partition" => "SEPARATE_HOME",
                 "Home Filesystem" => "HOME_FILESYSTEM",
+                "Swap" => "SWAP",
                 "Swap Size" => "SWAP_SIZE",
                 "Btrfs Snapshots" => "BTRFS_SNAPSHOTS",
                 "Btrfs Frequency" => "BTRFS_FREQUENCY",
@@ -264,12 +265,14 @@ impl Configuration {
                 "Bootloader" => "BOOTLOADER",
                 "OS Prober" => "OS_PROBER",
                 "GRUB Theme" => "GRUB_THEME",
+                "GRUB Theme Selection" => "GRUB_THEME_SELECTION",
                 "Desktop Environment" => "DESKTOP_ENVIRONMENT",
                 "Display Manager" => "DISPLAY_MANAGER",
                 "Plymouth" => "PLYMOUTH",
                 "Plymouth Theme" => "PLYMOUTH_THEME",
                 "Numlock on Boot" => "NUMLOCK_ON_BOOT",
                 "Git Repository" => "GIT_REPOSITORY",
+                "Git Repository URL" => "GIT_REPOSITORY_URL",
                 _ => continue, // Skip unknown options
             };
 
