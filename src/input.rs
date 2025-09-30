@@ -8,7 +8,9 @@ use ratatui::widgets::ListState;
 /// Information about a partition
 #[derive(Debug, Clone)]
 pub struct PartitionInfo {
+    #[allow(dead_code)]
     pub name: String,
+    #[allow(dead_code)]
     pub size: String,
 }
 
@@ -17,8 +19,11 @@ pub struct PartitionInfo {
 pub struct PartitionLayout {
     pub partitions: Vec<PartitionInfo>,
     pub table_type: String,
+    #[allow(dead_code)]
     pub has_esp: bool,
+    #[allow(dead_code)]
     pub has_boot: bool,
+    #[allow(dead_code)]
     pub has_root: bool,
 }
 
@@ -1572,12 +1577,12 @@ impl InputHandler {
     /// Parse disk size string to bytes for comparison
     fn parse_disk_size(size_str: &str) -> u64 {
         let size_str = size_str.trim();
-        let (number, unit) = if size_str.ends_with("G") {
-            (&size_str[..size_str.len() - 1], "G")
-        } else if size_str.ends_with("M") {
-            (&size_str[..size_str.len() - 1], "M")
-        } else if size_str.ends_with("T") {
-            (&size_str[..size_str.len() - 1], "T")
+        let (number, unit) = if let Some(stripped) = size_str.strip_suffix("G") {
+            (stripped, "G")
+        } else if let Some(stripped) = size_str.strip_suffix("M") {
+            (stripped, "M")
+        } else if let Some(stripped) = size_str.strip_suffix("T") {
+            (stripped, "T")
         } else {
             (size_str, "")
         };
@@ -1597,32 +1602,32 @@ impl InputHandler {
     /// Launch partitioning tool for manual partitioning
     pub fn launch_partitioning_tool(&mut self, disks: &[String]) -> Result<(), String> {
         use std::process::{Command, Stdio};
-        
+
         // Extract disk paths from the formatted strings
         let disk_paths: Vec<String> = disks
             .iter()
             .map(|d| d.split(' ').next().unwrap_or("").to_string())
             .filter(|d| !d.is_empty())
             .collect();
-        
+
         if disk_paths.is_empty() {
             return Err("No valid disks selected".to_string());
         }
-        
+
         // Validate disk paths to prevent command injection
         for disk in &disk_paths {
             if !disk.starts_with("/dev/") || disk.contains("..") || disk.contains(" ") {
                 return Err(format!("Invalid disk path: {}", disk));
             }
         }
-        
+
         // For single disk, use cfdisk (more user-friendly than fdisk)
         // For multiple disks, we'll launch cfdisk for each disk sequentially
         for disk in &disk_paths {
             println!("Launching cfdisk for {}", disk);
             println!("Please partition this disk according to your needs.");
             println!("Press Enter when you're done with {}", disk);
-            
+
             // Launch cfdisk in interactive mode
             let status = Command::new("cfdisk")
                 .arg(disk)
@@ -1630,7 +1635,7 @@ impl InputHandler {
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .status();
-            
+
             match status {
                 Ok(exit_status) => {
                     if !exit_status.success() {
@@ -1642,7 +1647,7 @@ impl InputHandler {
                 }
             }
         }
-        
+
         Ok(())
     }
 

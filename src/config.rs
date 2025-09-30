@@ -62,7 +62,7 @@ impl ConfigOption {
                 let value = self.get_value();
                 value.len() >= 3
                     && value.len() <= 32
-                    && value.chars().next().map_or(false, |c| c.is_alphabetic())
+                    && value.chars().next().is_some_and(|c| c.is_alphabetic())
                     && value.chars().all(|c| c.is_alphanumeric() || c == '_')
             }
             "User Password" | "Root Password" => {
@@ -71,12 +71,13 @@ impl ConfigOption {
             }
             "Disk" => self.get_value().starts_with("/dev/"),
             "Git Repository URL" => {
-                let value = self.get_value().trim();
-                value.is_empty()
-                    || value.starts_with("http://")
-                    || value.starts_with("https://")
-                    || value.starts_with("git://")
-                    || value.starts_with("ssh://")
+                let value = self.get_value();
+                let trimmed = value.trim();
+                trimmed.is_empty()
+                    || trimmed.starts_with("http://")
+                    || trimmed.starts_with("https://")
+                    || trimmed.starts_with("git://")
+                    || trimmed.starts_with("ssh://")
             }
             _ => true, // Default: any non-empty value is valid
         }
@@ -304,7 +305,7 @@ mod tests {
     fn test_config_option_new() {
         let option = ConfigOption::new("Test Option", true, "Test description", "default");
         assert_eq!(option.name, "Test Option");
-        assert_eq!(option.required, true);
+        assert!(option.required);
         assert_eq!(option.description, "Test description");
         assert_eq!(option.default_value, "default");
         assert_eq!(option.value, "");

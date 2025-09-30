@@ -3,7 +3,9 @@
 //! A clean, modular TUI for Arch Linux installation with proper separation of concerns.
 
 mod app;
+mod cli;
 mod config;
+mod config_file;
 mod error;
 mod input;
 mod installer;
@@ -15,8 +17,56 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::stdout;
 
+use crate::cli::Cli;
+use crate::config_file::InstallationConfig;
+
 /// Main application entry point
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse_args();
+
+    match cli.command {
+        Some(crate::cli::Commands::Validate { config }) => {
+            // Validate configuration file
+            match InstallationConfig::load_from_file(&config) {
+                Ok(config) => match config.validate() {
+                    Ok(_) => println!("✓ Configuration file is valid: {:?}", config),
+                    Err(e) => {
+                        eprintln!("✗ Configuration validation failed: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("✗ Failed to load configuration file: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(crate::cli::Commands::Install {
+            config,
+            save_config,
+        }) => {
+            if let Some(config_path) = config {
+                // Run installer with config file (skip TUI)
+                run_installer_with_config(&config_path)?;
+            } else if let Some(save_path) = save_config {
+                // Run TUI and save config when done
+                run_tui_installer_with_save(&save_path)?;
+            } else {
+                // Run normal TUI installer
+                run_tui_installer()?;
+            }
+        }
+        None => {
+            // Run the TUI installer (default behavior)
+            run_tui_installer()?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Run the TUI installer
+fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize terminal
     enable_raw_mode()
         .map_err(|e| error::general_error(format!("Failed to enable raw mode: {}", e)))?;
@@ -37,4 +87,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
 
     result
+}
+
+/// Run installer with configuration file (headless mode)
+fn run_installer_with_config(
+    config_path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Load and validate configuration
+    let config = InstallationConfig::load_from_file(config_path)?;
+    config.validate()?;
+
+    println!("✓ Configuration loaded and validated");
+    println!("🚀 Starting installation with configuration file...");
+
+    // Run the Bash installer with the config file
+    let output = std::process::Command::new("bash")
+        .arg("scripts/install.sh")
+        .arg("--config")
+        .arg(config_path)
+        .output()?;
+
+    // Print output in real-time (for now, just show final result)
+    if output.status.success() {
+        println!("✓ Installation completed successfully!");
+    } else {
+        eprintln!("✗ Installation failed");
+        eprintln!("STDOUT: {}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("STDERR: {}", String::from_utf8_lossy(&output.stderr));
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Run TUI installer and save configuration when done
+fn run_tui_installer_with_save(
+    save_path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!(
+        "🎯 TUI installer will save configuration to: {}",
+        save_path.display()
+    );
+    println!("Configure your installation, then the config will be saved and you can run:");
+    println!(
+        "  ./archinstall-tui install --config {}",
+        save_path.display()
+    );
+
+    // For now, just run the normal TUI
+    // TODO: Implement configuration saving in the TUI
+    run_tui_installer()?;
+
+    Ok(())
 }

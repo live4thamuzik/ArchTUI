@@ -53,14 +53,19 @@ readonly BOOT_FILESYSTEM="ext4"
 
 # --- Common Partitioning Functions ---
 
-# Get partition path based on disk type (NVMe vs regular)
+# Get partition path based on disk type (NVMe, eMMC, vs regular)
 get_partition_path() {
     local disk="$1"
     local part_num="$2"
     
     if [[ "$disk" =~ nvme ]]; then
+        # NVMe drives: /dev/nvme0n1p1, /dev/nvme0n1p2, etc.
+        echo "${disk}p${part_num}"
+    elif [[ "$disk" =~ mmcblk ]]; then
+        # eMMC drives: /dev/mmcblk0p1, /dev/mmcblk0p2, etc.
         echo "${disk}p${part_num}"
     else
+        # Regular drives: /dev/sda1, /dev/sdb2, etc.
         echo "${disk}${part_num}"
     fi
 }
@@ -79,10 +84,10 @@ create_partition_table() {
     
     if [ "$BOOT_MODE" = "UEFI" ]; then
         log_info "Creating GPT partition table on $disk"
-        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk."
+        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk. The command 'sgdisk -Z $disk' failed."
     else
         log_info "Creating MBR partition table on $disk"
-        printf "o\nw\n" | fdisk "$disk" || error_exit "Failed to create MBR label on $disk."
+        printf "o\nw\n" | fdisk "$disk" || error_exit "Failed to create MBR label on $disk. The command 'printf \"o\\nw\\n\" | fdisk $disk' failed."
     fi
     partprobe "$disk"
 }
@@ -95,7 +100,7 @@ create_esp_partition() {
     
     log_info "Creating ESP partition (${size_mib}MiB) for /efi..."
     local size_mb="${size_mib}M"
-    sgdisk -n "$part_num:0:+$size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$disk" || error_exit "Failed to create ESP partition."
+    sgdisk -n "$part_num:0:+$size_mb" -t "$part_num:$EFI_PARTITION_TYPE" "$disk" || error_exit "Failed to create ESP partition. The command 'sgdisk -n $part_num:0:+$size_mb -t $part_num:$EFI_PARTITION_TYPE $disk' failed."
     partprobe "$disk"
     local part_dev=$(get_partition_path "$disk" "$part_num")
     
@@ -133,7 +138,7 @@ create_boot_partition() {
     local size_mib="${3:-1024}"
     
     log_info "Creating boot partition (${size_mib}MiB) for /boot..."
-    printf "n\np\n$part_num\n\n+${size_mib}M\nw\n" | fdisk "$disk" || error_exit "Failed to create boot partition."
+    printf "n\np\n$part_num\n\n+${size_mib}M\nw\n" | fdisk "$disk" || error_exit "Failed to create boot partition. The command 'printf \"n\\np\\n$part_num\\n\\n+${size_mib}M\\nw\\n\" | fdisk $disk' failed."
     partprobe "$disk"
     local part_dev=$(get_partition_path "$disk" "$part_num")
     
