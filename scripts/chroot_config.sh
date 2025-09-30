@@ -642,26 +642,21 @@ main() {
     
     # --- Phase 3: Desktop Environment & Drivers ---
     _log_info "Installing Desktop Environment: ${DESKTOP_ENVIRONMENT:-none}..."
-    case "${DESKTOP_ENVIRONMENT:-none}" in
-        "gnome")
-            install_packages_chroot gnome gnome-extra || _log_error "Desktop Environment packages installation failed."
-            ;;
-        "kde")
-            install_packages_chroot plasma kde-applications || _log_error "Desktop Environment packages installation failed."
-            ;;
-        "xfce")
-            install_packages_chroot xfce4 xfce4-goodies || _log_error "Desktop Environment packages installation failed."
-            ;;
-        "i3")
-            install_packages_chroot i3-wm i3status i3lock || _log_error "Desktop Environment packages installation failed."
-            ;;
-        "hyprland")
-            install_packages_chroot hyprland waybar swaylock swayidle wlogout wlroots || _log_error "Desktop Environment packages installation failed."
-            ;;
-        "none")
-            _log_info "No desktop environment requested"
-            ;;
-    esac
+    # Install desktop environment using modular system
+    local de_name="${DESKTOP_ENVIRONMENT:-none}"
+    local de_script_path="./desktops/${de_name,,}.sh"  # ,, makes it lowercase
+    
+    if [ -f "$de_script_path" ]; then
+        _log_info "Running modular configuration for $de_name desktop environment..."
+        source "$de_script_path" || {
+            _log_error "Failed to install $de_name desktop environment"
+            return 1
+        }
+    else
+        _log_error "Desktop environment script not found: $de_script_path"
+        _log_info "Available desktop environments: gnome, kde, xfce, i3, hyprland, none"
+        return 1
+    fi
     
     # Install display manager
     install_display_manager_chroot || _log_error "Display manager installation failed."

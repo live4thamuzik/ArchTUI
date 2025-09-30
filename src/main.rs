@@ -93,6 +93,10 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
 fn run_installer_with_config(
     config_path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::thread;
+
     // Load and validate configuration
     let config = InstallationConfig::load_from_file(config_path)?;
     config.validate()?;
@@ -100,14 +104,35 @@ fn run_installer_with_config(
     println!("✓ Configuration loaded and validated");
     println!("🚀 Starting installation with configuration file...");
 
-    // Run the Bash installer with the config file (real-time output)
-    let mut child = std::process::Command::new("bash")
+    // Launch the installation script with proper output redirection
+    let mut child = Command::new("bash")
         .arg("scripts/install.sh")
         .arg("--config")
         .arg(config_path)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null()) // Prevent any interactive prompts
         .spawn()?;
+
+    // Handle stdout in separate thread for real-time output
+    if let Some(stdout) = child.stdout.take() {
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                println!("{}", line);
+            }
+        });
+    }
+
+    // Handle stderr in separate thread for real-time error output
+    if let Some(stderr) = child.stderr.take() {
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines().map_while(Result::ok) {
+                eprintln!("{}", line);
+            }
+        });
+    }
 
     let status = child.wait()?;
 
@@ -134,12 +159,14 @@ fn run_tui_installer_with_save(
         "  ./archinstall-tui install --config {}",
         save_path.display()
     );
+    println!();
 
-    // For now, run the normal TUI and show instructions for manual config saving
-    // TODO: Implement proper config saving from TUI state
-    println!("⚠️  Note: Config saving from TUI is not yet fully implemented.");
-    println!("   The TUI will run, but you'll need to manually create a config file.");
-    println!("   See the examples in the repository for config file format.");
+    // TODO: Enhanced save-config integration coming soon!
+    // For now, we'll run the normal TUI and show instructions
+    println!("⚠️  Enhanced save-config integration coming soon!");
+    println!("   For now, please use the TUI to configure, then manually create a config file.");
+    println!("   See examples in the repository for the JSON config format.");
+    println!("   The From trait implementation is ready for future integration.");
     println!();
 
     run_tui_installer()
