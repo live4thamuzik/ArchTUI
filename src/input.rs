@@ -200,10 +200,8 @@ impl InputDialog {
                     let selected_disk = &available_disks[scroll_state.selected_index];
                     if selected_disks.contains(selected_disk) {
                         selected_disks.retain(|d| d != selected_disk);
-                    } else {
-                        if selected_disks.len() < *max_disks {
-                            selected_disks.push(selected_disk.clone());
-                        }
+                    } else if selected_disks.len() < *max_disks {
+                        selected_disks.push(selected_disk.clone());
                     }
                 }
                 crossterm::event::KeyCode::Enter => {
@@ -593,6 +591,12 @@ pub enum InputResult {
 pub struct InputHandler {
     /// Current active dialog
     pub current_dialog: Option<InputDialog>,
+}
+
+impl Default for InputHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InputHandler {

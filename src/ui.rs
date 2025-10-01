@@ -18,6 +18,12 @@ pub struct UiRenderer {
     header_lines: Vec<Line<'static>>,
 }
 
+impl Default for UiRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UiRenderer {
     /// Create a new UI renderer
     pub fn new() -> Self {
@@ -109,7 +115,7 @@ impl UiRenderer {
         );
 
         // Render start button
-        self.render_start_button(f, chunks[4], &state);
+        self.render_start_button(f, chunks[4], state);
     }
 
     /// Render the installation UI
@@ -644,7 +650,7 @@ impl UiRenderer {
         self.render_title(f, chunks[1], "Arch Linux Toolkit");
 
         // Render main menu
-        let menu_items = vec![
+        let menu_items = [
             " ▶ Guided Installer  (Recommended for new users)",
             " ▶ Automated Install (Run from configuration file)",
             " ▶ Arch Linux Tools  (System repair and administration)",
@@ -698,7 +704,7 @@ impl UiRenderer {
         self.render_title(f, chunks[1], "Arch Linux Tools");
 
         // Render tools menu
-        let menu_items = vec![
+        let menu_items = [
             " ▶ Disk & Filesystem Tools",
             " ▶ System & Boot Tools",
             " ▶ User & Security Tools",
@@ -753,7 +759,7 @@ impl UiRenderer {
         self.render_title(f, chunks[1], "Disk & Filesystem Tools");
 
         // Render disk tools menu
-        let menu_items = vec![
+        let menu_items = [
             " ▶ Partition Disk (Manual)",
             " ▶ Format Partition",
             " ▶ Wipe Disk",
@@ -809,7 +815,7 @@ impl UiRenderer {
         self.render_title(f, chunks[1], "System & Boot Tools");
 
         // Render system tools menu
-        let menu_items = vec![
+        let menu_items = [
             " ▶ Install/Repair Bootloader",
             " ▶ Generate fstab",
             " ▶ Chroot into System",
@@ -865,7 +871,7 @@ impl UiRenderer {
         self.render_title(f, chunks[1], "User & Security Tools");
 
         // Render user tools menu
-        let menu_items = vec![
+        let menu_items = [
             " ▶ Add New User",
             " ▶ Reset Password",
             " ▶ Manage User Groups",
@@ -921,7 +927,7 @@ impl UiRenderer {
         self.render_title(f, chunks[1], "Network Tools");
 
         // Render network tools menu
-        let menu_items = vec![
+        let menu_items = [
             " ▶ Configure Network Interface",
             " ▶ Test Network Connectivity",
             " ▶ Configure Firewall",
