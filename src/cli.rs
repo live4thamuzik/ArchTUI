@@ -85,6 +85,33 @@ pub enum DiskToolCommands {
         #[arg(short, long)]
         confirm: bool,
     },
+    /// Check disk health using SMART
+    Health {
+        /// Disk device to check (e.g., /dev/sda)
+        #[arg(short, long)]
+        device: String,
+    },
+    /// Mount or unmount partitions
+    Mount {
+        /// Action to perform
+        #[arg(short, long)]
+        action: String,
+        /// Device to mount/unmount (e.g., /dev/sda1)
+        #[arg(short, long)]
+        device: String,
+        /// Mount point (required for mount action)
+        #[arg(short, long)]
+        mountpoint: Option<String>,
+        /// Filesystem type (optional)
+        #[arg(short, long)]
+        filesystem: Option<String>,
+    },
+    /// Manual disk partitioning using cfdisk
+    Manual {
+        /// Disk device to partition (e.g., /dev/sda)
+        #[arg(short, long)]
+        device: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -110,6 +137,30 @@ pub enum SystemToolCommands {
         #[arg(short, long)]
         root: String,
     },
+    /// Chroot into a mounted system
+    Chroot {
+        /// Root directory to chroot into (default: /mnt)
+        #[arg(short, long, default_value = "/mnt")]
+        root: String,
+        /// Skip mounting /proc, /sys, /dev
+        #[arg(long)]
+        no_mount: bool,
+    },
+    /// Display system information
+    Info {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+    },
+    /// Manage systemd services
+    Services {
+        /// Action to perform (enable, disable, start, stop, status, list)
+        #[arg(short, long)]
+        action: String,
+        /// Service name
+        #[arg(short, long)]
+        service: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -129,6 +180,45 @@ pub enum UserToolCommands {
         #[arg(short, long, default_value = "/bin/bash")]
         shell: String,
     },
+    /// Reset user password
+    ResetPassword {
+        /// Username to reset password for
+        #[arg(short, long)]
+        username: String,
+    },
+    /// Manage user groups
+    Groups {
+        /// Action to perform (add, remove, list, create, delete)
+        #[arg(short, long)]
+        action: String,
+        /// Username
+        #[arg(short, long)]
+        user: Option<String>,
+        /// Group name
+        #[arg(short, long)]
+        group: Option<String>,
+    },
+    /// Configure SSH server
+    Ssh {
+        /// Action to perform (install, configure, enable, disable, status)
+        #[arg(short, long)]
+        action: String,
+        /// SSH port
+        #[arg(short, long)]
+        port: Option<u16>,
+        /// Enable/disable root login
+        #[arg(long)]
+        root_login: Option<bool>,
+        /// Enable/disable password authentication
+        #[arg(long)]
+        password_auth: Option<bool>,
+    },
+    /// Perform security audit
+    Security {
+        /// Action to perform (basic, full)
+        #[arg(short, long)]
+        action: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -144,6 +234,45 @@ pub enum NetworkToolCommands {
         /// Gateway (optional)
         #[arg(short, long)]
         gateway: Option<String>,
+    },
+    /// Test network connectivity
+    Test {
+        /// Action to perform (ping, dns, http, full)
+        #[arg(short, long)]
+        action: String,
+        /// Host to test (optional)
+        #[arg(short, long)]
+        host: Option<String>,
+        /// Timeout in seconds
+        #[arg(short, long, default_value = "5")]
+        timeout: u16,
+    },
+    /// Configure firewall
+    Firewall {
+        /// Action to perform (enable, disable, status, rules, install)
+        #[arg(short, long)]
+        action: String,
+        /// Firewall type (iptables, ufw)
+        #[arg(short, long, default_value = "iptables")]
+        r#type: String,
+        /// Port to manage
+        #[arg(short, long)]
+        port: Option<u16>,
+        /// Protocol (tcp, udp)
+        #[arg(short, long, default_value = "tcp")]
+        protocol: String,
+        /// Allow the specified port
+        #[arg(long)]
+        allow: bool,
+        /// Deny the specified port
+        #[arg(long)]
+        deny: bool,
+    },
+    /// Network diagnostics
+    Diagnostics {
+        /// Action to perform (basic, detailed, troubleshoot)
+        #[arg(short, long)]
+        action: String,
     },
 }
 
