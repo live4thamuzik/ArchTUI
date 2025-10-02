@@ -111,7 +111,7 @@ impl UiRenderer {
         self.render_instructions(
             f,
             chunks[3],
-            "Use ↑↓ to navigate, Enter to configure, Space to install, 'q' to quit",
+            "Use ↑↓ to navigate, Enter to configure, Space to install, 'B' to go back, 'q' to quit",
         );
 
         // Render start button
