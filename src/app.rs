@@ -237,6 +237,20 @@ impl App {
         // Check if we're in an input dialog
         if self.input_handler.is_dialog_active() {
             if let Some(value) = self.input_handler.handle_input(key_event) {
+                // Check if we're in disk selection mode for a tool
+                let current_tool = {
+                    let state = self.state.lock().map_err(|_| "Failed to lock state")?;
+                    state.current_tool.clone()
+                };
+                
+                if let Some(tool) = current_tool {
+                    if tool == "health" {
+                        // Handle disk selection for health tool
+                        self.execute_health_tool_with_disk(value)?;
+                        return Ok(false);
+                    }
+                }
+                
                 // User confirmed input, update configuration
                 self.update_configuration_value(value)?;
             }
@@ -605,8 +619,11 @@ impl App {
                         });
                     }
                     1 => {
-                        // Check Disk Health - Create dialog
-                        self.create_tool_dialog("health")?;
+                        // Check Disk Health - Use disk selection dialog
+                        self.input_handler.start_disk_selection("".to_string());
+                        let mut state = self.lock_state_mut()?;
+                        state.current_tool = Some("health".to_string());
+                        state.status_message = "Select disk to check health (Enter to select, Esc to cancel)".to_string();
                     }
                     2 => {
                         // Mount/Unmount Partitions - Create dialog
@@ -1924,15 +1941,15 @@ impl App {
             ],
             "health" => vec![
                 ToolParam {
-                    name: "device".to_string(),
-                    description: "Disk device to check (e.g., /dev/sda)".to_string(),
-                    param_type: ToolParameter::Text("".to_string()),
-                    required: true,
-                },
-                ToolParam {
-                    name: "detailed".to_string(),
-                    description: "Show detailed SMART attributes".to_string(),
-                    param_type: ToolParameter::Boolean(false),
+                    name: "output_level".to_string(),
+                    description: "Output detail level".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "basic".to_string(),
+                            "detailed".to_string(),
+                        ],
+                        0,
+                    ),
                     required: false,
                 },
             ],
@@ -2244,6 +2261,57 @@ impl App {
         Ok(())
     }
 
+    /// Execute health tool with selected disk
+    fn execute_health_tool_with_disk(&mut self, selected_disk: String) -> Result<(), Box<dyn std::error::Error>> {
+        use std::process::{Command, Stdio};
+        
+        let mut args = Vec::new();
+        args.push("--device".to_string());
+        args.push(selected_disk.clone());
+        args.push("--detailed".to_string()); // Always use detailed for better user experience
+        
+        let script_path = "scripts/tools/check_disk_health.sh";
+        
+        println!("🔧 Executing: {} {}", script_path, args.join(" "));
+        
+        let output = Command::new("bash")
+            .arg(script_path)
+            .args(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
+        
+        // Print stdout
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.is_empty() {
+            print!("{}", stdout);
+        }
+        
+        // Print stderr
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            eprint!("{}", stderr);
+        }
+        
+        if output.status.success() {
+            println!("✅ Disk health check completed successfully");
+            if let Ok(mut state) = self.lock_state_mut() {
+                state.status_message = format!("Health check completed for {}", selected_disk);
+                state.current_tool = None;
+            }
+        } else {
+            let error_msg = format!("❌ Disk health check failed for {}", selected_disk);
+            eprintln!("{}", error_msg);
+            if let Ok(mut state) = self.lock_state_mut() {
+                state.status_message = error_msg.clone();
+                state.current_tool = None;
+            }
+            return Err(error_msg.into());
+        }
+        
+        Ok(())
+    }
+
     /// Execute a tool with the collected parameters
     pub fn execute_tool_with_params(
         &mut self,
@@ -2291,11 +2359,8 @@ impl App {
                 }
             }
                "health" => {
-                   if params.len() >= 1 {
-                       args.push("--device".to_string());
-                       args.push(params[0].clone());
-                   }
-                   if params.len() >= 2 && params[1] == "true" {
+                   // Device is handled through disk selection dialog
+                   if params.len() >= 1 && params[0] == "detailed" {
                        args.push("--detailed".to_string());
                    }
                }
