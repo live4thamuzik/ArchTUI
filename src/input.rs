@@ -118,6 +118,12 @@ impl InputDialog {
                 }
                 crossterm::event::KeyCode::Char(c) => {
                     current_value.push(c);
+                    // Check for 'done' command to cancel/back out
+                    if current_value.ends_with("done") {
+                        // Remove the command and cancel
+                        current_value.clear();
+                        return InputResult::Cancel;
+                    }
                 }
                 _ => {}
             },
@@ -1097,7 +1103,7 @@ impl InputHandler {
         self.current_dialog = Some(InputDialog::new(
             input_type,
             format!("Configure {}", field_name),
-            "Type the password and press Enter to confirm, Esc to cancel".to_string(),
+            "Type the password and press Enter to confirm, Esc to cancel, or type 'done' to go back".to_string(),
         ));
     }
 
@@ -1117,7 +1123,8 @@ impl InputHandler {
         self.current_dialog = Some(InputDialog::new(
             input_type,
             format!("Configure {}", field_name),
-            "Type the value and press Enter to confirm, Esc to cancel".to_string(),
+            "Type the value and press Enter to confirm, Esc to cancel, or type 'done' to go back"
+                .to_string(),
         ));
     }
 

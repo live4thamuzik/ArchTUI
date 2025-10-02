@@ -111,7 +111,7 @@ impl UiRenderer {
         self.render_instructions(
             f,
             chunks[3],
-            "Use ↑↓ to navigate, Enter to configure/start installation, 'q' to quit",
+            "Use ↑↓ to navigate, Enter to configure, Space to install, 'q' to quit",
         );
 
         // Render start button
@@ -662,7 +662,9 @@ impl UiRenderer {
             .enumerate()
             .map(|(index, item)| {
                 let style = if index == state.main_menu_selection {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -672,7 +674,12 @@ impl UiRenderer {
 
         let menu = List::new(menu_items)
             .block(Block::default().borders(Borders::ALL).title("Main Menu"))
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol(">> ");
 
         f.render_widget(menu, chunks[2]);
@@ -681,7 +688,7 @@ impl UiRenderer {
         self.render_instructions(
             f,
             chunks[3],
-            "Use ↑↓ to navigate, Enter to select, 'q' to quit",
+            "Use ↑↓ to navigate, Enter to select, 'b' to go back, 'q' to quit",
         );
     }
 
@@ -717,7 +724,9 @@ impl UiRenderer {
             .enumerate()
             .map(|(index, item)| {
                 let style = if index == state.tools_menu_selection {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -727,7 +736,12 @@ impl UiRenderer {
 
         let menu = List::new(menu_items)
             .block(Block::default().borders(Borders::ALL).title("Tools Menu"))
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol(">> ");
 
         f.render_widget(menu, chunks[2]);
@@ -773,7 +787,9 @@ impl UiRenderer {
             .enumerate()
             .map(|(index, item)| {
                 let style = if index == state.tools_menu_selection {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -783,7 +799,12 @@ impl UiRenderer {
 
         let menu = List::new(menu_items)
             .block(Block::default().borders(Borders::ALL).title("Disk Tools"))
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol(">> ");
 
         f.render_widget(menu, chunks[2]);
@@ -829,7 +850,9 @@ impl UiRenderer {
             .enumerate()
             .map(|(index, item)| {
                 let style = if index == state.tools_menu_selection {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -839,7 +862,12 @@ impl UiRenderer {
 
         let menu = List::new(menu_items)
             .block(Block::default().borders(Borders::ALL).title("System Tools"))
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol(">> ");
 
         f.render_widget(menu, chunks[2]);
@@ -885,7 +913,9 @@ impl UiRenderer {
             .enumerate()
             .map(|(index, item)| {
                 let style = if index == state.tools_menu_selection {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -895,7 +925,12 @@ impl UiRenderer {
 
         let menu = List::new(menu_items)
             .block(Block::default().borders(Borders::ALL).title("User Tools"))
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol(">> ");
 
         f.render_widget(menu, chunks[2]);
@@ -940,7 +975,9 @@ impl UiRenderer {
             .enumerate()
             .map(|(index, item)| {
                 let style = if index == state.tools_menu_selection {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -949,8 +986,17 @@ impl UiRenderer {
             .collect();
 
         let menu = List::new(menu_items)
-            .block(Block::default().borders(Borders::ALL).title("Network Tools"))
-            .highlight_style(Style::default().bg(Color::Blue).fg(Color::White).add_modifier(Modifier::BOLD))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Network Tools"),
+            )
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
             .highlight_symbol(">> ");
 
         f.render_widget(menu, chunks[2]);
@@ -983,7 +1029,11 @@ impl UiRenderer {
 
         // Render content
         let content = Paragraph::new("Automated installation from configuration file")
-            .block(Block::default().borders(Borders::ALL).title("Configuration"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Configuration"),
+            )
             .alignment(Alignment::Center);
         f.render_widget(content, chunks[2]);
 
@@ -999,15 +1049,16 @@ impl UiRenderer {
     fn render_tool_dialog(&self, f: &mut Frame, state: &AppState) {
         if let Some(ref dialog) = state.tool_dialog {
             let area = f.area();
-            
+
             // Create a centered dialog box
             let dialog_width = (area.width * 3 / 4).min(80);
             let dialog_height = (area.height * 3 / 4).min(20);
             let dialog_x = (area.width - dialog_width) / 2;
             let dialog_y = (area.height - dialog_height) / 2;
-            
-            let dialog_rect = ratatui::layout::Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
-            
+
+            let dialog_rect =
+                ratatui::layout::Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
+
             // Draw dialog background
             f.render_widget(
                 ratatui::widgets::Block::default()
@@ -1016,7 +1067,7 @@ impl UiRenderer {
                     .style(ratatui::style::Style::default().bg(ratatui::style::Color::DarkGray)),
                 dialog_rect,
             );
-            
+
             // Render parameter list
             let param_area = ratatui::layout::Rect::new(
                 dialog_x + 2,
@@ -1024,7 +1075,7 @@ impl UiRenderer {
                 dialog_width - 4,
                 dialog_height - 6,
             );
-            
+
             let mut param_items = Vec::new();
             for (i, param) in dialog.parameters.iter().enumerate() {
                 let style = if i == dialog.current_param {
@@ -1032,32 +1083,30 @@ impl UiRenderer {
                 } else {
                     ratatui::style::Style::default()
                 };
-                
+
                 let value = if i < dialog.param_values.len() {
                     &dialog.param_values[i]
                 } else {
                     ""
                 };
-                
-                param_items.push(ratatui::widgets::ListItem::new(
-                    ratatui::text::Line::from(vec![
+
+                param_items.push(ratatui::widgets::ListItem::new(ratatui::text::Line::from(
+                    vec![
                         ratatui::text::Span::styled(
                             format!("{}: ", param.name),
                             ratatui::style::Style::default().fg(ratatui::style::Color::Cyan),
                         ),
-                        ratatui::text::Span::styled(
-                            value.to_string(),
-                            style,
-                        ),
-                    ])
-                ));
+                        ratatui::text::Span::styled(value.to_string(), style),
+                    ],
+                )));
             }
-            
-            let param_list = ratatui::widgets::List::new(param_items)
-                .highlight_style(ratatui::style::Style::default().fg(ratatui::style::Color::Yellow));
-            
+
+            let param_list = ratatui::widgets::List::new(param_items).highlight_style(
+                ratatui::style::Style::default().fg(ratatui::style::Color::Yellow),
+            );
+
             f.render_widget(param_list, param_area);
-            
+
             // Render instructions
             let instruction_area = ratatui::layout::Rect::new(
                 dialog_x + 2,
@@ -1065,7 +1114,7 @@ impl UiRenderer {
                 dialog_width - 4,
                 1,
             );
-            
+
             f.render_widget(
                 ratatui::widgets::Paragraph::new("Enter: Next parameter | b: Back to tools")
                     .style(ratatui::style::Style::default().fg(ratatui::style::Color::Gray)),
@@ -1077,7 +1126,7 @@ impl UiRenderer {
     /// Render tool execution screen
     fn render_tool_execution(&self, f: &mut Frame, state: &AppState) {
         let area = f.area();
-        
+
         // Title
         let title_area = ratatui::layout::Rect::new(0, 0, area.width, 3);
         f.render_widget(
@@ -1086,7 +1135,7 @@ impl UiRenderer {
                 .alignment(ratatui::layout::Alignment::Center),
             title_area,
         );
-        
+
         // Status message
         let status_area = ratatui::layout::Rect::new(0, 3, area.width, 1);
         f.render_widget(
@@ -1094,21 +1143,22 @@ impl UiRenderer {
                 .style(ratatui::style::Style::default().fg(ratatui::style::Color::Green)),
             status_area,
         );
-        
+
         // Tool output
         if !state.tool_output.is_empty() {
             let output_area = ratatui::layout::Rect::new(2, 5, area.width - 4, area.height - 8);
-            let output_items: Vec<ratatui::widgets::ListItem> = state.tool_output
+            let output_items: Vec<ratatui::widgets::ListItem> = state
+                .tool_output
                 .iter()
                 .map(|line| ratatui::widgets::ListItem::new(line.as_str()))
                 .collect();
-            
+
             let output_list = ratatui::widgets::List::new(output_items)
                 .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
-            
+
             f.render_widget(output_list, output_area);
         }
-        
+
         // Instructions
         let instruction_area = ratatui::layout::Rect::new(0, area.height - 2, area.width, 1);
         f.render_widget(
