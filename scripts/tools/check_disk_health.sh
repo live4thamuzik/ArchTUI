@@ -63,13 +63,26 @@ if ! command -v smartctl >/dev/null 2>&1; then
     fi
 fi
 
-log_info "🔍 Comprehensive Disk Health Diagnostics for $DEVICE"
+log_info "🔍 Comprehensive Disk Health Diagnostics"
 echo "=================================================="
+log_info "Target Device: $DEVICE"
 
 # Get basic disk information
 log_info "📊 Disk Information:"
 if command -v lsblk >/dev/null 2>&1; then
-    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL "$DEVICE" 2>/dev/null || log_info "Basic disk info not available"
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL "$DEVICE" 2>/dev/null || {
+        log_warning "Could not get detailed disk information for $DEVICE"
+        echo "  Device: $DEVICE"
+    }
+else
+    log_warning "lsblk not available"
+    echo "  Device: $DEVICE"
+fi
+
+# Show device size if available
+if [[ -r "$DEVICE" ]]; then
+    local size=$(blockdev --getsize64 "$DEVICE" 2>/dev/null | numfmt --to=iec 2>/dev/null || echo "unknown")
+    echo "  Size: $size"
 fi
 
 echo
@@ -156,11 +169,19 @@ if ! smartctl -H "$DEVICE" >/dev/null 2>&1; then
     if [[ "$SMART_WORKING" == false ]]; then
         log_error "❌ SMART diagnostics not available for this device"
         log_info "This device may not support SMART or requires special handling"
+        log_info ""
+        log_info "Common devices without SMART support:"
+        log_info "  • Some USB drives"
+        log_info "  • Network storage devices"
+        log_info "  • Older or specialized storage devices"
+        log_info ""
         log_info "Available alternatives:"
         log_info "  • Use 'badblocks' to check for bad sectors"
         log_info "  • Use 'fsck' to check filesystem integrity"
         log_info "  • Check device manufacturer's diagnostic tools"
-        error_exit "SMART not accessible on this device"
+        log_info ""
+        log_info "Note: This is normal for certain device types and doesn't indicate a problem."
+        exit 0  # Exit gracefully instead of error
     fi
 fi
 

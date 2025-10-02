@@ -70,7 +70,7 @@ log_critical() {
 # Error handling
 error_exit() {
     local message="$1"
-    local command="$2"
+    local command="${2:-}"
     local script_name="$(basename "$0")"
     local line_number="${BASH_LINENO[1]}"
     
