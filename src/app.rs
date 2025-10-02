@@ -235,7 +235,7 @@ impl App {
                 // Exit application
                 return Ok(true);
             }
-            KeyCode::Char('b') => {
+            KeyCode::Char('b') | KeyCode::Char('B') => {
                 // Go back in menu system
                 self.handle_back_key()?;
             }
