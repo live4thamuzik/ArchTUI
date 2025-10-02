@@ -1970,7 +1970,7 @@ impl App {
                     param_type: ToolParameter::Selection(
                         vec![
                             "mount".to_string(),
-                            "unmount".to_string(),
+                            "umount".to_string(),
                             "list".to_string(),
                             "info".to_string(),
                         ],
@@ -2279,8 +2279,8 @@ impl App {
                             args.push("--mountpoint".to_string());
                             args.push(params[2].clone());
                         }
-                    } else if action == "unmount" {
-                        // For unmount: determine if target is device or mountpoint
+                    } else if action == "umount" {
+                        // For umount: determine if target is device or mountpoint
                         if target.starts_with("/dev/") {
                             args.push("--device".to_string());
                             args.push(target.clone());

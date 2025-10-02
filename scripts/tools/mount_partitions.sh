@@ -54,32 +54,32 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help)
-            echo "Usage: $0 --action <mount|unmount|list|info> [options]"
+            echo "Usage: $0 --action <mount|umount|list|info> [options]"
             echo ""
             echo "Actions:"
             echo "  mount     Mount a device to a directory"
-            echo "  unmount   Unmount a device or directory"
+            echo "  umount    Unmount a device or directory (uses umount -R for safety)"
             echo "  list      List all mounted filesystems"
             echo "  info      Show detailed partition information"
             echo ""
             echo "Options:"
-            echo "  --device <device>        Device to mount/unmount (e.g., /dev/sda1)"
+            echo "  --device <device>        Device to mount/umount (e.g., /dev/sda1)"
             echo "  --mountpoint <path>      Directory to mount to (user-specified)"
             echo "  --filesystem <type>      Filesystem type (auto-detected if not specified)"
             echo "  --options <opts>         Additional mount options"
             echo "  --readonly               Mount as read-only"
-            echo "  --lazy                   Lazy unmount (for busy filesystems)"
+            echo "  --lazy                   Lazy umount (for busy filesystems)"
             echo "  --force                  Force operation (use with caution)"
             echo ""
             echo "Examples:"
             echo "  $0 --action mount --device /dev/sda1 --mountpoint /home/user/data"
             echo "  $0 --action mount --device /dev/sda1 --mountpoint /mnt --readonly"
-            echo "  $0 --action unmount --device /dev/sda1"
-            echo "  $0 --action unmount --mountpoint /home/user/data"
+            echo "  $0 --action umount --device /dev/sda1"
+            echo "  $0 --action umount --mountpoint /home/user/data"
             echo "  $0 --action list"
             echo "  $0 --action info --device /dev/sda1"
             echo ""
-            echo "Note: Users specify their own mount points and destinations"
+            echo "Note: Uses 'umount -R' (recursive) for safe unmounting, especially for system repair"
             exit 0
             ;;
         *)
@@ -331,7 +331,7 @@ case "$ACTION" in
         mount | grep "$DEVICE" | sed 's/^/  /'
         df -h "$MOUNTPOINT" | sed 's/^/  /'
         ;;
-    unmount)
+    umount)
         # Determine what to unmount - device or mountpoint
         TARGET=""
         TARGET_TYPE=""
@@ -343,7 +343,7 @@ case "$ACTION" in
             TARGET="$MOUNTPOINT"
             TARGET_TYPE="mountpoint"
         else
-            error_exit "Either device (--device /dev/sda1) or mountpoint (--mountpoint /path) is required for unmounting"
+            error_exit "Either device (--device /dev/sda1) or mountpoint (--mountpoint /path) is required for umounting"
         fi
         
         log_info "🔌 Unmounting $TARGET_TYPE: $TARGET"
@@ -365,21 +365,21 @@ case "$ACTION" in
             lsof "$TARGET" | head -5 | sed 's/^/  /'
             
             if [[ "$LAZY" == true ]]; then
-                log_info "Lazy unmount enabled - unmounting anyway..."
+                log_info "Lazy umount enabled - umounting anyway..."
                 umount -l "$TARGET"
-                log_success "✅ Lazy unmounted $TARGET (will unmount when not busy)"
+                log_success "✅ Lazy umounted $TARGET (will umount when not busy)"
             else
-                log_info "Use --lazy to force unmount (will unmount when not busy)"
+                log_info "Use --lazy to force umount (will umount when not busy)"
                 exit 1
             fi
         else
-            # Normal unmount
-            log_info "🚀 Unmounting $TARGET..."
-            umount "$TARGET"
-            log_success "✅ Successfully unmounted $TARGET"
+            # Use umount -R (recursive) for safety, especially for system repair
+            log_info "🚀 Umounting $TARGET (using umount -R for safety)..."
+            umount -R "$TARGET"
+            log_success "✅ Successfully umounted $TARGET"
         fi
         ;;
     *)
-        error_exit "Invalid action: $ACTION. Use mount, unmount, list, or info"
+        error_exit "Invalid action: $ACTION. Use mount, umount, list, or info"
         ;;
 esac
