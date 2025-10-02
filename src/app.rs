@@ -707,6 +707,23 @@ impl App {
 
         let mut state = self.lock_state_mut()?;
         match current_mode {
+            AppMode::MainMenu => {
+                // Already at top level - could show exit confirmation
+                state.status_message =
+                    "Press 'Q' to quit or use arrow keys to navigate".to_string();
+            }
+            AppMode::GuidedInstaller => {
+                // Go back to main menu from guided installer
+                state.mode = AppMode::MainMenu;
+                state.main_menu_selection = 0;
+                state.status_message = "Welcome to Arch Linux Toolkit".to_string();
+            }
+            AppMode::AutomatedInstall => {
+                // Go back to main menu
+                state.mode = AppMode::MainMenu;
+                state.main_menu_selection = 0;
+                state.status_message = "Welcome to Arch Linux Toolkit".to_string();
+            }
             AppMode::ToolsMenu => {
                 // Go back to main menu
                 state.mode = AppMode::MainMenu;
@@ -723,14 +740,115 @@ impl App {
                 state.status_message =
                     "Arch Linux Tools - System repair and administration".to_string();
             }
-            AppMode::AutomatedInstall => {
-                // Go back to main menu
+            AppMode::ToolDialog => {
+                // Go back to the appropriate tool menu based on current tool
+                if let Some(ref tool_name) = state.current_tool {
+                    match tool_name.as_str() {
+                        "format_partition" | "wipe_disk" | "check_disk_health"
+                        | "mount_partitions" | "manual_partition" => {
+                            state.mode = AppMode::DiskTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Disk & Filesystem Tools".to_string();
+                        }
+                        "install_bootloader" | "generate_fstab" | "chroot_system"
+                        | "manage_services" | "system_info" => {
+                            state.mode = AppMode::SystemTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "System & Boot Tools".to_string();
+                        }
+                        "add_user" | "reset_password" | "manage_groups" | "configure_ssh"
+                        | "security_audit" => {
+                            state.mode = AppMode::UserTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "User & Security Tools".to_string();
+                        }
+                        "configure_network"
+                        | "test_network"
+                        | "configure_firewall"
+                        | "network_diagnostics" => {
+                            state.mode = AppMode::NetworkTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Network Tools".to_string();
+                        }
+                        _ => {
+                            // Fallback to tools menu
+                            state.mode = AppMode::ToolsMenu;
+                            state.tools_menu_selection = 0;
+                            state.status_message =
+                                "Arch Linux Tools - System repair and administration".to_string();
+                        }
+                    }
+                } else {
+                    // Fallback to tools menu
+                    state.mode = AppMode::ToolsMenu;
+                    state.tools_menu_selection = 0;
+                    state.status_message =
+                        "Arch Linux Tools - System repair and administration".to_string();
+                }
+                // Clear tool dialog state
+                state.tool_dialog = None;
+                state.current_tool = None;
+            }
+            AppMode::ToolExecution => {
+                // Go back to the appropriate tool menu (same logic as ToolDialog)
+                if let Some(ref tool_name) = state.current_tool {
+                    match tool_name.as_str() {
+                        "format_partition" | "wipe_disk" | "check_disk_health"
+                        | "mount_partitions" | "manual_partition" => {
+                            state.mode = AppMode::DiskTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Disk & Filesystem Tools".to_string();
+                        }
+                        "install_bootloader" | "generate_fstab" | "chroot_system"
+                        | "manage_services" | "system_info" => {
+                            state.mode = AppMode::SystemTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "System & Boot Tools".to_string();
+                        }
+                        "add_user" | "reset_password" | "manage_groups" | "configure_ssh"
+                        | "security_audit" => {
+                            state.mode = AppMode::UserTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "User & Security Tools".to_string();
+                        }
+                        "configure_network"
+                        | "test_network"
+                        | "configure_firewall"
+                        | "network_diagnostics" => {
+                            state.mode = AppMode::NetworkTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Network Tools".to_string();
+                        }
+                        _ => {
+                            // Fallback to tools menu
+                            state.mode = AppMode::ToolsMenu;
+                            state.tools_menu_selection = 0;
+                            state.status_message =
+                                "Arch Linux Tools - System repair and administration".to_string();
+                        }
+                    }
+                } else {
+                    // Fallback to tools menu
+                    state.mode = AppMode::ToolsMenu;
+                    state.tools_menu_selection = 0;
+                    state.status_message =
+                        "Arch Linux Tools - System repair and administration".to_string();
+                }
+                // Clear tool execution state
+                state.tool_output.clear();
+                state.current_tool = None;
+            }
+            AppMode::Installation => {
+                // During installation, go back to guided installer
+                state.mode = AppMode::GuidedInstaller;
+                state.status_message =
+                    "Installation cancelled - configure your settings".to_string();
+            }
+            AppMode::Complete => {
+                // From completion screen, go back to main menu
                 state.mode = AppMode::MainMenu;
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
-            }
-            _ => {
-                // For other modes, do nothing (or could go to main menu)
             }
         }
         Ok(())

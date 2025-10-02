@@ -263,11 +263,11 @@ install_bootloader_chroot() {
             if [[ "$BOOT_MODE" == "UEFI" ]]; then
                 _log_info "Installing GRUB for UEFI..."
                 pacman -S --noconfirm "${GRUB_EFI_PACKAGES[@]}"
-                grub-install --target=x86_64-efi --bootloader-id=grub_uefi --recheck --efi-directory=/efi
+                grub-install --target=x86_64-efi --bootloader-id=grub_uefi --efi-directory=/efi --recheck
             else
                 _log_info "Installing GRUB for BIOS..."
                 pacman -S --noconfirm "${GRUB_BIOS_PACKAGES[@]}"
-                grub-install --target=i386-pc --recheck "${INSTALL_DISK}"
+                grub-install --target=i386-pc "${INSTALL_DISK}" --recheck
             fi
             ;;
         "systemd-boot")
