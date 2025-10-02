@@ -220,6 +220,20 @@ impl App {
         &mut self,
         key_event: KeyEvent,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        // Check if we're in a tool dialog
+        let is_tool_dialog = {
+            if let Ok(state) = self.lock_state() {
+                state.mode == AppMode::ToolDialog
+            } else {
+                false
+            }
+        };
+        
+        if is_tool_dialog {
+            self.handle_tool_dialog_input(key_event)?;
+            return Ok(false);
+        }
+
         // Check if we're in an input dialog
         if self.input_handler.is_dialog_active() {
             if let Some(value) = self.input_handler.handle_input(key_event) {
@@ -539,11 +553,20 @@ impl App {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk (Manual) - No parameters needed
+                        // Partition Disk (Manual) - Launch cfdisk directly
                         let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("partition_disk".to_string());
-                        state.status_message = "Launching manual disk partitioner...".to_string();
-                        // For now, just show status - could integrate with cfdisk/fdisk
+                        state.current_tool = Some("manual_partition".to_string());
+                        state.status_message = "Launching manual disk partitioner (cfdisk)...".to_string();
+                        state.mode = AppMode::ToolExecution;
+                        state.tool_output.push("Launching cfdisk for manual disk partitioning...".to_string());
+                        state.tool_output.push("Note: This will open cfdisk in a new terminal window.".to_string());
+                        state.tool_output.push("Use 'B' to go back when done.".to_string());
+                        
+                        // Launch cfdisk in background
+                        std::thread::spawn(move || {
+                            use std::process::Command;
+                            let _ = Command::new("cfdisk").spawn();
+                        });
                     }
                     1 => {
                         // Format Partition - Create dialog
@@ -1980,6 +2003,95 @@ impl App {
         }
     }
 
+    /// Handle tool dialog input (navigation, parameter input, etc.)
+    fn handle_tool_dialog_input(&mut self, key_event: KeyEvent) -> Result<(), Box<dyn std::error::Error>> {
+        match key_event.code {
+            KeyCode::Up => {
+                // Move to previous parameter (if not at first)
+                let mut state = self.lock_state_mut()?;
+                if let Some(ref mut dialog) = state.tool_dialog {
+                    if dialog.current_param > 0 {
+                        dialog.current_param -= 1;
+                    }
+                }
+            }
+            KeyCode::Down => {
+                // Move to next parameter (if not at last)
+                let mut state = self.lock_state_mut()?;
+                if let Some(ref mut dialog) = state.tool_dialog {
+                    if dialog.current_param < dialog.parameters.len() - 1 {
+                        dialog.current_param += 1;
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                // Execute tool with collected parameters
+                self.handle_tool_dialog_enter()?;
+            }
+            KeyCode::Esc => {
+                // Cancel tool dialog and go back
+                let mut state = self.lock_state_mut()?;
+                let current_tool = state.current_tool.clone();
+                state.tool_dialog = None;
+                state.current_tool = None;
+                // Go back to appropriate tool menu
+                if let Some(ref tool_name) = current_tool {
+                    match tool_name.as_str() {
+                        "format_partition" | "wipe_disk" | "health" | "mount" | "manual_partition" => {
+                            state.mode = AppMode::DiskTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Disk & Filesystem Tools".to_string();
+                        }
+                        "install_bootloader" | "generate_fstab" | "chroot" | "info" => {
+                            state.mode = AppMode::SystemTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "System & Boot Tools".to_string();
+                        }
+                        "reset_password" => {
+                            state.mode = AppMode::UserTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "User & Security Tools".to_string();
+                        }
+                        "configure" => {
+                            state.mode = AppMode::NetworkTools;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Network Tools".to_string();
+                        }
+                        _ => {
+                            state.mode = AppMode::ToolsMenu;
+                            state.tools_menu_selection = 0;
+                            state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+                        }
+                    }
+                } else {
+                    state.mode = AppMode::ToolsMenu;
+                    state.tools_menu_selection = 0;
+                    state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+                }
+            }
+            KeyCode::Char(c) => {
+                // Handle text input for current parameter
+                let mut state = self.lock_state_mut()?;
+                if let Some(ref mut dialog) = state.tool_dialog {
+                    if dialog.current_param < dialog.param_values.len() {
+                        dialog.param_values[dialog.current_param].push(c);
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                // Handle backspace for current parameter
+                let mut state = self.lock_state_mut()?;
+                if let Some(ref mut dialog) = state.tool_dialog {
+                    if dialog.current_param < dialog.param_values.len() {
+                        dialog.param_values[dialog.current_param].pop();
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Handle tool dialog enter key
     fn handle_tool_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (tool_name, current_param, param_values) = {
@@ -2158,17 +2270,18 @@ impl App {
         }
 
         let script_name = match tool_name {
-            "Format Partition" => "format_partition.sh",
-            "Wipe Disk" => "wipe_disk.sh",
-            "Install/Repair Bootloader" => "install_bootloader.sh",
-            "Generate fstab" => "generate_fstab.sh",
-            "Add New User" => "add_user.sh",
+            "format_partition" => "format_partition.sh",
+            "wipe_disk" => "wipe_disk.sh",
+            "install_bootloader" => "install_bootloader.sh",
+            "generate_fstab" => "generate_fstab.sh",
+            "add_user" => "add_user.sh",
             "health" => "check_disk_health.sh",
             "mount" => "mount_partitions.sh",
             "chroot" => "chroot_system.sh",
             "info" => "system_info.sh",
             "reset_password" => "reset_password.sh",
             "configure" => "configure_network.sh",
+            "manual_partition" => "manual_partition.sh",
             _ => {
                 return Err(format!("Unknown tool: {}", tool_name).into());
             }
