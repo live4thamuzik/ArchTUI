@@ -1979,14 +1979,14 @@ impl App {
                     required: true,
                 },
                 ToolParam {
-                    name: "device".to_string(),
-                    description: "Device to mount/unmount (e.g., /dev/sda1)".to_string(),
+                    name: "target".to_string(),
+                    description: "Device path (e.g., /dev/sda1) or mountpoint path".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
                 ToolParam {
-                    name: "mountpoint".to_string(),
-                    description: "Mount point directory (e.g., /mnt)".to_string(),
+                    name: "destination".to_string(),
+                    description: "Destination directory (for mount action)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
                 },
@@ -2266,12 +2266,35 @@ impl App {
                 if params.len() >= 2 {
                     args.push("--action".to_string());
                     args.push(params[0].clone());
-                    args.push("--device".to_string());
-                    args.push(params[1].clone());
-                    if params.len() >= 3 && !params[2].is_empty() {
-                        args.push("--mountpoint".to_string());
-                        args.push(params[2].clone());
+                    
+                    // Determine if target is device or mountpoint based on action
+                    let action = &params[0];
+                    let target = &params[1];
+                    
+                    if action == "mount" {
+                        // For mount: target is device, destination is mountpoint
+                        args.push("--device".to_string());
+                        args.push(target.clone());
+                        if params.len() >= 3 && !params[2].is_empty() {
+                            args.push("--mountpoint".to_string());
+                            args.push(params[2].clone());
+                        }
+                    } else if action == "unmount" {
+                        // For unmount: determine if target is device or mountpoint
+                        if target.starts_with("/dev/") {
+                            args.push("--device".to_string());
+                            args.push(target.clone());
+                        } else {
+                            args.push("--mountpoint".to_string());
+                            args.push(target.clone());
+                        }
+                    } else {
+                        // For info/list: target is device
+                        args.push("--device".to_string());
+                        args.push(target.clone());
                     }
+                    
+                    // Add flags
                     if params.len() >= 4 && params[3] == "true" {
                         args.push("--readonly".to_string());
                     }
