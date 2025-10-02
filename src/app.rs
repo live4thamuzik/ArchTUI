@@ -553,14 +553,19 @@ impl App {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk (Manual) - Launch cfdisk and wait for completion
+                        // Partition Disk (cfdisk) - Launch cfdisk and wait for completion
                         let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("manual_partition".to_string());
-                        state.status_message = "Launching manual disk partitioner (cfdisk)...".to_string();
+                        state.status_message = "Launching cfdisk - comprehensive disk partitioning tool...".to_string();
                         state.mode = AppMode::ToolExecution;
-                        state.tool_output.push("Launching cfdisk for manual disk partitioning...".to_string());
+                        state.tool_output.push("Launching cfdisk for disk partitioning...".to_string());
                         state.tool_output.push("".to_string());
-                        state.tool_output.push("When you finish partitioning and exit cfdisk,".to_string());
+                        state.tool_output.push("cfdisk can handle:".to_string());
+                        state.tool_output.push("• Create, delete, resize partitions".to_string());
+                        state.tool_output.push("• Set partition types and flags".to_string());
+                        state.tool_output.push("• Format partitions (basic filesystems)".to_string());
+                        state.tool_output.push("".to_string());
+                        state.tool_output.push("When you finish and exit cfdisk,".to_string());
                         state.tool_output.push("you will automatically return to the Disk Tools menu.".to_string());
                         
                         // Launch cfdisk and wait for completion
@@ -600,20 +605,19 @@ impl App {
                         });
                     }
                     1 => {
-                        // Format Partition - Create dialog
-                        self.create_tool_dialog("format_partition")?;
-                    }
-                    2 => {
-                        // Wipe Disk - Create dialog
-                        self.create_tool_dialog("wipe_disk")?;
-                    }
-                    3 => {
                         // Check Disk Health - Create dialog
                         self.create_tool_dialog("health")?;
                     }
-                    4 => {
+                    2 => {
                         // Mount/Unmount Partitions - Create dialog
                         self.create_tool_dialog("mount")?;
+                    }
+                    3 => {
+                        // Back to Tools Menu
+                        let mut state = self.lock_state_mut()?;
+                        state.mode = AppMode::ToolsMenu;
+                        state.tools_menu_selection = 0;
+                        state.status_message = "Arch Linux Tools - System repair and administration".to_string();
                     }
                     _ => {}
                 }
