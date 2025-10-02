@@ -1966,12 +1966,13 @@ impl App {
             "mount" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform (mount, unmount, list)".to_string(),
+                    description: "Action to perform".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "mount".to_string(),
                             "unmount".to_string(),
                             "list".to_string(),
+                            "info".to_string(),
                         ],
                         0,
                     ),
@@ -1985,14 +1986,20 @@ impl App {
                 },
                 ToolParam {
                     name: "mountpoint".to_string(),
-                    description: "Mount point (required for mount action)".to_string(),
+                    description: "Mount point directory (e.g., /mnt)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
                 },
                 ToolParam {
-                    name: "filesystem".to_string(),
-                    description: "Filesystem type (optional)".to_string(),
-                    param_type: ToolParameter::Text("".to_string()),
+                    name: "readonly".to_string(),
+                    description: "Mount as read-only".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: false,
+                },
+                ToolParam {
+                    name: "force".to_string(),
+                    description: "Force operation (unmount if busy)".to_string(),
+                    param_type: ToolParameter::Boolean(false),
                     required: false,
                 },
             ],
@@ -2265,9 +2272,11 @@ impl App {
                         args.push("--mountpoint".to_string());
                         args.push(params[2].clone());
                     }
-                    if params.len() >= 4 && !params[3].is_empty() {
-                        args.push("--filesystem".to_string());
-                        args.push(params[3].clone());
+                    if params.len() >= 4 && params[3] == "true" {
+                        args.push("--readonly".to_string());
+                    }
+                    if params.len() >= 5 && params[4] == "true" {
+                        args.push("--force".to_string());
                     }
                 }
             }
