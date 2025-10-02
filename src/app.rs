@@ -1949,12 +1949,20 @@ impl App {
                     required: true,
                 },
             ],
-            "health" => vec![ToolParam {
-                name: "device".to_string(),
-                description: "Disk device to check (e.g., /dev/sda)".to_string(),
-                param_type: ToolParameter::Text("".to_string()),
-                required: true,
-            }],
+            "health" => vec![
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Disk device to check (e.g., /dev/sda)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "detailed".to_string(),
+                    description: "Show detailed SMART attributes".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: false,
+                },
+            ],
             "mount" => vec![
                 ToolParam {
                     name: "action".to_string(),
@@ -2238,12 +2246,15 @@ impl App {
                     }
                 }
             }
-            "health" => {
-                if params.len() >= 1 {
-                    args.push("--device".to_string());
-                    args.push(params[0].clone());
-                }
-            }
+               "health" => {
+                   if params.len() >= 1 {
+                       args.push("--device".to_string());
+                       args.push(params[0].clone());
+                   }
+                   if params.len() >= 2 && params[1] == "true" {
+                       args.push("--detailed".to_string());
+                   }
+               }
             "mount" => {
                 if params.len() >= 2 {
                     args.push("--action".to_string());
