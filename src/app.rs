@@ -1846,12 +1846,18 @@ impl App {
                 },
                 ToolParam {
                     name: "mode".to_string(),
-                    description: "Boot mode (uefi or bios)".to_string(),
+                    description: "Boot mode (uefi or bios, auto-detected if empty)".to_string(),
                     param_type: ToolParameter::Selection(
-                        vec!["uefi".to_string(), "bios".to_string()],
+                        vec!["".to_string(), "uefi".to_string(), "bios".to_string()],
                         0,
                     ),
-                    required: true,
+                    required: false,
+                },
+                ToolParam {
+                    name: "repair".to_string(),
+                    description: "Repair existing bootloader installation".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: false,
                 },
             ],
             "generate_fstab" => vec![ToolParam {
@@ -1913,39 +1919,6 @@ impl App {
                     name: "confirm".to_string(),
                     description: "Confirm destructive operation".to_string(),
                     param_type: ToolParameter::Boolean(false),
-                    required: true,
-                },
-            ],
-            "add_user" => vec![
-                ToolParam {
-                    name: "username".to_string(),
-                    description: "Username to create".to_string(),
-                    param_type: ToolParameter::Text("".to_string()),
-                    required: true,
-                },
-                ToolParam {
-                    name: "full_name".to_string(),
-                    description: "Full name (optional)".to_string(),
-                    param_type: ToolParameter::Text("".to_string()),
-                    required: false,
-                },
-                ToolParam {
-                    name: "groups".to_string(),
-                    description: "Additional groups (comma-separated)".to_string(),
-                    param_type: ToolParameter::Text("".to_string()),
-                    required: false,
-                },
-                ToolParam {
-                    name: "shell".to_string(),
-                    description: "Default shell".to_string(),
-                    param_type: ToolParameter::Selection(
-                        vec![
-                            "/bin/bash".to_string(),
-                            "/bin/zsh".to_string(),
-                            "/bin/fish".to_string(),
-                        ],
-                        0,
-                    ),
                     required: true,
                 },
             ],
@@ -2017,34 +1990,98 @@ impl App {
                     required: false,
                 },
             ],
-            "info" => vec![ToolParam {
-                name: "detailed".to_string(),
-                description: "Show detailed information".to_string(),
-                param_type: ToolParameter::Boolean(false),
-                required: false,
-            }],
+            "info" => vec![
+                ToolParam {
+                    name: "detailed".to_string(),
+                    description: "Show detailed system information".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: false,
+                },
+                ToolParam {
+                    name: "json".to_string(),
+                    description: "Output in JSON format".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: false,
+                },
+            ],
+            "add_user" => vec![
+                ToolParam {
+                    name: "username".to_string(),
+                    description: "Username to create".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "full_name".to_string(),
+                    description: "Full name (optional)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "groups".to_string(),
+                    description: "Additional groups (comma-separated, optional)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "shell".to_string(),
+                    description: "Login shell (default: /bin/bash)".to_string(),
+                    param_type: ToolParameter::Text("/bin/bash".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "system_user".to_string(),
+                    description: "Create as system user".to_string(),
+                    param_type: ToolParameter::Boolean(false),
+                    required: false,
+                },
+            ],
             "reset_password" => vec![ToolParam {
                 name: "username".to_string(),
                 description: "Username to reset password for".to_string(),
                 param_type: ToolParameter::Text("".to_string()),
                 required: true,
             }],
-            "configure" => vec![
+            "configure_network" => vec![
                 ToolParam {
                     name: "interface".to_string(),
-                    description: "Network interface name".to_string(),
+                    description: "Network interface name (e.g., eth0, enp0s3)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
                 ToolParam {
+                    name: "action".to_string(),
+                    description: "Action to perform".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec!["configure".to_string(), "status".to_string(), "info".to_string(), "enable".to_string(), "disable".to_string()],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "config_type".to_string(),
+                    description: "Configuration type (for configure action)".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec!["".to_string(), "dhcp".to_string(), "static".to_string()],
+                        0,
+                    ),
+                    required: false,
+                },
+                ToolParam {
                     name: "ip".to_string(),
-                    description: "IP address (optional for DHCP)".to_string(),
+                    description: "IP address (for static configuration)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "netmask".to_string(),
+                    description: "Network mask (e.g., 255.255.255.0 or 24)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
                 },
                 ToolParam {
                     name: "gateway".to_string(),
-                    description: "Gateway (optional)".to_string(),
+                    description: "Default gateway (for static configuration)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
                 },
@@ -2316,6 +2353,51 @@ impl App {
                 if params.len() >= 1 && params[0] == "true" {
                     args.push("--detailed".to_string());
                 }
+                if params.len() >= 2 && params[1] == "true" {
+                    args.push("--json".to_string());
+                }
+            }
+            "install_bootloader" => {
+                if params.len() >= 1 {
+                    args.push("--type".to_string());
+                    args.push(params[0].clone());
+                }
+                if params.len() >= 2 {
+                    args.push("--disk".to_string());
+                    args.push(params[1].clone());
+                }
+                if params.len() >= 3 && !params[2].is_empty() {
+                    args.push("--efi-path".to_string());
+                    args.push(params[2].clone());
+                }
+                if params.len() >= 4 && !params[3].is_empty() {
+                    args.push("--mode".to_string());
+                    args.push(params[3].clone());
+                }
+                if params.len() >= 5 && params[4] == "true" {
+                    args.push("--repair".to_string());
+                }
+            }
+            "add_user" => {
+                if params.len() >= 1 {
+                    args.push("--username".to_string());
+                    args.push(params[0].clone());
+                }
+                if params.len() >= 2 && !params[1].is_empty() {
+                    args.push("--full-name".to_string());
+                    args.push(params[1].clone());
+                }
+                if params.len() >= 3 && !params[2].is_empty() {
+                    args.push("--groups".to_string());
+                    args.push(params[2].clone());
+                }
+                if params.len() >= 4 && !params[3].is_empty() {
+                    args.push("--shell".to_string());
+                    args.push(params[3].clone());
+                }
+                if params.len() >= 5 && params[4] == "true" {
+                    args.push("--system".to_string());
+                }
             }
             "reset_password" => {
                 if params.len() >= 1 {
@@ -2323,18 +2405,30 @@ impl App {
                     args.push(params[0].clone());
                 }
             }
-            "configure" => {
+            "configure_network" => {
                 if params.len() >= 1 {
                     args.push("--interface".to_string());
                     args.push(params[0].clone());
-                    if params.len() >= 2 && !params[1].is_empty() {
-                        args.push("--ip".to_string());
-                        args.push(params[1].clone());
-                    }
-                    if params.len() >= 3 && !params[2].is_empty() {
-                        args.push("--gateway".to_string());
-                        args.push(params[2].clone());
-                    }
+                }
+                if params.len() >= 2 {
+                    args.push("--action".to_string());
+                    args.push(params[1].clone());
+                }
+                if params.len() >= 3 && !params[2].is_empty() {
+                    args.push("--config_type".to_string());
+                    args.push(params[2].clone());
+                }
+                if params.len() >= 4 && !params[3].is_empty() {
+                    args.push("--ip".to_string());
+                    args.push(params[3].clone());
+                }
+                if params.len() >= 5 && !params[4].is_empty() {
+                    args.push("--netmask".to_string());
+                    args.push(params[4].clone());
+                }
+                if params.len() >= 6 && !params[5].is_empty() {
+                    args.push("--gateway".to_string());
+                    args.push(params[5].clone());
                 }
             }
             _ => {
@@ -2358,7 +2452,7 @@ impl App {
             "chroot" => "chroot_system.sh",
             "info" => "system_info.sh",
             "reset_password" => "reset_password.sh",
-            "configure" => "configure_network.sh",
+            "configure_network" => "configure_network.sh",
             "manual_partition" => "manual_partition.sh",
             _ => {
                 return Err(format!("Unknown tool: {}", tool_name).into());
