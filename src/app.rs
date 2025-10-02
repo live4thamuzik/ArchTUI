@@ -228,7 +228,7 @@ impl App {
                 false
             }
         };
-        
+
         if is_tool_dialog {
             self.handle_tool_dialog_input(key_event)?;
             return Ok(false);
@@ -242,15 +242,32 @@ impl App {
                     let state = self.state.lock().map_err(|_| "Failed to lock state")?;
                     state.current_tool.clone()
                 };
-                
+
                 if let Some(tool) = current_tool {
-                    if tool == "health" {
-                        // Handle disk selection for health tool
-                        self.execute_health_tool_with_disk(value)?;
-                        return Ok(false);
+                    match tool.as_str() {
+                        "health" => {
+                            // Handle disk selection for health tool
+                            self.execute_health_tool_with_disk(value)?;
+                            return Ok(false);
+                        }
+                        "format_partition" => {
+                            // Handle disk selection for format partition tool
+                            self.execute_tool_with_device("format_partition.sh", &value, &[])?;
+                            return Ok(false);
+                        }
+                        "wipe_disk" => {
+                            // Handle disk selection for wipe disk tool
+                            self.execute_tool_with_device(
+                                "wipe_disk.sh",
+                                &value,
+                                &["--method", "zero", "--confirm"],
+                            )?;
+                            return Ok(false);
+                        }
+                        _ => {}
                     }
                 }
-                
+
                 // User confirmed input, update configuration
                 self.update_configuration_value(value)?;
             }
@@ -343,7 +360,13 @@ impl App {
                         state.tools_menu_selection += 1;
                     }
                 }
-                AppMode::DiskTools | AppMode::SystemTools | AppMode::UserTools => {
+                AppMode::DiskTools => {
+                    if state.tools_menu_selection < 5 {
+                        // 6 items total (0-5)
+                        state.tools_menu_selection += 1;
+                    }
+                }
+                AppMode::SystemTools | AppMode::UserTools => {
                     if state.tools_menu_selection < 5 {
                         // 6 items total (0-5)
                         state.tools_menu_selection += 1;
@@ -538,8 +561,9 @@ impl App {
 
         // Check if user selected "Back" option (last item in each menu)
         let is_back_option = match current_mode {
-            AppMode::DiskTools | AppMode::SystemTools | AppMode::UserTools => selection == 5,
-            AppMode::NetworkTools => selection == 4,
+            AppMode::DiskTools => selection == 5, // 6 items (0-5), back is at index 5
+            AppMode::SystemTools | AppMode::UserTools => selection == 5, // 6 items (0-5), back is at index 5
+            AppMode::NetworkTools => selection == 4, // 5 items (0-4), back is at index 4
             _ => false,
         };
 
@@ -570,45 +594,71 @@ impl App {
                         // Partition Disk (cfdisk) - Launch cfdisk and wait for completion
                         let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("manual_partition".to_string());
-                        state.status_message = "Launching cfdisk - comprehensive disk partitioning tool...".to_string();
+                        state.status_message =
+                            "Launching cfdisk - comprehensive disk partitioning tool..."
+                                .to_string();
                         state.mode = AppMode::ToolExecution;
-                        state.tool_output.push("Launching cfdisk for disk partitioning...".to_string());
+                        state
+                            .tool_output
+                            .push("Launching cfdisk for disk partitioning...".to_string());
                         state.tool_output.push("".to_string());
                         state.tool_output.push("cfdisk can handle:".to_string());
-                        state.tool_output.push("• Create, delete, resize partitions".to_string());
-                        state.tool_output.push("• Set partition types and flags".to_string());
-                        state.tool_output.push("• Format partitions (basic filesystems)".to_string());
+                        state
+                            .tool_output
+                            .push("• Create, delete, resize partitions".to_string());
+                        state
+                            .tool_output
+                            .push("• Set partition types and flags".to_string());
+                        state
+                            .tool_output
+                            .push("• Format partitions (basic filesystems)".to_string());
                         state.tool_output.push("".to_string());
-                        state.tool_output.push("When you finish and exit cfdisk,".to_string());
-                        state.tool_output.push("you will automatically return to the Disk Tools menu.".to_string());
-                        
+                        state
+                            .tool_output
+                            .push("When you finish and exit cfdisk,".to_string());
+                        state.tool_output.push(
+                            "you will automatically return to the Disk Tools menu.".to_string(),
+                        );
+
                         // Launch cfdisk and wait for completion
                         let state_clone = self.state.clone();
                         std::thread::spawn(move || {
                             use std::process::Command;
                             let result = Command::new("cfdisk").status();
-                            
+
                             // When cfdisk exits, return to disk tools menu
                             if let Ok(mut state) = state_clone.lock() {
                                 match result {
                                     Ok(exit_status) => {
                                         if exit_status.success() {
                                             state.tool_output.push("".to_string());
-                                            state.tool_output.push("✅ cfdisk completed successfully!".to_string());
-                                            state.tool_output.push("Returning to Disk Tools menu...".to_string());
+                                            state.tool_output.push(
+                                                "✅ cfdisk completed successfully!".to_string(),
+                                            );
+                                            state.tool_output.push(
+                                                "Returning to Disk Tools menu...".to_string(),
+                                            );
                                         } else {
                                             state.tool_output.push("".to_string());
-                                            state.tool_output.push("⚠️ cfdisk exited with an error.".to_string());
-                                            state.tool_output.push("Returning to Disk Tools menu...".to_string());
+                                            state.tool_output.push(
+                                                "⚠️ cfdisk exited with an error.".to_string(),
+                                            );
+                                            state.tool_output.push(
+                                                "Returning to Disk Tools menu...".to_string(),
+                                            );
                                         }
                                     }
                                     Err(e) => {
                                         state.tool_output.push("".to_string());
-                                        state.tool_output.push(format!("❌ Failed to launch cfdisk: {}", e));
-                                        state.tool_output.push("Returning to Disk Tools menu...".to_string());
+                                        state
+                                            .tool_output
+                                            .push(format!("❌ Failed to launch cfdisk: {}", e));
+                                        state
+                                            .tool_output
+                                            .push("Returning to Disk Tools menu...".to_string());
                                     }
                                 }
-                                
+
                                 // Return to disk tools menu after a short delay
                                 std::thread::sleep(std::time::Duration::from_millis(1500));
                                 state.mode = AppMode::DiskTools;
@@ -619,22 +669,42 @@ impl App {
                         });
                     }
                     1 => {
+                        // Format Partition - Use disk selection dialog
+                        self.input_handler.start_disk_selection("".to_string());
+                        let mut state = self.lock_state_mut()?;
+                        state.current_tool = Some("format_partition".to_string());
+                        state.status_message =
+                            "Select partition to format (Enter to select, Esc to cancel)"
+                                .to_string();
+                    }
+                    2 => {
+                        // Wipe Disk - Use disk selection dialog
+                        self.input_handler.start_disk_selection("".to_string());
+                        let mut state = self.lock_state_mut()?;
+                        state.current_tool = Some("wipe_disk".to_string());
+                        state.status_message =
+                            "Select disk to wipe (Enter to select, Esc to cancel)".to_string();
+                    }
+                    3 => {
                         // Check Disk Health - Use disk selection dialog
                         self.input_handler.start_disk_selection("".to_string());
                         let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("health".to_string());
-                        state.status_message = "Select disk to check health (Enter to select, Esc to cancel)".to_string();
+                        state.status_message =
+                            "Select disk to check health (Enter to select, Esc to cancel)"
+                                .to_string();
                     }
-                    2 => {
+                    4 => {
                         // Mount/Unmount Partitions - Create dialog
                         self.create_tool_dialog("mount")?;
                     }
-                    3 => {
+                    5 => {
                         // Back to Tools Menu
                         let mut state = self.lock_state_mut()?;
                         state.mode = AppMode::ToolsMenu;
                         state.tools_menu_selection = 0;
-                        state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+                        state.status_message =
+                            "Arch Linux Tools - System repair and administration".to_string();
                     }
                     _ => {}
                 }
@@ -660,8 +730,20 @@ impl App {
                         state.status_message = "Service management tool...".to_string();
                     }
                     4 => {
-                        // System Information - Create dialog
-                        self.create_tool_dialog("info")?;
+                        // System Information - Simple tool with no parameters
+                        {
+                            let mut state = self.lock_state_mut()?;
+                            state.current_tool = Some("system_info".to_string());
+                            state.status_message = "Gathering system information...".to_string();
+                        }
+
+                        // Execute system info tool directly
+                        if let Err(e) = self.execute_simple_tool("system_info.sh", &["--detailed"])
+                        {
+                            eprintln!("Failed to execute system info tool: {}", e);
+                            let mut state = self.lock_state_mut()?;
+                            state.status_message = "System info tool failed".to_string();
+                        }
                     }
                     _ => {}
                 }
@@ -704,10 +786,21 @@ impl App {
                         self.create_tool_dialog("configure")?;
                     }
                     1 => {
-                        // Test Network Connectivity
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("test_network".to_string());
-                        state.status_message = "Testing network connectivity...".to_string();
+                        // Test Network Connectivity - Simple tool
+                        {
+                            let mut state = self.lock_state_mut()?;
+                            state.current_tool = Some("test_network".to_string());
+                            state.status_message = "Testing network connectivity...".to_string();
+                        }
+
+                        // Execute network test tool directly
+                        if let Err(e) =
+                            self.execute_simple_tool("test_network.sh", &["--action", "full"])
+                        {
+                            eprintln!("Failed to execute network test tool: {}", e);
+                            let mut state = self.lock_state_mut()?;
+                            state.status_message = "Network test tool failed".to_string();
+                        }
                     }
                     2 => {
                         // Configure Firewall
@@ -1939,20 +2032,15 @@ impl App {
                     required: true,
                 },
             ],
-            "health" => vec![
-                ToolParam {
-                    name: "output_level".to_string(),
-                    description: "Output detail level".to_string(),
-                    param_type: ToolParameter::Selection(
-                        vec![
-                            "basic".to_string(),
-                            "detailed".to_string(),
-                        ],
-                        0,
-                    ),
-                    required: false,
-                },
-            ],
+            "health" => vec![ToolParam {
+                name: "output_level".to_string(),
+                description: "Output detail level".to_string(),
+                param_type: ToolParameter::Selection(
+                    vec!["basic".to_string(), "detailed".to_string()],
+                    0,
+                ),
+                required: false,
+            }],
             "mount" => vec![
                 ToolParam {
                     name: "action".to_string(),
@@ -2070,7 +2158,13 @@ impl App {
                     name: "action".to_string(),
                     description: "Action to perform".to_string(),
                     param_type: ToolParameter::Selection(
-                        vec!["configure".to_string(), "status".to_string(), "info".to_string(), "enable".to_string(), "disable".to_string()],
+                        vec![
+                            "configure".to_string(),
+                            "status".to_string(),
+                            "info".to_string(),
+                            "enable".to_string(),
+                            "disable".to_string(),
+                        ],
                         0,
                     ),
                     required: true,
@@ -2108,7 +2202,10 @@ impl App {
     }
 
     /// Handle tool dialog input (navigation, parameter input, etc.)
-    fn handle_tool_dialog_input(&mut self, key_event: KeyEvent) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_tool_dialog_input(
+        &mut self,
+        key_event: KeyEvent,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         match key_event.code {
             KeyCode::Up => {
                 // Move to previous parameter (if not at first)
@@ -2141,7 +2238,8 @@ impl App {
                 // Go back to appropriate tool menu
                 if let Some(ref tool_name) = current_tool {
                     match tool_name.as_str() {
-                        "format_partition" | "wipe_disk" | "health" | "mount" | "manual_partition" => {
+                        "format_partition" | "wipe_disk" | "health" | "mount"
+                        | "manual_partition" => {
                             state.mode = AppMode::DiskTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
@@ -2164,13 +2262,15 @@ impl App {
                         _ => {
                             state.mode = AppMode::ToolsMenu;
                             state.tools_menu_selection = 0;
-                            state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+                            state.status_message =
+                                "Arch Linux Tools - System repair and administration".to_string();
                         }
                     }
                 } else {
                     state.mode = AppMode::ToolsMenu;
                     state.tools_menu_selection = 0;
-                    state.status_message = "Arch Linux Tools - System repair and administration".to_string();
+                    state.status_message =
+                        "Arch Linux Tools - System repair and administration".to_string();
                 }
             }
             KeyCode::Char(c) => {
@@ -2262,45 +2362,72 @@ impl App {
     }
 
     /// Execute health tool with selected disk
-    fn execute_health_tool_with_disk(&mut self, selected_disk: String) -> Result<(), Box<dyn std::error::Error>> {
+    fn execute_health_tool_with_disk(
+        &mut self,
+        selected_disk: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.execute_tool_with_device("check_disk_health.sh", &selected_disk, &["--detailed"])
+    }
+
+    /// Generic function to execute tools that need a device parameter
+    fn execute_tool_with_device(
+        &mut self,
+        script_name: &str,
+        device: &str,
+        extra_args: &[&str],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use std::process::{Command, Stdio};
-        
+
         let mut args = Vec::new();
         args.push("--device".to_string());
-        args.push(selected_disk.clone());
-        args.push("--detailed".to_string()); // Always use detailed for better user experience
-        
-        let script_path = "scripts/tools/check_disk_health.sh";
-        
+        args.push(device.to_string());
+
+        for arg in extra_args {
+            args.push(arg.to_string());
+        }
+
+        let script_path = format!("scripts/tools/{}", script_name);
+
         println!("🔧 Executing: {} {}", script_path, args.join(" "));
-        
+
         let output = Command::new("bash")
-            .arg(script_path)
+            .arg(&script_path)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()?;
-        
+
         // Print stdout
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !stdout.is_empty() {
             print!("{}", stdout);
         }
-        
+
         // Print stderr
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.is_empty() {
             eprint!("{}", stderr);
         }
-        
+
         if output.status.success() {
-            println!("✅ Disk health check completed successfully");
+            println!(
+                "✅ {} completed successfully",
+                script_name.replace(".sh", "").replace("_", " ")
+            );
             if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = format!("Health check completed for {}", selected_disk);
+                state.status_message = format!(
+                    "{} completed for {}",
+                    script_name.replace(".sh", "").replace("_", " "),
+                    device
+                );
                 state.current_tool = None;
             }
         } else {
-            let error_msg = format!("❌ Disk health check failed for {}", selected_disk);
+            let error_msg = format!(
+                "❌ {} failed for {}",
+                script_name.replace(".sh", "").replace("_", " "),
+                device
+            );
             eprintln!("{}", error_msg);
             if let Ok(mut state) = self.lock_state_mut() {
                 state.status_message = error_msg.clone();
@@ -2308,7 +2435,71 @@ impl App {
             }
             return Err(error_msg.into());
         }
-        
+
+        Ok(())
+    }
+
+    /// Generic function to execute simple tools with no parameters
+    fn execute_simple_tool(
+        &mut self,
+        script_name: &str,
+        extra_args: &[&str],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::process::{Command, Stdio};
+
+        let mut args = Vec::new();
+        for arg in extra_args {
+            args.push(arg.to_string());
+        }
+
+        let script_path = format!("scripts/tools/{}", script_name);
+
+        println!("🔧 Executing: {} {}", script_path, args.join(" "));
+
+        let output = Command::new("bash")
+            .arg(&script_path)
+            .args(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
+
+        // Print stdout
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.is_empty() {
+            print!("{}", stdout);
+        }
+
+        // Print stderr
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            eprint!("{}", stderr);
+        }
+
+        if output.status.success() {
+            println!(
+                "✅ {} completed successfully",
+                script_name.replace(".sh", "").replace("_", " ")
+            );
+            if let Ok(mut state) = self.lock_state_mut() {
+                state.status_message = format!(
+                    "{} completed",
+                    script_name.replace(".sh", "").replace("_", " ")
+                );
+                state.current_tool = None;
+            }
+        } else {
+            let error_msg = format!(
+                "❌ {} failed",
+                script_name.replace(".sh", "").replace("_", " ")
+            );
+            eprintln!("{}", error_msg);
+            if let Ok(mut state) = self.lock_state_mut() {
+                state.status_message = error_msg.clone();
+                state.current_tool = None;
+            }
+            return Err(error_msg.into());
+        }
+
         Ok(())
     }
 
@@ -2358,21 +2549,21 @@ impl App {
                     }
                 }
             }
-               "health" => {
-                   // Device is handled through disk selection dialog
-                   if params.len() >= 1 && params[0] == "detailed" {
-                       args.push("--detailed".to_string());
-                   }
-               }
+            "health" => {
+                // Device is handled through disk selection dialog
+                if params.len() >= 1 && params[0] == "detailed" {
+                    args.push("--detailed".to_string());
+                }
+            }
             "mount" => {
                 if params.len() >= 2 {
                     args.push("--action".to_string());
                     args.push(params[0].clone());
-                    
+
                     // Determine if target is device or mountpoint based on action
                     let action = &params[0];
                     let target = &params[1];
-                    
+
                     if action == "mount" {
                         // For mount: target is device, destination is mountpoint
                         args.push("--device".to_string());
@@ -2395,7 +2586,7 @@ impl App {
                         args.push("--device".to_string());
                         args.push(target.clone());
                     }
-                    
+
                     // Add flags
                     if params.len() >= 4 && params[3] == "true" {
                         args.push("--readonly".to_string());

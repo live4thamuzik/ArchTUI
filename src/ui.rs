@@ -775,7 +775,9 @@ impl UiRenderer {
         // Render disk tools menu
         let menu_items = [
             " ▶ Partition Disk (cfdisk) - Create, delete, resize partitions",
-            " ▶ Check Disk Health - SMART diagnostics and disk info",
+            " ▶ Format Partition - Format with ext4, btrfs, xfs, etc",
+            " ▶ Wipe Disk - Securely wipe disk with zero/random data",
+            " ▶ Check Disk Health - Comprehensive disk reliability test",
             " ▶ Mount/Unmount - Manage partition mounting",
             " ▶ Back to Tools Menu",
         ];
