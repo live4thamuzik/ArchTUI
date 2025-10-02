@@ -57,14 +57,14 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 --action <mount|unmount|list|info> [options]"
             echo ""
             echo "Actions:"
-            echo "  mount     Mount a partition to a directory"
-            echo "  unmount   Unmount a mounted partition"
+            echo "  mount     Mount a device to a directory"
+            echo "  unmount   Unmount a device or directory"
             echo "  list      List all mounted filesystems"
             echo "  info      Show detailed partition information"
             echo ""
             echo "Options:"
             echo "  --device <device>        Device to mount/unmount (e.g., /dev/sda1)"
-            echo "  --mountpoint <path>      Mount point directory (e.g., /mnt)"
+            echo "  --mountpoint <path>      Directory to mount to (user-specified)"
             echo "  --filesystem <type>      Filesystem type (auto-detected if not specified)"
             echo "  --options <opts>         Additional mount options"
             echo "  --readonly               Mount as read-only"
@@ -72,10 +72,14 @@ while [[ $# -gt 0 ]]; do
             echo "  --force                  Force operation (use with caution)"
             echo ""
             echo "Examples:"
-            echo "  $0 --action mount --device /dev/sda1 --mountpoint /mnt"
+            echo "  $0 --action mount --device /dev/sda1 --mountpoint /home/user/data"
+            echo "  $0 --action mount --device /dev/sda1 --mountpoint /mnt --readonly"
             echo "  $0 --action unmount --device /dev/sda1"
+            echo "  $0 --action unmount --mountpoint /home/user/data"
             echo "  $0 --action list"
             echo "  $0 --action info --device /dev/sda1"
+            echo ""
+            echo "Note: Users specify their own mount points and destinations"
             exit 0
             ;;
         *)
@@ -328,41 +332,51 @@ case "$ACTION" in
         df -h "$MOUNTPOINT" | sed 's/^/  /'
         ;;
     unmount)
-        if [[ -z "$DEVICE" ]]; then
-            error_exit "Device is required for unmounting (--device /dev/sda1)"
+        # Determine what to unmount - device or mountpoint
+        TARGET=""
+        TARGET_TYPE=""
+        
+        if [[ -n "$DEVICE" ]]; then
+            TARGET="$DEVICE"
+            TARGET_TYPE="device"
+        elif [[ -n "$MOUNTPOINT" ]]; then
+            TARGET="$MOUNTPOINT"
+            TARGET_TYPE="mountpoint"
+        else
+            error_exit "Either device (--device /dev/sda1) or mountpoint (--mountpoint /path) is required for unmounting"
         fi
         
-        log_info "🔌 Unmounting $DEVICE"
+        log_info "🔌 Unmounting $TARGET_TYPE: $TARGET"
         echo "=================================================="
         
-        # Check if device is mounted
-        if ! mountpoint -q "$DEVICE" 2>/dev/null; then
-            log_warning "⚠️  Device $DEVICE is not mounted"
+        # Check if target is mounted
+        if ! mountpoint -q "$TARGET" 2>/dev/null; then
+            log_warning "⚠️  $TARGET_TYPE $TARGET is not mounted"
             exit 0
         fi
         
         # Show current mount information
         log_info "📌 Current mount information:"
-        mount | grep "$DEVICE" | sed 's/^/  /'
+        mount | grep "$TARGET" | sed 's/^/  /'
         
         # Check for busy filesystem
-        if lsof "$DEVICE" >/dev/null 2>&1; then
-            log_warning "⚠️  Device $DEVICE is in use (files open)"
-            lsof "$DEVICE" | head -5 | sed 's/^/  /'
+        if lsof "$TARGET" >/dev/null 2>&1; then
+            log_warning "⚠️  $TARGET_TYPE $TARGET is in use (files open)"
+            lsof "$TARGET" | head -5 | sed 's/^/  /'
             
             if [[ "$LAZY" == true ]]; then
                 log_info "Lazy unmount enabled - unmounting anyway..."
-                umount -l "$DEVICE"
-                log_success "✅ Lazy unmounted $DEVICE (will unmount when not busy)"
+                umount -l "$TARGET"
+                log_success "✅ Lazy unmounted $TARGET (will unmount when not busy)"
             else
                 log_info "Use --lazy to force unmount (will unmount when not busy)"
                 exit 1
             fi
         else
             # Normal unmount
-            log_info "🚀 Unmounting $DEVICE..."
-            umount "$DEVICE"
-            log_success "✅ Successfully unmounted $DEVICE"
+            log_info "🚀 Unmounting $TARGET..."
+            umount "$TARGET"
+            log_success "✅ Successfully unmounted $TARGET"
         fi
         ;;
     *)
