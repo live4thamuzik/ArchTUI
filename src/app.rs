@@ -553,19 +553,50 @@ impl App {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk (Manual) - Launch cfdisk directly
+                        // Partition Disk (Manual) - Launch cfdisk and wait for completion
                         let mut state = self.lock_state_mut()?;
                         state.current_tool = Some("manual_partition".to_string());
                         state.status_message = "Launching manual disk partitioner (cfdisk)...".to_string();
                         state.mode = AppMode::ToolExecution;
                         state.tool_output.push("Launching cfdisk for manual disk partitioning...".to_string());
-                        state.tool_output.push("Note: This will open cfdisk in a new terminal window.".to_string());
-                        state.tool_output.push("Use 'B' to go back when done.".to_string());
+                        state.tool_output.push("".to_string());
+                        state.tool_output.push("When you finish partitioning and exit cfdisk,".to_string());
+                        state.tool_output.push("you will automatically return to the Disk Tools menu.".to_string());
                         
-                        // Launch cfdisk in background
+                        // Launch cfdisk and wait for completion
+                        let state_clone = self.state.clone();
                         std::thread::spawn(move || {
                             use std::process::Command;
-                            let _ = Command::new("cfdisk").spawn();
+                            let result = Command::new("cfdisk").status();
+                            
+                            // When cfdisk exits, return to disk tools menu
+                            if let Ok(mut state) = state_clone.lock() {
+                                match result {
+                                    Ok(exit_status) => {
+                                        if exit_status.success() {
+                                            state.tool_output.push("".to_string());
+                                            state.tool_output.push("✅ cfdisk completed successfully!".to_string());
+                                            state.tool_output.push("Returning to Disk Tools menu...".to_string());
+                                        } else {
+                                            state.tool_output.push("".to_string());
+                                            state.tool_output.push("⚠️ cfdisk exited with an error.".to_string());
+                                            state.tool_output.push("Returning to Disk Tools menu...".to_string());
+                                        }
+                                    }
+                                    Err(e) => {
+                                        state.tool_output.push("".to_string());
+                                        state.tool_output.push(format!("❌ Failed to launch cfdisk: {}", e));
+                                        state.tool_output.push("Returning to Disk Tools menu...".to_string());
+                                    }
+                                }
+                                
+                                // Return to disk tools menu after a short delay
+                                std::thread::sleep(std::time::Duration::from_millis(1500));
+                                state.mode = AppMode::DiskTools;
+                                state.tools_menu_selection = 0;
+                                state.current_tool = None;
+                                state.status_message = "Disk & Filesystem Tools".to_string();
+                            }
                         });
                     }
                     1 => {
