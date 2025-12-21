@@ -303,3 +303,88 @@ impl From<&crate::config::Configuration> for InstallationConfig {
         file_config
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn create_test_config() -> InstallationConfig {
+        InstallationConfig {
+            install_disk: "/dev/sda".to_string(),
+            partitioning_strategy: "simple".to_string(),
+            root_filesystem: "ext4".to_string(),
+            encryption: "no".to_string(),
+            locale: "en_US.UTF-8".to_string(),
+            timezone_region: "America".to_string(),
+            timezone: "New_York".to_string(),
+            hostname: "archtest".to_string(),
+            username: "testuser".to_string(),
+            user_password: "password123".to_string(),
+            root_password: "rootpass".to_string(),
+            bootloader: "grub".to_string(),
+            desktop_environment: "gnome".to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_installation_config_default() {
+        let config = InstallationConfig::default();
+        assert!(config.install_disk.is_empty());
+        assert!(config.hostname.is_empty());
+        assert!(config.username.is_empty());
+    }
+
+    #[test]
+    fn test_installation_config_to_env_vars() {
+        let config = create_test_config();
+        let env_vars = config.to_env_vars();
+
+        assert!(env_vars.contains(&("INSTALL_DISK".to_string(), "/dev/sda".to_string())));
+        assert!(env_vars.contains(&("HOSTNAME".to_string(), "archtest".to_string())));
+        assert!(env_vars.contains(&("USERNAME".to_string(), "testuser".to_string())));
+        assert!(env_vars.contains(&("ROOT_FILESYSTEM".to_string(), "ext4".to_string())));
+    }
+
+    #[test]
+    fn test_save_and_load_json_config() {
+        let config = create_test_config();
+
+        // Create a temp file
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Save config
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        temp_file.write_all(json.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        // Load config
+        let loaded = InstallationConfig::load_from_file(&path);
+        assert!(loaded.is_ok());
+        let loaded = loaded.unwrap();
+
+        assert_eq!(loaded.install_disk, config.install_disk);
+        assert_eq!(loaded.hostname, config.hostname);
+        assert_eq!(loaded.username, config.username);
+        assert_eq!(loaded.root_filesystem, config.root_filesystem);
+    }
+
+    #[test]
+    fn test_load_nonexistent_file() {
+        let result = InstallationConfig::load_from_file(std::path::Path::new("/nonexistent/path"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_invalid_json() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(b"{ invalid json }").unwrap();
+        temp_file.flush().unwrap();
+
+        let result = InstallationConfig::load_from_file(temp_file.path());
+        assert!(result.is_err());
+    }
+}

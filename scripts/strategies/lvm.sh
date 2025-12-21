@@ -75,12 +75,12 @@ execute_lvm_partitioning() {
     # Format logical volumes
     log_info "Formatting logical volumes..."
     format_filesystem "/dev/arch/root" "$ROOT_FILESYSTEM_TYPE"
-    capture_device_info "root" "/dev/arch/root" "UUID"
+    capture_device_info "root" "/dev/arch/root"
     safe_mount "/dev/arch/root" "/mnt"
-    
+
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
         format_filesystem "/dev/arch/home" "$HOME_FILESYSTEM_TYPE"
-        capture_device_info "home" "/dev/arch/home" "UUID"
+        capture_device_info "home" "/dev/arch/home"
         mkdir -p /mnt/home
         safe_mount "/dev/arch/home" "/mnt/home"
     fi

@@ -138,3 +138,138 @@ impl ScrollState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scroll_state_new() {
+        let state = ScrollState::new(100, 10);
+        assert_eq!(state.offset, 0);
+        assert_eq!(state.total_items, 100);
+        assert_eq!(state.visible_items, 10);
+        assert_eq!(state.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_down() {
+        let mut state = ScrollState::new(10, 5);
+        state.move_down();
+        assert_eq!(state.selected_index, 1);
+        state.move_down();
+        assert_eq!(state.selected_index, 2);
+    }
+
+    #[test]
+    fn test_move_up() {
+        let mut state = ScrollState::new(10, 5);
+        state.selected_index = 5;
+        state.move_up();
+        assert_eq!(state.selected_index, 4);
+    }
+
+    #[test]
+    fn test_move_up_at_zero() {
+        let mut state = ScrollState::new(10, 5);
+        state.move_up();
+        assert_eq!(state.selected_index, 0); // Should stay at 0
+    }
+
+    #[test]
+    fn test_page_down() {
+        let mut state = ScrollState::new(50, 10);
+        state.page_down();
+        assert_eq!(state.selected_index, 9); // visible_items - 1
+    }
+
+    #[test]
+    fn test_page_up() {
+        let mut state = ScrollState::new(50, 10);
+        state.selected_index = 20;
+        state.page_up();
+        assert_eq!(state.selected_index, 11); // 20 - (10 - 1)
+    }
+
+    #[test]
+    fn test_move_to_first() {
+        let mut state = ScrollState::new(50, 10);
+        state.selected_index = 25;
+        state.move_to_first();
+        assert_eq!(state.selected_index, 0);
+    }
+
+    #[test]
+    fn test_move_to_last() {
+        let mut state = ScrollState::new(50, 10);
+        state.move_to_last();
+        assert_eq!(state.selected_index, 50);
+    }
+
+    #[test]
+    fn test_visible_range() {
+        let state = ScrollState::new(50, 10);
+        let (start, end) = state.visible_range();
+        assert_eq!(start, 0);
+        assert_eq!(end, 10);
+    }
+
+    #[test]
+    fn test_visible_range_scrolled() {
+        let mut state = ScrollState::new(50, 10);
+        state.offset = 15;
+        let (start, end) = state.visible_range();
+        assert_eq!(start, 15);
+        assert_eq!(end, 25);
+    }
+
+    #[test]
+    fn test_page_info_no_pagination() {
+        let state = ScrollState::new(5, 10);
+        assert!(state.page_info().is_none());
+    }
+
+    #[test]
+    fn test_page_info_with_pagination() {
+        let state = ScrollState::new(50, 10);
+        let info = state.page_info();
+        assert!(info.is_some());
+        let (current, total) = info.unwrap();
+        assert_eq!(current, 1);
+        assert_eq!(total, 5);
+    }
+
+    #[test]
+    fn test_set_selected() {
+        let mut state = ScrollState::new(50, 10);
+        state.set_selected(25);
+        assert_eq!(state.selected_index, 25);
+    }
+
+    #[test]
+    fn test_set_selected_out_of_bounds() {
+        let mut state = ScrollState::new(10, 5);
+        state.set_selected(100);
+        assert_eq!(state.selected_index, 0); // Should not change
+    }
+
+    #[test]
+    fn test_update_visible_items() {
+        let mut state = ScrollState::new(50, 10);
+        state.selected_index = 25;
+        state.update_visible_items(5);
+        assert_eq!(state.visible_items, 5);
+    }
+
+    #[test]
+    fn test_scrolling_keeps_selection_visible() {
+        let mut state = ScrollState::new(50, 10);
+        // Move down past visible area
+        for _ in 0..15 {
+            state.move_down();
+        }
+        // Selection should be visible
+        let (start, end) = state.visible_range();
+        assert!(state.selected_index >= start && state.selected_index < end);
+    }
+}

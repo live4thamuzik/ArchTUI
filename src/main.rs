@@ -4,6 +4,7 @@
 
 mod app;
 mod cli;
+mod components;
 mod config;
 mod config_file;
 mod error;

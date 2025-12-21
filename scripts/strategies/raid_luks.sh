@@ -108,13 +108,9 @@ execute_raid_luks_partitioning() {
         format_filesystem "/dev/md/BOOT" "ext4"
     fi
     
-    # Set up LUKS encryption on data RAID array
-    log_info "Setting up LUKS encryption on data RAID array"
-    echo -n "$LUKS_PASSWORD" | cryptsetup luksFormat --key-size=512 --hash=sha512 /dev/md/DATA
-    
-    # Open encrypted RAID array
-    log_info "Opening encrypted RAID array"
-    echo -n "$LUKS_PASSWORD" | cryptsetup open /dev/md/DATA cryptdata
+    # Set up LUKS encryption on data RAID array using helper function (non-interactive)
+    local encrypted_dev
+    encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptdata")
     
     # Format encrypted array
     log_info "Formatting encrypted RAID array"
@@ -128,12 +124,9 @@ execute_raid_luks_partitioning() {
             mount /dev/mapper/cryptdata /mnt
             btrfs subvolume create /mnt/@swap
             umount /mnt
-        else
-            # Create swap partition
-            echo -n "$LUKS_PASSWORD" | cryptsetup luksFormat --key-size=512 --hash=sha512 /dev/md/DATA
-            echo -n "$LUKS_PASSWORD" | cryptsetup open /dev/md/DATA cryptswap
-            mkswap /dev/mapper/cryptswap
         fi
+        # Note: For non-btrfs, swap will be created as a file or using LVM on the encrypted volume
+        # Creating a separate LUKS device for swap on the same RAID array is not practical
     fi
     
     # Mount filesystems
@@ -149,25 +142,30 @@ execute_raid_luks_partitioning() {
         mount "${INSTALL_DISKS[0]}1" /mnt/efi
         
         # Capture UUIDs for configuration
-        capture_device_info "/dev/md/XBOOTLDR" "XBOOTLDR"
-        capture_device_info "/dev/mapper/cryptdata" "ROOT"
-        capture_device_info "/dev/md/DATA" "LUKS"
+        capture_device_info "boot" "/dev/md/XBOOTLDR"
+        capture_device_info "root" "/dev/mapper/cryptdata"
+        capture_device_info "luks" "/dev/md/DATA"
     else
         # BIOS: Mount boot
         mkdir -p /mnt/boot
         mount /dev/md/BOOT /mnt/boot
         
         # Capture UUIDs for configuration
-        capture_device_info "/dev/md/BOOT" "BOOT"
-        capture_device_info "/dev/mapper/cryptdata" "ROOT"
-        capture_device_info "/dev/md/DATA" "LUKS"
+        capture_device_info "boot" "/dev/md/BOOT"
+        capture_device_info "root" "/dev/mapper/cryptdata"
+        capture_device_info "luks" "/dev/md/DATA"
     fi
     
     # Save RAID configuration
     log_info "Saving RAID configuration"
     mkdir -p /mnt/etc/mdadm
     mdadm --detail --scan > /mnt/etc/mdadm/mdadm.conf
-    
+
+    # Generate crypttab entry for boot-time unlocking
+    log_info "Generating crypttab entry..."
+    mkdir -p /mnt/etc
+    generate_crypttab "/dev/md/DATA" "cryptdata"
+
     log_info "RAID + LUKS partitioning completed successfully"
 }
 

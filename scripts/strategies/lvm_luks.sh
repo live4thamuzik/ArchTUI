@@ -58,10 +58,9 @@ execute_lvm_luks_partitioning() {
     partprobe "$INSTALL_DISK"
     local luks_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
     
-    # Set up LUKS encryption
-    log_info "Setting up LUKS encryption..."
-    cryptsetup luksFormat --type luks2 "$luks_dev" || error_exit "Failed to format LUKS partition."
-    cryptsetup open "$luks_dev" cryptlvm || error_exit "Failed to open LUKS partition."
+    # Set up LUKS encryption using helper function (non-interactive)
+    local encrypted_dev
+    encrypted_dev=$(setup_luks_encryption "$luks_dev" "cryptlvm")
     
     # Create LVM setup on encrypted device
     log_info "Setting up LVM on encrypted device..."
@@ -80,12 +79,12 @@ execute_lvm_luks_partitioning() {
     # Format logical volumes
     log_info "Formatting logical volumes..."
     format_filesystem "/dev/arch/root" "$ROOT_FILESYSTEM_TYPE"
-    capture_device_info "root" "/dev/arch/root" "UUID"
+    capture_device_info "root" "/dev/arch/root"
     safe_mount "/dev/arch/root" "/mnt"
-    
+
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
         format_filesystem "/dev/arch/home" "$HOME_FILESYSTEM_TYPE"
-        capture_device_info "home" "/dev/arch/home" "UUID"
+        capture_device_info "home" "/dev/arch/home"
         mkdir -p /mnt/home
         safe_mount "/dev/arch/home" "/mnt/home"
     fi
@@ -96,5 +95,10 @@ execute_lvm_luks_partitioning() {
         LVM_DEVICES_MAP["arch_home"]="/dev/arch/home"
     fi
     
+    # Generate crypttab entry for boot-time unlocking
+    log_info "Generating crypttab entry..."
+    mkdir -p /mnt/etc
+    generate_crypttab "$luks_dev" "cryptlvm"
+
     log_partitioning_complete "LVM + LUKS ESP + XBOOTLDR"
 }
