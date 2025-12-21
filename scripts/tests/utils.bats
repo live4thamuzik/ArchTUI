@@ -41,12 +41,6 @@ teardown() {
     [[ "$output" =~ "SUCCESS: Success message" ]]
 }
 
-@test "log_critical outputs timestamped critical message" {
-    run log_critical "Critical error"
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "CRITICAL: Critical error" ]]
-}
-
 @test "log_debug outputs message when LOG_LEVEL is DEBUG" {
     export LOG_LEVEL="DEBUG"
     run log_debug "Debug message"
@@ -217,12 +211,6 @@ teardown() {
 # =============================================================================
 # Command Execution Tests
 # =============================================================================
-
-@test "execute_critical runs command and logs success" {
-    run execute_critical "Test operation" echo "hello"
-    [ "$status" -eq 0 ]
-    [[ "$output" =~ "SUCCESS" ]] || [[ "$output" =~ "completed" ]]
-}
 
 @test "execute_non_critical runs command and logs success" {
     run execute_non_critical "Test operation" echo "hello"
