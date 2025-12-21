@@ -69,6 +69,7 @@ get_partition_path() {
 
 # Wipe disk clean
 # SECURITY: Requires explicit confirmation to prevent accidental data loss
+# Supports dry-run mode for preview
 wipe_disk() {
     local disk="$1"
     local confirmed="${2:-no}"
@@ -80,6 +81,15 @@ wipe_disk() {
 
     log_warning "⚠️  DESTROYING ALL DATA ON $disk"
     log_info "Wiping disk: $disk"
+
+    # Dry-run mode: show what would be done
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        log_info "[DRY-RUN] Would unmount partitions on $disk"
+        log_info "[DRY-RUN] Would run: wipefs -af $disk"
+        log_info "[DRY-RUN] Would zero first and last 10MB of $disk"
+        log_info "[DRY-RUN] Would run: partprobe $disk"
+        return 0
+    fi
 
     # Unmount any mounted partitions
     for part in "${disk}"*; do
@@ -95,9 +105,9 @@ wipe_disk() {
     dd if=/dev/zero of="$disk" bs=1M count=10 status=none 2>/dev/null || true
     dd if=/dev/zero of="$disk" bs=1M seek=$(($(blockdev --getsz "$disk") / 2048 - 10)) count=10 status=none 2>/dev/null || true
 
-    # Inform kernel of partition changes
+    # Inform kernel of partition changes and wait for udev to settle
     partprobe "$disk" 2>/dev/null || true
-    sleep 1
+    udevadm settle --timeout=5 2>/dev/null || sleep 1
 
     log_success "Disk $disk wiped successfully"
 }
@@ -105,6 +115,11 @@ wipe_disk() {
 # Create partition table (GPT for UEFI, MBR for BIOS)
 create_partition_table() {
     local disk="$1"
+
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        log_info "[DRY-RUN] Would create ${BOOT_MODE:-UEFI} partition table on $disk"
+        return 0
+    fi
 
     if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
         log_info "Creating GPT partition table on $disk"
@@ -114,7 +129,7 @@ create_partition_table() {
         printf "o\nw\n" | fdisk "$disk" || error_exit "Failed to create MBR label on $disk"
     fi
     partprobe "$disk"
-    sleep 1
+    udevadm settle --timeout=5 2>/dev/null || sleep 1
 }
 
 # Create ESP partition (UEFI only)

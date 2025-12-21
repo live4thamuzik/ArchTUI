@@ -461,10 +461,16 @@ check_package_available() {
 }
 
 # Format filesystem based on type
+# Supports dry-run mode for preview
 format_filesystem() {
     local device="$1"
     local fs_type="$2"
-    
+
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        log_info "[DRY-RUN] Would format $device as $fs_type"
+        return 0
+    fi
+
     case "$fs_type" in
         "ext4")
             check_package_available "e2fsprogs" "mkfs.ext4" || return 1
@@ -549,4 +555,85 @@ validate_raid_disks() {
 
     log_success "RAID disk compatibility check passed"
     return 0
+}
+
+# Wait for device to be ready (replaces hardcoded sleep)
+wait_for_device() {
+    local device="$1"
+    local max_wait="${2:-10}"
+    local waited=0
+
+    log_debug "Waiting for device $device to be ready..."
+
+    while [[ $waited -lt $max_wait ]]; do
+        if [[ -b "$device" ]]; then
+            # Device exists, wait for udev to settle
+            udevadm settle --timeout=2 2>/dev/null || sleep 1
+            log_debug "Device $device is ready"
+            return 0
+        fi
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+
+    log_warn "Timeout waiting for device $device after ${max_wait}s"
+    return 1
+}
+
+# Check disk SMART health status
+check_disk_health() {
+    local disk="$1"
+
+    # Check if smartctl is available
+    if ! command -v smartctl &>/dev/null; then
+        log_debug "smartctl not available, skipping SMART health check"
+        return 0
+    fi
+
+    log_info "Checking SMART health status for $disk..."
+
+    # Check if SMART is supported
+    if ! smartctl -i "$disk" &>/dev/null; then
+        log_debug "SMART not supported on $disk, skipping health check"
+        return 0
+    fi
+
+    # Get SMART health status
+    local health_status
+    health_status=$(smartctl -H "$disk" 2>/dev/null | grep -i "SMART overall-health" | awk '{print $NF}')
+
+    if [[ -z "$health_status" ]]; then
+        log_warn "Could not determine SMART health status for $disk"
+        return 0
+    fi
+
+    if [[ "$health_status" =~ PASSED|OK ]]; then
+        log_success "SMART health check passed for $disk: $health_status"
+        return 0
+    else
+        log_error "⚠️  SMART health check FAILED for $disk: $health_status"
+        log_error "This disk may be failing and could cause data loss!"
+
+        if [[ "${FORCE_UNSAFE_DISK:-false}" != "true" ]]; then
+            error_exit "Refusing to use potentially failing disk $disk (use FORCE_UNSAFE_DISK=true to override)"
+        else
+            log_warn "Proceeding with potentially failing disk due to FORCE_UNSAFE_DISK=true"
+        fi
+    fi
+}
+
+# Enhanced RAID validation with SMART checks
+validate_raid_disks_with_health() {
+    local -a disks=("$@")
+
+    # First do standard compatibility checks
+    validate_raid_disks "$@"
+
+    # Then check SMART health on all disks
+    log_info "Performing SMART health checks on RAID disks..."
+    for disk in "${disks[@]}"; do
+        check_disk_health "$disk"
+    done
+
+    log_success "All RAID disks passed health checks"
 }
