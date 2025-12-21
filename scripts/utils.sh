@@ -172,31 +172,65 @@ perform_preflight_checks() {
 }
 
 # Validation functions
+# SECURITY: Enhanced disk validation with path canonicalization and whitelisting
 validate_disk() {
     local disk="$1"
+
     if [ -z "$disk" ]; then
         log_error "Disk path is empty"
         return 1
     fi
-    
-    if [ ! -b "$disk" ]; then
-        log_error "Disk $disk does not exist or is not a block device"
+
+    # Canonicalize path to prevent symlink/path traversal attacks
+    local canonical_disk
+    canonical_disk=$(readlink -f "$disk" 2>/dev/null) || {
+        log_error "Failed to canonicalize disk path: $disk"
+        return 1
+    }
+
+    # Whitelist allowed device patterns for security
+    case "$canonical_disk" in
+        /dev/sd[a-z]|/dev/sd[a-z][a-z])
+            log_debug "Valid SATA/SCSI disk: $canonical_disk"
+            ;;
+        /dev/nvme[0-9]n[0-9]|/dev/nvme[0-9][0-9]n[0-9])
+            log_debug "Valid NVMe disk: $canonical_disk"
+            ;;
+        /dev/vd[a-z]|/dev/vd[a-z][a-z])
+            log_debug "Valid virtio disk: $canonical_disk"
+            ;;
+        /dev/mmcblk[0-9]|/dev/mmcblk[0-9][0-9])
+            log_debug "Valid MMC/SD disk: $canonical_disk"
+            ;;
+        /dev/loop[0-9]|/dev/loop[0-9][0-9])
+            log_warn "Loop device detected: $canonical_disk (allowed for testing)"
+            ;;
+        *)
+            error_exit "Invalid or unsafe disk path: $canonical_disk (must be /dev/sd*, /dev/nvme*, /dev/vd*, or /dev/mmcblk*)"
+            ;;
+    esac
+
+    # Verify it's a block device
+    if [ ! -b "$canonical_disk" ]; then
+        log_error "Disk $canonical_disk does not exist or is not a block device"
         return 1
     fi
-    
+
     # Additional disk validation
-    log_debug "Validating disk: $disk"
-    
+    log_debug "Validating disk: $canonical_disk"
+
     # Check if disk is mounted
-    if mountpoint -q "$disk" 2>/dev/null; then
-        error_exit "Disk $disk is currently mounted and cannot be used for installation"
+    if mountpoint -q "$canonical_disk" 2>/dev/null; then
+        error_exit "Disk $canonical_disk is currently mounted and cannot be used for installation"
     fi
-    
+
     # Check if any partitions on disk are mounted
-    local mounted_parts=$(lsblk -n -o MOUNTPOINT "$disk" 2>/dev/null | grep -v "^$" | wc -l)
+    local mounted_parts=$(lsblk -n -o MOUNTPOINT "$canonical_disk" 2>/dev/null | grep -v "^$" | wc -l)
     if [[ $mounted_parts -gt 0 ]]; then
-        log_warn "Some partitions on $disk are mounted - proceeding anyway"
+        log_warn "Some partitions on $canonical_disk are mounted - this may cause issues"
     fi
+
+    log_success "Disk validation passed: $canonical_disk"
     
     # Check disk size (minimum 8GB)
     local disk_size_bytes=$(lsblk -b -d -n -o SIZE "$disk" 2>/dev/null)
@@ -210,35 +244,55 @@ validate_disk() {
     return 0
 }
 
+# SECURITY: Enhanced username validation to prevent injection attacks
 validate_username() {
     local username="$1"
+
     if [ -z "$username" ]; then
         log_error "Username is empty"
         return 1
     fi
-    
-    if ! echo "$username" | grep -qE '^[a-zA-Z0-9._-]+$'; then
-        log_error "Username contains invalid characters"
-        return 1
+
+    # Strict validation: lowercase alphanumeric, underscore, hyphen only
+    # Must start with lowercase letter or underscore
+    # Max 32 characters (Linux limit)
+    if ! echo "$username" | grep -qE '^[a-z_][a-z0-9_-]{0,31}$'; then
+        error_exit "Invalid username: '$username' (must be lowercase alphanumeric with _ or -, start with letter or _, max 32 chars)"
     fi
-    
-    log_info "Username $username validated successfully"
+
+    # Reserved system usernames
+    case "$username" in
+        root|daemon|bin|sys|sync|games|man|lp|mail|news|uucp|proxy|www-data|backup|list|irc|gnats|nobody)
+            error_exit "Username '$username' is reserved by the system"
+            ;;
+    esac
+
+    log_success "Username $username validated successfully"
     return 0
 }
 
+# SECURITY: Enhanced hostname validation
 validate_hostname() {
     local hostname="$1"
+
     if [ -z "$hostname" ]; then
         log_error "Hostname is empty"
         return 1
     fi
-    
-    if ! echo "$hostname" | grep -qE '^[a-zA-Z0-9.-]+$'; then
-        log_error "Hostname contains invalid characters"
-        return 1
+
+    # Strict validation: lowercase alphanumeric and hyphens only
+    # Cannot start or end with hyphen
+    # Max 63 characters per RFC 1035
+    if ! echo "$hostname" | grep -qE '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'; then
+        error_exit "Invalid hostname: '$hostname' (must be lowercase alphanumeric with hyphens, max 63 chars, cannot start/end with hyphen)"
     fi
-    
-    log_info "Hostname $hostname validated successfully"
+
+    # Hostname cannot be 'localhost' or numeric-only
+    if [[ "$hostname" == "localhost" ]] || echo "$hostname" | grep -qE '^[0-9]+$'; then
+        error_exit "Invalid hostname: '$hostname' (cannot be 'localhost' or numeric-only)"
+    fi
+
+    log_success "Hostname $hostname validated successfully"
     return 0
 }
 
@@ -437,4 +491,62 @@ format_filesystem() {
             return 1
             ;;
     esac
+}
+
+# SECURITY: RAID disk compatibility validation
+# Validates that disks in a RAID array are compatible
+validate_raid_disks() {
+    local -a disks=("$@")
+
+    if [[ ${#disks[@]} -lt 2 ]]; then
+        error_exit "RAID requires at least 2 disks, got ${#disks[@]}"
+    fi
+
+    log_info "Validating RAID disk compatibility for ${#disks[@]} disks..."
+
+    # Get size of first disk as reference
+    local first_disk="${disks[0]}"
+    local first_size=$(blockdev --getsize64 "$first_disk" 2>/dev/null)
+    local first_sector=$(blockdev --getss "$first_disk" 2>/dev/null)
+
+    if [[ -z "$first_size" ]] || [[ -z "$first_sector" ]]; then
+        error_exit "Failed to get size/sector info for $first_disk"
+    fi
+
+    log_debug "Reference disk: $first_disk (size: $first_size bytes, sector: $first_sector bytes)"
+
+    # Check all disks for compatibility
+    for disk in "${disks[@]:1}"; do
+        local disk_size=$(blockdev --getsize64 "$disk" 2>/dev/null)
+        local disk_sector=$(blockdev --getss "$disk" 2>/dev/null)
+
+        # Check sector size compatibility
+        if [[ "$disk_sector" != "$first_sector" ]]; then
+            log_error "RAID disk sector size mismatch:"
+            log_error "  $first_disk: $first_sector bytes"
+            log_error "  $disk: $disk_sector bytes"
+            error_exit "All RAID disks must have matching sector sizes"
+        fi
+
+        # Warn about size differences (allow up to 5% difference)
+        local size_diff=$((disk_size - first_size))
+        local size_diff_abs=${size_diff#-}  # Absolute value
+        local size_diff_pct=$((size_diff_abs * 100 / first_size))
+
+        if [[ $size_diff_pct -gt 5 ]]; then
+            log_warn "⚠️  RAID disk size mismatch (${size_diff_pct}% difference):"
+            log_warn "  $first_disk: $(numfmt --to=iec $first_size 2>/dev/null || echo $first_size)"
+            log_warn "  $disk: $(numfmt --to=iec $disk_size 2>/dev/null || echo $disk_size)"
+            log_warn "Smallest disk will limit RAID capacity"
+        fi
+
+        # Check for existing RAID metadata
+        if mdadm --examine "$disk" &>/dev/null; then
+            log_warn "⚠️  Disk $disk has existing RAID metadata"
+            log_warn "This will be overwritten during RAID creation"
+        fi
+    done
+
+    log_success "RAID disk compatibility check passed"
+    return 0
 }

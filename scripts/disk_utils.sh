@@ -68,8 +68,17 @@ get_partition_path() {
 }
 
 # Wipe disk clean
+# SECURITY: Requires explicit confirmation to prevent accidental data loss
 wipe_disk() {
     local disk="$1"
+    local confirmed="${2:-no}"
+
+    # Safety check: require explicit confirmation parameter
+    if [[ "$confirmed" != "CONFIRMED" ]]; then
+        error_exit "CRITICAL: wipe_disk requires explicit 'CONFIRMED' parameter to prevent accidental data loss"
+    fi
+
+    log_warning "⚠️  DESTROYING ALL DATA ON $disk"
     log_info "Wiping disk: $disk"
 
     # Unmount any mounted partitions
@@ -89,6 +98,8 @@ wipe_disk() {
     # Inform kernel of partition changes
     partprobe "$disk" 2>/dev/null || true
     sleep 1
+
+    log_success "Disk $disk wiped successfully"
 }
 
 # Create partition table (GPT for UEFI, MBR for BIOS)
@@ -516,6 +527,7 @@ log_partitioning_complete() {
 }
 
 # Setup LUKS encryption with password from variable
+# Security: Uses file descriptor to avoid exposing password in process list
 setup_luks_encryption() {
     local device="$1"
     local mapper_name="${2:-cryptroot}"
@@ -526,13 +538,19 @@ setup_luks_encryption() {
 
     log_info "Setting up LUKS encryption on $device..."
 
-    # Format LUKS container
-    echo -n "$ENCRYPTION_PASSWORD" | cryptsetup luksFormat --type luks2 --batch-mode "$device" - || \
+    # Format LUKS container using process substitution to avoid password exposure
+    # This prevents the password from appearing in process list or environment
+    cryptsetup luksFormat --type luks2 --batch-mode --key-file=<(echo -n "$ENCRYPTION_PASSWORD") "$device" || \
         error_exit "Failed to format LUKS container on $device"
 
-    # Open LUKS container
-    echo -n "$ENCRYPTION_PASSWORD" | cryptsetup open "$device" "$mapper_name" - || \
+    # Open LUKS container using same secure method
+    cryptsetup open --key-file=<(echo -n "$ENCRYPTION_PASSWORD") "$device" "$mapper_name" || \
         error_exit "Failed to open LUKS container on $device"
+
+    # Clear password from memory after use for additional security
+    local temp_clear="$ENCRYPTION_PASSWORD"
+    ENCRYPTION_PASSWORD=""
+    temp_clear=""
 
     # Capture LUKS UUID for crypttab
     capture_device_info "luks" "$device"
