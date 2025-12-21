@@ -88,28 +88,27 @@ execute_raid_partitioning() {
         local first_disk="${RAID_DEVICES[0]}"
         local efi_part=$(get_partition_path "$first_disk" "$efi_part_num")
         format_filesystem "$efi_part" "$EFI_FILESYSTEM"
-        capture_device_info "efi" "$efi_part" "UUID"
-        capture_device_info "efi" "$efi_part" "PARTUUID"
+        capture_device_info "efi" "$efi_part"
         safe_mount "$efi_part" "/mnt/efi"
-        
+
         # Format and mount XBOOTLDR (not in RAID)
         local xbootldr_part=$(get_partition_path "$first_disk" "$xbootldr_part_num")
         format_filesystem "$xbootldr_part" "$BOOT_FILESYSTEM"
-        capture_device_info "boot" "$xbootldr_part" "UUID"
+        capture_device_info "boot" "$xbootldr_part"
         safe_mount "$xbootldr_part" "/mnt/boot"
     else
         # BIOS: Format and mount boot partition (not in RAID)
         local first_disk="${RAID_DEVICES[0]}"
         local boot_part=$(get_partition_path "$first_disk" "$xbootldr_part_num")
         format_filesystem "$boot_part" "$BOOT_FILESYSTEM"
-        capture_device_info "boot" "$boot_part" "UUID"
+        capture_device_info "boot" "$boot_part"
         safe_mount "$boot_part" "/mnt/boot"
     fi
-    
+
     # --- Phase 4: Handle data partition ---
     # Format RAID array
     format_filesystem "/dev/md0" "$ROOT_FILESYSTEM_TYPE"
-    capture_device_info "root" "/dev/md0" "UUID"
+    capture_device_info "root" "/dev/md0"
     safe_mount "/dev/md0" "/mnt"
     
     # Handle Btrfs subvolumes if needed
@@ -140,7 +139,7 @@ execute_raid_partitioning() {
         
         # Format and mount home
         format_filesystem "/dev/md1" "$HOME_FILESYSTEM_TYPE"
-        capture_device_info "home" "/dev/md1" "UUID"
+        capture_device_info "home" "/dev/md1"
         mkdir -p /mnt/home
         safe_mount "/dev/md1" "/mnt/home"
         

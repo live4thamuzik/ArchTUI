@@ -2,12 +2,20 @@
 //!
 //! Handles the main application lifecycle, event processing, and state transitions.
 
+#![allow(dead_code)]
+
+use crate::components::confirm_dialog::{
+    format_partition_confirm, start_install_confirm, wipe_disk_confirm,
+};
+use crate::components::floating_window::FloatingOutputState;
+use crate::components::keybindings::KeybindingContext;
+use crate::components::pty_terminal::{PtyTerminal, PtyTerminalState};
 use crate::config::Configuration;
 use crate::error;
 use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::ui::UiRenderer;
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -68,10 +76,22 @@ pub struct AppState {
     pub tool_output: Vec<String>,
     /// Tool dialog state for parameter collection
     pub tool_dialog: Option<ToolDialogState>,
+    /// Whether help overlay is visible
+    pub help_visible: bool,
+    /// Floating output window state
+    pub floating_output: Option<FloatingOutputState>,
+    /// Embedded terminal state
+    pub embedded_terminal: Option<PtyTerminalState>,
+    /// File browser state
+    pub file_browser: Option<crate::components::file_browser::FileBrowserState>,
+    /// Confirmation dialog state
+    pub confirm_dialog: Option<crate::components::confirm_dialog::ConfirmDialogState>,
+    /// Previous mode to return to after dialog
+    pub pre_dialog_mode: Option<AppMode>,
 }
 
 /// Application operating modes
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AppMode {
     /// Main menu - entry point for all functionality
     MainMenu,
@@ -97,6 +117,14 @@ pub enum AppMode {
     Installation,
     /// Installation complete
     Complete,
+    /// Embedded terminal for interactive tools
+    EmbeddedTerminal,
+    /// Floating output window
+    FloatingOutput,
+    /// File browser for selecting config files
+    FileBrowser,
+    /// Confirmation dialog for destructive operations
+    ConfirmDialog,
 }
 
 impl Default for AppState {
@@ -113,6 +141,12 @@ impl Default for AppState {
             current_tool: None,
             tool_output: Vec::new(),
             tool_dialog: None,
+            help_visible: false,
+            floating_output: None,
+            embedded_terminal: None,
+            file_browser: None,
+            confirm_dialog: None,
+            pre_dialog_mode: None,
         }
     }
 }
@@ -124,6 +158,10 @@ pub struct App {
     ui_renderer: UiRenderer,
     input_handler: InputHandler,
     save_config_path: Option<std::path::PathBuf>,
+    /// PTY terminal for embedded interactive tools
+    pty_terminal: Option<PtyTerminal>,
+    /// Keybinding context for navigation hints
+    keybinding_context: KeybindingContext,
 }
 
 impl App {
@@ -153,7 +191,207 @@ impl App {
             ui_renderer: UiRenderer::new(),
             input_handler: InputHandler::new(),
             save_config_path,
+            pty_terminal: None,
+            keybinding_context: KeybindingContext::new(),
         }
+    }
+
+    /// Get reference to keybinding context
+    pub fn keybinding_context(&self) -> &KeybindingContext {
+        &self.keybinding_context
+    }
+
+    /// Toggle help overlay visibility
+    pub fn toggle_help(&self) {
+        if let Ok(mut state) = self.lock_state_mut() {
+            state.help_visible = !state.help_visible;
+        }
+    }
+
+    /// Load a configuration file and start installation
+    fn load_config_file(&mut self, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::config_file::InstallationConfig;
+
+        // Clear file browser state first
+        {
+            let mut state = self.lock_state_mut()?;
+            state.file_browser = None;
+        }
+
+        // Load and validate the config file
+        match InstallationConfig::load_from_file(path) {
+            Ok(config) => {
+                match config.validate() {
+                    Ok(_) => {
+                        // Config is valid - start installation
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = format!(
+                            "Configuration loaded from: {}",
+                            path.display()
+                        );
+
+                        // Set up floating output to show config details
+                        let mut content = vec![
+                            format!("Configuration file: {}", path.display()),
+                            String::new(),
+                            "Configuration loaded successfully!".to_string(),
+                            String::new(),
+                            format!("Disk: {}", config.install_disk),
+                            format!("Hostname: {}", config.hostname),
+                            format!("Username: {}", config.username),
+                            format!("Bootloader: {}", config.bootloader),
+                            String::new(),
+                        ];
+
+                        if !config.desktop_environment.is_empty() {
+                            content.push(format!("Desktop: {}", config.desktop_environment));
+                        }
+
+                        content.push(String::new());
+                        content.push("Press Enter to start installation or Esc to cancel".to_string());
+
+                        state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
+                            title: "Configuration Loaded".to_string(),
+                            content,
+                            scroll_offset: 0,
+                            auto_scroll: false,
+                            complete: true,
+                            progress: None,
+                            status: "Ready to install".to_string(),
+                        });
+                        state.mode = AppMode::FloatingOutput;
+                    }
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.mode = AppMode::AutomatedInstall;
+                        state.status_message = format!("Config validation failed: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                let mut state = self.lock_state_mut()?;
+                state.mode = AppMode::AutomatedInstall;
+                state.status_message = format!("Failed to load config: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Launch an embedded terminal for interactive tools
+    pub fn launch_embedded_tool(
+        &mut self,
+        cmd: &str,
+        args: &[&str],
+        tool_name: &str,
+        return_mode: AppMode,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::components::pty_terminal::{spawn_or_fallback, PtySpawnResult};
+
+        // Get terminal size
+        let (cols, rows) = crossterm::terminal::size()?;
+        let pty_rows = rows.saturating_sub(2); // Reserve space for nav bar
+
+        match spawn_or_fallback(cmd, args, cols, pty_rows) {
+            PtySpawnResult::Success(pty) => {
+                self.pty_terminal = Some(*pty);
+
+                let mut state = self.lock_state_mut()?;
+                let return_menu_selection = state.tools_menu_selection;
+                state.embedded_terminal = Some(PtyTerminalState {
+                    tool_name: tool_name.to_string(),
+                    return_mode,
+                    return_menu_selection,
+                });
+                state.mode = AppMode::EmbeddedTerminal;
+                Ok(())
+            }
+            PtySpawnResult::Fallback(reason) => {
+                // Log the fallback reason and use passthrough mode
+                log::warn!("PTY fallback: {}", reason);
+                self.launch_passthrough_tool(cmd, args, return_mode)
+            }
+        }
+    }
+
+    /// Launch a tool in passthrough mode (fallback when PTY fails)
+    fn launch_passthrough_tool(
+        &mut self,
+        cmd: &str,
+        args: &[&str],
+        return_mode: AppMode,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::process::Command;
+
+        // Temporarily leave alternate screen
+        crossterm::execute!(
+            std::io::stdout(),
+            crossterm::terminal::LeaveAlternateScreen
+        )?;
+        crossterm::terminal::disable_raw_mode()?;
+
+        // Run the command
+        let status = Command::new(cmd).args(args).status();
+
+        // Return to alternate screen
+        crossterm::terminal::enable_raw_mode()?;
+        crossterm::execute!(
+            std::io::stdout(),
+            crossterm::terminal::EnterAlternateScreen
+        )?;
+
+        // Check status and return to appropriate mode
+        match status {
+            Ok(exit_status) => {
+                let mut state = self.lock_state_mut()?;
+                if exit_status.success() {
+                    state.status_message = format!("{} completed successfully", cmd);
+                } else {
+                    state.status_message = format!("{} exited with error", cmd);
+                }
+                state.mode = return_mode;
+            }
+            Err(e) => {
+                let mut state = self.lock_state_mut()?;
+                state.status_message = format!("Failed to run {}: {}", cmd, e);
+                state.mode = return_mode;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Exit embedded terminal and return to previous mode
+    fn exit_embedded_terminal(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Kill the PTY if running
+        if let Some(ref mut pty) = self.pty_terminal {
+            pty.kill();
+        }
+        self.pty_terminal = None;
+
+        // Return to previous mode
+        let mut state = self.lock_state_mut()?;
+        if let Some(terminal_state) = state.embedded_terminal.take() {
+            state.mode = terminal_state.return_mode;
+            state.tools_menu_selection = terminal_state.return_menu_selection;
+            state.status_message = format!("{} closed", terminal_state.tool_name);
+        } else {
+            state.mode = AppMode::MainMenu;
+        }
+
+        Ok(())
+    }
+
+    /// Poll PTY output if in embedded terminal mode
+    fn poll_pty(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(ref mut pty) = self.pty_terminal {
+            // Check if PTY is still running
+            if !pty.is_running() {
+                // PTY exited, return to previous mode
+                self.exit_embedded_terminal()?;
+            }
+        }
+        Ok(())
     }
 
     /// Run the main application loop
@@ -162,8 +400,11 @@ impl App {
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         loop {
+            // Poll PTY if in embedded terminal mode
+            self.poll_pty()?;
+
             // Handle input events
-            if crossterm::event::poll(Duration::from_millis(100))? {
+            if crossterm::event::poll(Duration::from_millis(50))? {
                 match crossterm::event::read()? {
                     Event::Key(key_event) => {
                         if self.handle_key_event(key_event)? {
@@ -173,6 +414,10 @@ impl App {
                     Event::Resize(width, height) => {
                         // Handle window resize - update scroll state
                         self.handle_resize(width, height)?;
+                        // Also resize PTY if active
+                        if let Some(ref mut pty) = self.pty_terminal {
+                            let _ = pty.resize(width, height.saturating_sub(2));
+                        }
                     }
                     _ => {}
                 }
@@ -202,13 +447,14 @@ impl App {
                 // Update scroll state with actual available space for config options
                 if state.mode == AppMode::GuidedInstaller {
                     // Calculate the config area height (total height minus reserved space)
-                    let config_area_height = f.area().height.saturating_sub(16); // 16 lines reserved
+                    let config_area_height = f.area().height.saturating_sub(17); // 17 lines reserved (includes nav bar)
                     let visible_items = config_area_height.saturating_sub(2); // Account for borders
                     state
                         .config_scroll
                         .update_visible_items(visible_items as usize);
                 }
-                self.ui_renderer.render(f, &state, &mut self.input_handler);
+                self.ui_renderer
+                    .render_with_context(f, &state, &mut self.input_handler, &self.keybinding_context, self.pty_terminal.as_mut());
             })?;
         }
 
@@ -220,14 +466,51 @@ impl App {
         &mut self,
         key_event: KeyEvent,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        // Check if we're in a tool dialog
-        let is_tool_dialog = {
+        // Get current mode and help visibility
+        let (current_mode, help_visible) = {
             if let Ok(state) = self.lock_state() {
-                state.mode == AppMode::ToolDialog
+                (state.mode.clone(), state.help_visible)
             } else {
-                false
+                return Ok(false);
             }
         };
+
+        // Handle embedded terminal mode - forward all keys except Ctrl+Q
+        if current_mode == AppMode::EmbeddedTerminal {
+            // Ctrl+Q exits the embedded terminal
+            if key_event.modifiers.contains(KeyModifiers::CONTROL)
+                && key_event.code == KeyCode::Char('q')
+            {
+                self.exit_embedded_terminal()?;
+                return Ok(false);
+            }
+
+            // Forward all other keys to PTY
+            if let Some(ref mut pty) = self.pty_terminal {
+                let _ = pty.send_key(key_event);
+            }
+            return Ok(false);
+        }
+
+        // Handle help overlay - ? or Esc dismisses it
+        if help_visible {
+            match key_event.code {
+                KeyCode::Char('?') | KeyCode::Esc => {
+                    self.toggle_help();
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
+
+        // Global help toggle with '?' (except in dialogs and embedded terminal)
+        if key_event.code == KeyCode::Char('?') && !self.input_handler.is_dialog_active() {
+            self.toggle_help();
+            return Ok(false);
+        }
+
+        // Check if we're in a tool dialog
+        let is_tool_dialog = current_mode == AppMode::ToolDialog;
 
         if is_tool_dialog {
             self.handle_tool_dialog_input(key_event)?;
@@ -251,17 +534,20 @@ impl App {
                             return Ok(false);
                         }
                         "format_partition" => {
-                            // Handle disk selection for format partition tool
-                            self.execute_tool_with_device("format_partition.sh", &value, &[])?;
+                            // Show confirmation dialog before formatting
+                            let mut state = self.lock_state_mut()?;
+                            state.pre_dialog_mode = Some(AppMode::DiskTools);
+                            state.confirm_dialog =
+                                Some(format_partition_confirm(&value, "ext4"));
+                            state.mode = AppMode::ConfirmDialog;
                             return Ok(false);
                         }
                         "wipe_disk" => {
-                            // Handle disk selection for wipe disk tool
-                            self.execute_tool_with_device(
-                                "wipe_disk.sh",
-                                &value,
-                                &["--method", "zero", "--confirm"],
-                            )?;
+                            // Show confirmation dialog before wiping
+                            let mut state = self.lock_state_mut()?;
+                            state.pre_dialog_mode = Some(AppMode::DiskTools);
+                            state.confirm_dialog = Some(wipe_disk_confirm(&value));
+                            state.mode = AppMode::ConfirmDialog;
                             return Ok(false);
                         }
                         _ => {}
@@ -270,6 +556,120 @@ impl App {
 
                 // User confirmed input, update configuration
                 self.update_configuration_value(value)?;
+            }
+            return Ok(false);
+        }
+
+        // Handle floating output mode
+        if current_mode == AppMode::FloatingOutput {
+            match key_event.code {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('b') | KeyCode::Char('B') => {
+                    // Dismiss floating output and return to previous mode
+                    let mut state = self.lock_state_mut()?;
+                    if let Some(_output) = state.floating_output.take() {
+                        // Return to tools menu or previous mode
+                        state.mode = AppMode::ToolsMenu;
+                    }
+                }
+                KeyCode::Up => {
+                    let mut state = self.lock_state_mut()?;
+                    if let Some(ref mut output) = state.floating_output {
+                        if output.scroll_offset > 0 {
+                            output.scroll_offset -= 1;
+                        }
+                    }
+                }
+                KeyCode::Down => {
+                    let mut state = self.lock_state_mut()?;
+                    if let Some(ref mut output) = state.floating_output {
+                        if output.scroll_offset < output.content.len().saturating_sub(1) {
+                            output.scroll_offset += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
+
+        // Handle file browser mode
+        if current_mode == AppMode::FileBrowser {
+            let mut state = self.lock_state_mut()?;
+            if let Some(ref mut browser) = state.file_browser {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        browser.cancel();
+                    }
+                    KeyCode::Enter => {
+                        browser.handle_enter();
+                    }
+                    KeyCode::Up => {
+                        browser.move_up();
+                    }
+                    KeyCode::Down => {
+                        browser.move_down();
+                    }
+                    KeyCode::Char('~') => {
+                        browser.go_home();
+                    }
+                    KeyCode::Char('/') => {
+                        browser.go_root();
+                    }
+                    _ => {}
+                }
+
+                // Check if file browser is complete
+                if browser.complete {
+                    if let Some(selected_path) = browser.selected_file.clone() {
+                        // Load the config file
+                        drop(state); // Release the lock before loading
+                        self.load_config_file(&selected_path)?;
+                    } else {
+                        // Cancelled - return to automated install screen
+                        state.file_browser = None;
+                        state.mode = AppMode::AutomatedInstall;
+                        state.status_message = "File selection cancelled".to_string();
+                    }
+                }
+            }
+            return Ok(false);
+        }
+
+        // Handle confirm dialog mode
+        if current_mode == AppMode::ConfirmDialog {
+            let mut state = self.lock_state_mut()?;
+            if let Some(ref mut dialog) = state.confirm_dialog {
+                match key_event.code {
+                    KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
+                        // Toggle between Yes (0) and No (1)
+                        dialog.selected = if dialog.selected == 0 { 1 } else { 0 };
+                    }
+                    KeyCode::Enter => {
+                        let confirmed = dialog.selected == 0; // 0 = Yes
+                        let action = dialog.confirm_action.clone();
+                        let data = dialog.action_data.clone();
+
+                        // Clear dialog and restore previous mode
+                        state.confirm_dialog = None;
+                        if let Some(prev_mode) = state.pre_dialog_mode.take() {
+                            state.mode = prev_mode;
+                        }
+
+                        if confirmed {
+                            // Drop the lock before executing action
+                            drop(state);
+                            self.execute_confirmed_action(&action, data)?;
+                        }
+                    }
+                    KeyCode::Esc => {
+                        // Cancel - restore previous mode
+                        state.confirm_dialog = None;
+                        if let Some(prev_mode) = state.pre_dialog_mode.take() {
+                            state.mode = prev_mode;
+                        }
+                    }
+                    _ => {}
+                }
             }
             return Ok(false);
         }
@@ -467,8 +867,135 @@ impl App {
             AppMode::Complete => {
                 // Installation complete, no action needed
             }
+            AppMode::EmbeddedTerminal => {
+                // Embedded terminal handles its own input
+            }
+            AppMode::FloatingOutput => {
+                // Dismiss floating output on Enter
+                let mut state = self.lock_state_mut()?;
+                if let Some(_output) = state.floating_output.take() {
+                    state.mode = AppMode::ToolsMenu;
+                }
+            }
+            AppMode::FileBrowser => {
+                // File browser handles its own Enter key
+            }
+            AppMode::ConfirmDialog => {
+                // Handle confirmation dialog selection
+                self.handle_confirm_dialog_enter()?;
+            }
         }
 
+        Ok(())
+    }
+
+    /// Handle confirmation dialog Enter key
+    fn handle_confirm_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let (confirmed, action, action_data, pre_mode) = {
+            let state = self.lock_state()?;
+            if let Some(ref dialog) = state.confirm_dialog {
+                (
+                    dialog.is_confirmed(),
+                    dialog.confirm_action.clone(),
+                    dialog.action_data.clone(),
+                    state.pre_dialog_mode.clone(),
+                )
+            } else {
+                return Ok(());
+            }
+        };
+
+        // Clear the dialog
+        {
+            let mut state = self.lock_state_mut()?;
+            state.confirm_dialog = None;
+            // Return to previous mode
+            if let Some(mode) = pre_mode {
+                state.mode = mode;
+            }
+            state.pre_dialog_mode = None;
+        }
+
+        if confirmed {
+            // Execute the confirmed action
+            match action.as_str() {
+                "wipe_disk" => {
+                    if let Some(disk) = action_data {
+                        log::info!("Confirmed: wiping disk {}", disk);
+                        // Execute wipe disk operation
+                        self.execute_wipe_disk(&disk)?;
+                    }
+                }
+                "format_partition" => {
+                    if let Some(partition) = action_data {
+                        log::info!("Confirmed: formatting partition {}", partition);
+                        // Execute format operation
+                    }
+                }
+                "start_installation" => {
+                    log::info!("Confirmed: starting installation");
+                    // Start installation
+                }
+                _ => {
+                    log::warn!("Unknown confirm action: {}", action);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute wipe disk operation
+    fn execute_wipe_disk(&mut self, disk: &str) -> Result<(), Box<dyn std::error::Error>> {
+        // Show floating output for the operation
+        let mut state = self.lock_state_mut()?;
+        state.floating_output = Some(FloatingOutputState::new(&format!("Wiping {}", disk)));
+        state.floating_output.as_mut().unwrap().append_line(format!("Starting secure wipe of {}...", disk));
+        state.floating_output.as_mut().unwrap().append_line("This may take a while depending on disk size.".to_string());
+        state.mode = AppMode::FloatingOutput;
+        Ok(())
+    }
+
+    /// Execute action after confirmation dialog
+    fn execute_confirmed_action(
+        &mut self,
+        action: &str,
+        data: Option<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match action {
+            "wipe_disk" => {
+                if let Some(disk) = data {
+                    self.execute_wipe_disk(&disk)?;
+                }
+            }
+            "format_partition" => {
+                if let Some(partition) = data {
+                    self.execute_tool_with_device("format_partition.sh", &partition, &[])?;
+                }
+            }
+            "install_bootloader" => {
+                if let Some(params) = data {
+                    // params format: "bootloader:disk"
+                    let parts: Vec<&str> = params.split(':').collect();
+                    if parts.len() == 2 {
+                        self.execute_tool_with_device(
+                            "install_bootloader.sh",
+                            parts[1],
+                            &["--bootloader", parts[0]],
+                        )?;
+                    }
+                }
+            }
+            "start_installation" => {
+                // Start the installation process
+                self.start_installation()?;
+            }
+            _ => {
+                // Unknown action
+                let mut state = self.lock_state_mut()?;
+                state.status_message = format!("Unknown action: {}", action);
+            }
+        }
         Ok(())
     }
 
@@ -591,82 +1118,8 @@ impl App {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk (cfdisk) - Launch cfdisk and wait for completion
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("manual_partition".to_string());
-                        state.status_message =
-                            "Launching cfdisk - comprehensive disk partitioning tool..."
-                                .to_string();
-                        state.mode = AppMode::ToolExecution;
-                        state
-                            .tool_output
-                            .push("Launching cfdisk for disk partitioning...".to_string());
-                        state.tool_output.push("".to_string());
-                        state.tool_output.push("cfdisk can handle:".to_string());
-                        state
-                            .tool_output
-                            .push("• Create, delete, resize partitions".to_string());
-                        state
-                            .tool_output
-                            .push("• Set partition types and flags".to_string());
-                        state
-                            .tool_output
-                            .push("• Format partitions (basic filesystems)".to_string());
-                        state.tool_output.push("".to_string());
-                        state
-                            .tool_output
-                            .push("When you finish and exit cfdisk,".to_string());
-                        state.tool_output.push(
-                            "you will automatically return to the Disk Tools menu.".to_string(),
-                        );
-
-                        // Launch cfdisk and wait for completion
-                        let state_clone = self.state.clone();
-                        std::thread::spawn(move || {
-                            use std::process::Command;
-                            let result = Command::new("cfdisk").status();
-
-                            // When cfdisk exits, return to disk tools menu
-                            if let Ok(mut state) = state_clone.lock() {
-                                match result {
-                                    Ok(exit_status) => {
-                                        if exit_status.success() {
-                                            state.tool_output.push("".to_string());
-                                            state.tool_output.push(
-                                                "✅ cfdisk completed successfully!".to_string(),
-                                            );
-                                            state.tool_output.push(
-                                                "Returning to Disk Tools menu...".to_string(),
-                                            );
-                                        } else {
-                                            state.tool_output.push("".to_string());
-                                            state.tool_output.push(
-                                                "⚠️ cfdisk exited with an error.".to_string(),
-                                            );
-                                            state.tool_output.push(
-                                                "Returning to Disk Tools menu...".to_string(),
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        state.tool_output.push("".to_string());
-                                        state
-                                            .tool_output
-                                            .push(format!("❌ Failed to launch cfdisk: {}", e));
-                                        state
-                                            .tool_output
-                                            .push("Returning to Disk Tools menu...".to_string());
-                                    }
-                                }
-
-                                // Return to disk tools menu after a short delay
-                                std::thread::sleep(std::time::Duration::from_millis(1500));
-                                state.mode = AppMode::DiskTools;
-                                state.tools_menu_selection = 0;
-                                state.current_tool = None;
-                                state.status_message = "Disk & Filesystem Tools".to_string();
-                            }
-                        });
+                        // Partition Disk (cfdisk) - Launch in embedded terminal
+                        let _ = self.launch_embedded_tool("cfdisk", &[], "cfdisk", AppMode::DiskTools);
                     }
                     1 => {
                         // Format Partition - Use disk selection dialog
@@ -839,15 +1292,14 @@ impl App {
             self.open_input_dialog()?;
         }
 
-        // Start installation if needed
+        // Start installation if needed - show confirmation dialog first
         if should_start_installation {
             if self.validate_configuration_for_installation() {
-                {
-                    let mut state = self.lock_state_mut()?;
-                    state.status_message =
-                        "Validation passed. Starting installation...".to_string();
-                }
-                self.start_installation()?;
+                // Show confirmation dialog before starting
+                let mut state = self.lock_state_mut()?;
+                state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
+                state.confirm_dialog = Some(start_install_confirm());
+                state.mode = AppMode::ConfirmDialog;
             } else {
                 // Validation failed - status message already set in validate_configuration_for_installation
                 // User will see the error message
@@ -859,10 +1311,17 @@ impl App {
 
     /// Handle automated install enter
     fn handle_automated_install_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Implement file selection dialog for config file
+        // Launch file browser for config file selection
+        let start_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"));
+        let file_browser = crate::components::file_browser::FileBrowserState::new(
+            &start_dir,
+            vec!["toml".to_string(), "json".to_string()],
+        );
+
         let mut state = self.lock_state_mut()?;
-        state.status_message =
-            "Automated install - config file selection not yet implemented".to_string();
+        state.file_browser = Some(file_browser);
+        state.mode = AppMode::FileBrowser;
+        state.status_message = "Select a configuration file (.toml or .json)".to_string();
         Ok(())
     }
 
@@ -1017,6 +1476,38 @@ impl App {
                 state.mode = AppMode::MainMenu;
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
+            }
+            AppMode::EmbeddedTerminal => {
+                // Embedded terminal uses Ctrl+Q to exit, but we can also handle 'b'
+                // Return to previous mode - will be handled by exit_embedded_terminal
+                drop(state);
+                self.exit_embedded_terminal()?;
+                return Ok(());
+            }
+            AppMode::FloatingOutput => {
+                // Dismiss floating output and return to tools menu
+                if let Some(_output) = state.floating_output.take() {
+                    state.mode = AppMode::ToolsMenu;
+                    state.tools_menu_selection = 0;
+                    state.status_message =
+                        "Arch Linux Tools - System repair and administration".to_string();
+                }
+            }
+            AppMode::FileBrowser => {
+                // Cancel file browser and return to automated install
+                state.file_browser = None;
+                state.mode = AppMode::AutomatedInstall;
+                state.status_message = "File selection cancelled".to_string();
+            }
+            AppMode::ConfirmDialog => {
+                // Cancel confirmation dialog and return to previous mode
+                state.confirm_dialog = None;
+                if let Some(mode) = state.pre_dialog_mode.take() {
+                    state.mode = mode;
+                } else {
+                    state.mode = AppMode::ToolsMenu;
+                }
+                state.status_message = "Operation cancelled".to_string();
             }
         }
         Ok(())
@@ -2453,8 +2944,22 @@ impl App {
         }
 
         let script_path = format!("scripts/tools/{}", script_name);
+        let tool_display = script_name.replace(".sh", "").replace("_", " ");
 
-        println!("🔧 Executing: {} {}", script_path, args.join(" "));
+        // Set up floating output window
+        {
+            let mut state = self.lock_state_mut()?;
+            state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
+                title: format!("Running: {}", tool_display),
+                content: vec![format!("Executing: {} {}", script_path, args.join(" "))],
+                scroll_offset: 0,
+                auto_scroll: true,
+                complete: false,
+                progress: None,
+                status: "Running...".to_string(),
+            });
+            state.mode = AppMode::FloatingOutput;
+        }
 
         let output = Command::new("bash")
             .arg(&script_path)
@@ -2463,41 +2968,54 @@ impl App {
             .stderr(Stdio::piped())
             .output()?;
 
-        // Print stdout
+        // Collect output lines
         let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        let mut output_lines: Vec<String> = Vec::new();
+        output_lines.push(format!("Executing: {} {}", script_path, args.join(" ")));
+        output_lines.push(String::new());
+
         if !stdout.is_empty() {
-            print!("{}", stdout);
+            for line in stdout.lines() {
+                output_lines.push(line.to_string());
+            }
         }
 
-        // Print stderr
-        let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.is_empty() {
-            eprint!("{}", stderr);
+            output_lines.push(String::new());
+            output_lines.push("--- Errors ---".to_string());
+            for line in stderr.lines() {
+                output_lines.push(line.to_string());
+            }
         }
+
+        output_lines.push(String::new());
 
         if output.status.success() {
-            println!(
-                "✅ {} completed successfully",
-                script_name.replace(".sh", "").replace("_", " ")
-            );
+            output_lines.push(format!("{} completed successfully", tool_display));
             if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = format!(
-                    "{} completed",
-                    script_name.replace(".sh", "").replace("_", " ")
-                );
+                if let Some(ref mut floating) = state.floating_output {
+                    floating.content = output_lines;
+                    floating.content.push(String::new());
+                    floating.content.push("Press Esc or Enter to close".to_string());
+                    floating.complete = true;
+                }
+                state.status_message = format!("{} completed", tool_display);
                 state.current_tool = None;
             }
         } else {
-            let error_msg = format!(
-                "❌ {} failed",
-                script_name.replace(".sh", "").replace("_", " ")
-            );
-            eprintln!("{}", error_msg);
+            output_lines.push(format!("{} failed", tool_display));
             if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = error_msg.clone();
+                if let Some(ref mut floating) = state.floating_output {
+                    floating.content = output_lines;
+                    floating.content.push(String::new());
+                    floating.content.push("Press Esc or Enter to close".to_string());
+                    floating.complete = true;
+                }
+                state.status_message = format!("{} failed", tool_display);
                 state.current_tool = None;
             }
-            return Err(error_msg.into());
         }
 
         Ok(())
@@ -2551,7 +3069,7 @@ impl App {
             }
             "health" => {
                 // Device is handled through disk selection dialog
-                if params.len() >= 1 && params[0] == "detailed" {
+                if !params.is_empty() && params[0] == "detailed" {
                     args.push("--detailed".to_string());
                 }
             }
@@ -2597,7 +3115,7 @@ impl App {
                 }
             }
             "chroot" => {
-                if params.len() >= 1 {
+                if !params.is_empty() {
                     args.push("--root".to_string());
                     args.push(params[0].clone());
                     if params.len() >= 2 && params[1] == "true" {
@@ -2606,7 +3124,7 @@ impl App {
                 }
             }
             "info" => {
-                if params.len() >= 1 && params[0] == "true" {
+                if !params.is_empty() && params[0] == "true" {
                     args.push("--detailed".to_string());
                 }
                 if params.len() >= 2 && params[1] == "true" {
@@ -2614,7 +3132,7 @@ impl App {
                 }
             }
             "install_bootloader" => {
-                if params.len() >= 1 {
+                if !params.is_empty() {
                     args.push("--type".to_string());
                     args.push(params[0].clone());
                 }
@@ -2635,7 +3153,7 @@ impl App {
                 }
             }
             "add_user" => {
-                if params.len() >= 1 {
+                if !params.is_empty() {
                     args.push("--username".to_string());
                     args.push(params[0].clone());
                 }
@@ -2656,13 +3174,13 @@ impl App {
                 }
             }
             "reset_password" => {
-                if params.len() >= 1 {
+                if !params.is_empty() {
                     args.push("--username".to_string());
                     args.push(params[0].clone());
                 }
             }
             "configure_network" => {
-                if params.len() >= 1 {
+                if !params.is_empty() {
                     args.push("--interface".to_string());
                     args.push(params[0].clone());
                 }
@@ -2715,9 +3233,51 @@ impl App {
             }
         };
 
+        // Interactive tools should use embedded terminal
+        let interactive_tools = ["chroot", "manual_partition"];
+        if interactive_tools.contains(&tool_name) {
+            let script_path = format!("scripts/tools/{}", script_name);
+
+            // Determine return mode based on tool
+            let return_mode = match tool_name {
+                "chroot" => AppMode::SystemTools,
+                "manual_partition" => AppMode::DiskTools,
+                _ => AppMode::ToolsMenu,
+            };
+
+            // Clear tool dialog state before launching
+            if let Ok(mut state) = self.lock_state_mut() {
+                state.tool_dialog = None;
+                state.current_tool = None;
+            }
+
+            // Build argument list for bash: ["-c", "script_path arg1 arg2 ..."]
+            let full_cmd = if args.is_empty() {
+                script_path.clone()
+            } else {
+                format!("{} {}", script_path, args.iter().map(|a| format!("'{}'", a)).collect::<Vec<_>>().join(" "))
+            };
+            let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, return_mode);
+            return Ok(());
+        }
+
         let script_path = format!("scripts/tools/{}", script_name);
 
-        println!("🔧 Executing: {} {}", script_path, args.join(" "));
+        // Non-interactive tools use floating output window
+        {
+            let mut state = self.lock_state_mut()?;
+            state.tool_dialog = None;
+            state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
+                title: format!("Running: {}", tool_name.replace("_", " ")),
+                content: vec![format!("Executing: {} {}", script_path, args.join(" "))],
+                scroll_offset: 0,
+                auto_scroll: true,
+                complete: false,
+                progress: None,
+                status: "Running...".to_string(),
+            });
+            state.mode = AppMode::FloatingOutput;
+        }
 
         let output = Command::new("bash")
             .arg(&script_path)
@@ -2726,30 +3286,48 @@ impl App {
             .stderr(Stdio::piped())
             .output()?;
 
-        // Print stdout
+        // Collect output lines
         let stdout = String::from_utf8_lossy(&output.stdout);
-        if !stdout.is_empty() {
-            print!("{}", stdout);
-        }
-
-        // Print stderr
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if !stderr.is_empty() {
-            eprint!("{}", stderr);
+
+        let mut output_lines: Vec<String> = Vec::new();
+        output_lines.push(format!("Executing: {} {}", script_path, args.join(" ")));
+        output_lines.push(String::new());
+
+        if !stdout.is_empty() {
+            for line in stdout.lines() {
+                output_lines.push(line.to_string());
+            }
         }
 
+        if !stderr.is_empty() {
+            output_lines.push(String::new());
+            output_lines.push("--- Errors ---".to_string());
+            for line in stderr.lines() {
+                output_lines.push(line.to_string());
+            }
+        }
+
+        output_lines.push(String::new());
         if output.status.success() {
-            println!("✅ Tool executed successfully");
-            if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = format!("{} completed successfully", tool_name);
-            }
+            output_lines.push("Tool executed successfully".to_string());
         } else {
-            let error_msg = format!("❌ Tool execution failed: {}", tool_name);
-            eprintln!("{}", error_msg);
-            if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = error_msg.clone();
+            output_lines.push(format!("Tool execution failed: {}", tool_name));
+        }
+        output_lines.push(String::new());
+        output_lines.push("Press Esc or Enter to close".to_string());
+
+        // Update floating output with results
+        if let Ok(mut state) = self.lock_state_mut() {
+            if let Some(ref mut floating) = state.floating_output {
+                floating.content = output_lines;
+                floating.complete = true;
             }
-            return Err(error_msg.into());
+            if output.status.success() {
+                state.status_message = format!("{} completed successfully", tool_name);
+            } else {
+                state.status_message = format!("{} failed", tool_name);
+            }
         }
 
         Ok(())

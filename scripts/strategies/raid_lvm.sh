@@ -159,23 +159,23 @@ execute_raid_lvm_partitioning() {
         mount "${INSTALL_DISKS[0]}1" /mnt/efi
         
         # Capture UUIDs for configuration
-        capture_device_info "/dev/md/XBOOTLDR" "XBOOTLDR"
-        capture_device_info "/dev/archvg/root" "ROOT"
+        capture_device_info "boot" "/dev/md/XBOOTLDR"
+        capture_device_info "root" "/dev/archvg/root"
     else
         # BIOS: Mount boot
         mkdir -p /mnt/boot
         mount /dev/md/BOOT /mnt/boot
-        
+
         # Capture UUIDs for configuration
-        capture_device_info "/dev/md/BOOT" "BOOT"
-        capture_device_info "/dev/archvg/root" "ROOT"
+        capture_device_info "boot" "/dev/md/BOOT"
+        capture_device_info "root" "/dev/archvg/root"
     fi
-    
+
     # Mount home if created
     if [[ "$WANT_HOME_PARTITION" == "yes" ]]; then
         mkdir -p /mnt/home
         mount /dev/archvg/home /mnt/home
-        capture_device_info "/dev/archvg/home" "HOME"
+        capture_device_info "home" "/dev/archvg/home"
     fi
     
     # Save RAID configuration

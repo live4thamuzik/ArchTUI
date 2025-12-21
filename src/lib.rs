@@ -4,6 +4,7 @@
 
 pub mod app;
 pub mod cli;
+pub mod components;
 pub mod config;
 pub mod config_file;
 pub mod error;

@@ -1,7 +1,7 @@
 # Makefile for archinstall-tui development and testing
 # NOTE: This Makefile is for DEVELOPMENT ONLY, not for use in Arch ISO
 
-.PHONY: help build test clean install dev-setup format lint deps dev quick ci iso-ready
+.PHONY: help build test test-rust test-bash clean install dev-setup format lint deps dev quick ci iso-ready
 
 # Default target
 help:
@@ -11,7 +11,9 @@ help:
 	@echo "Available targets:"
 	@echo "  build        - Build the release binary"
 	@echo "  build-debug  - Build the debug binary"
-	@echo "  test         - Run tests"
+	@echo "  test         - Run all tests (Rust + Bash)"
+	@echo "  test-rust    - Run Rust tests only"
+	@echo "  test-bash    - Run Bash script tests only"
 	@echo "  clean        - Clean build artifacts"
 	@echo "  install      - Install the binary to /usr/local/bin"
 	@echo "  iso-ready    - Check if installer is ready for ISO"
@@ -30,8 +32,18 @@ build-debug:
 	cp target/debug/archinstall-tui ./
 
 # Testing
-test:
+test: test-rust test-bash
+
+test-rust:
 	cargo test
+
+test-bash:
+	@if command -v bats >/dev/null 2>&1; then \
+		./scripts/tests/run_tests.sh; \
+	else \
+		echo "⚠️  bats not installed, skipping bash tests"; \
+		echo "   Install with: sudo pacman -S bash-bats"; \
+	fi
 
 # Cleanup
 clean:

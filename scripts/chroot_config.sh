@@ -1,772 +1,1068 @@
 #!/bin/bash
-# chroot_config_new.sh - Complete chroot configuration for Arch Linux installer
+# chroot_config.sh - Complete chroot configuration for Arch Linux installer
 # This script configures the newly installed Arch Linux system inside chroot
 
 set -euo pipefail
 
-# Source logging functions
-SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/utils.sh"
+# Get script directory (we're running from /root inside chroot)
+SCRIPT_DIR="/root"
 
-# Logging functions
-_log_message() {
+# Source utility functions if available
+if [[ -f "$SCRIPT_DIR/utils.sh" ]]; then
+    source "$SCRIPT_DIR/utils.sh"
+fi
+
+# Logging functions (in case utils.sh wasn't sourced)
+_log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     echo "[$timestamp] [$level] $message"
 }
 
-_log_info() { _log_message "INFO" "$1"; }
-_log_warn() { _log_message "WARN" "$1"; }
-_log_error() { _log_message "ERROR" "$1" "$?"; exit 1; }
-_log_debug() { _log_message "DEBUG" "$1"; }
-_log_success() { echo -e "\n\e[32;1m==================================================\e[0m\n\e[32;1m $* \e[0m\n\e[32;1m==================================================\e[0m\n"; }
+log_info() { _log "INFO" "$1"; }
+log_warn() { _log "WARN" "$1"; }
+log_error() { _log "ERROR" "$1"; }
+log_success() { _log "SUCCESS" "$1"; }
 
 # =============================================================================
-# PACKAGE DEFINITIONS FOR MAINTAINABILITY
+# MAIN CONFIGURATION FUNCTION
 # =============================================================================
 
-# Essential system packages
-ESSENTIAL_PACKAGES=(
-    "base"
-    "base-devel"
-    "linux"
-    "linux-firmware"
-    "networkmanager"
-    "openssh"
-    "vim"
-    "nano"
-    "git"
-    "curl"
-    "wget"
-    "htop"
-    "tree"
-    "unzip"
-    "zip"
-    "man-db"
-    "man-pages"
-)
+main() {
+    log_success "Starting chroot configuration..."
 
-# Desktop Environment Package Lists
-KDE_PACKAGES=("plasma" "kde-applications")
-GNOME_PACKAGES=("gnome" "gnome-extra")
-XFCE_PACKAGES=("xfce4" "xfce4-goodies")
-I3_PACKAGES=("i3-wm" "i3status" "i3lock")
-HYPRLAND_PACKAGES=("hyprland" "waybar" "swaylock" "swayidle" "wlogout" "wlroots")
-
-# Bootloader packages
-GRUB_EFI_PACKAGES=("grub" "efibootmgr")
-GRUB_BIOS_PACKAGES=("grub")
-
-# Display manager packages
-GDM_PACKAGES=("gdm")
-SDDM_PACKAGES=("sddm")
-LIGHTDM_PACKAGES=("lightdm" "lightdm-gtk-greeter")
-LXDM_PACKAGES=("lxdm")
-
-# GPU driver packages
-NVIDIA_PACKAGES=("nvidia" "nvidia-utils" "nvidia-settings")
-NVIDIA_LTS_PACKAGES=("nvidia-lts" "nvidia-utils" "nvidia-settings")
-AMD_PACKAGES=("mesa" "lib32-mesa" "xf86-video-amdgpu")
-INTEL_PACKAGES=("mesa" "lib32-mesa" "xf86-video-intel")
-NOUVEAU_PACKAGES=("mesa" "lib32-mesa" "xf86-video-nouveau")
-
-# Time synchronization packages
-NTP_PACKAGES=("ntp")
-CHRONY_PACKAGES=("chrony")
-
-# Plymouth packages
-PLYMOUTH_PACKAGES=("plymouth")
-
-# Flatpak packages
-FLATPAK_PACKAGES=("flatpak")
-
-# Numlock packages
-NUMLOCK_PACKAGES=("numlockx")
-
-# AUR Helper Package Lists
-PARU_PACKAGES=("paru")
-YAY_PACKAGES=("yay")
-
-# =============================================================================
-# MISSING FUNCTION IMPLEMENTATIONS
-# =============================================================================
-
-# Configure Pacman (mirrors, multilib, etc.)
-configure_pacman_chroot() {
-    _log_info "Configuring Pacman..."
-    
-    # Configure mirrors if mirror country was selected
-    if [[ -n "${MIRROR_COUNTRY:-}" && "$MIRROR_COUNTRY" != "None" ]]; then
-        _log_info "Configuring mirrors for country: ${MIRROR_COUNTRY}"
-        # This would typically run reflector or configure mirrorlist
-        # For now, we'll use the default mirrorlist
+    # Validate required variables
+    if [[ -z "${MAIN_USERNAME:-}" ]]; then
+        log_error "MAIN_USERNAME is not set"
+        exit 1
     fi
-    
-    # Enable multilib repository if requested
-    if [[ "${MULTILIB:-}" == "Yes" ]]; then
-        _log_info "Enabling multilib repository..."
-        sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf
-        pacman -Sy
+
+    if [[ -z "${ROOT_PASSWORD:-}" ]]; then
+        log_error "ROOT_PASSWORD is not set"
+        exit 1
     fi
-    
-    # Update package database
-    pacman -Sy
-    _log_success "Pacman configuration completed"
+
+    # --- Phase 1: Basic System Configuration ---
+    log_info "=== Phase 1: Basic System Configuration ==="
+
+    configure_localization
+    configure_hostname
+    create_user_account
+    configure_sudoers
+    enable_base_services
+
+    # --- Phase 2: Bootloader & Initramfs ---
+    log_info "=== Phase 2: Bootloader & Initramfs ==="
+
+    configure_mkinitcpio
+    install_bootloader
+    configure_grub_settings
+    configure_secure_boot
+
+    # --- Phase 3: Desktop Environment ---
+    log_info "=== Phase 3: Desktop Environment ==="
+
+    install_desktop_environment
+    install_display_manager
+    install_gpu_drivers
+
+    # --- Phase 4: Additional Software ---
+    log_info "=== Phase 4: Additional Software ==="
+
+    install_aur_helper
+    install_flatpak
+    install_additional_packages
+    configure_plymouth
+    configure_snapper
+
+    # --- Phase 5: Final Configuration ---
+    log_info "=== Phase 5: Final Configuration ==="
+
+    configure_numlock
+    deploy_dotfiles
+    final_cleanup
+
+    log_success "Chroot configuration complete!"
 }
 
-# Install CPU microcode
-install_microcode_chroot() {
-    _log_info "Installing CPU microcode..."
-    
-    # Detect CPU and install appropriate microcode
-    if lscpu | grep -q "Vendor ID.*GenuineIntel"; then
-        _log_info "Intel CPU detected, installing intel-ucode..."
-        pacman -S --noconfirm intel-ucode
-    elif lscpu | grep -q "Vendor ID.*AuthenticAMD"; then
-        _log_info "AMD CPU detected, installing amd-ucode..."
-        pacman -S --noconfirm amd-ucode
-    else
-        _log_warn "Unknown CPU vendor, skipping microcode installation"
-    fi
-}
+# =============================================================================
+# PHASE 1: BASIC SYSTEM CONFIGURATION
+# =============================================================================
 
-# Install essential extra packages
-install_essential_extras_chroot() {
-    _log_info "Installing essential extra packages..."
-    
-    # Use the predefined package array for maintainability
-    pacman -S --noconfirm "${ESSENTIAL_PACKAGES[@]}"
-    _log_success "Essential extra packages installed"
-}
+configure_localization() {
+    log_info "Configuring localization..."
 
-# Set default editor
-configure_default_editor_chroot() {
-    _log_info "Setting Neovim as default editor..."
-    echo "export EDITOR=nvim" >> /etc/environment
-    echo "export VISUAL=nvim" >> /etc/environment
-}
-
-# Enable systemd services
-enable_systemd_service_chroot() {
-    local service="$1"
-    _log_info "Enabling systemd service: $service"
-    systemctl enable "$service"
-}
-
-# Install time synchronization packages
-install_time_sync_chroot() {
-    _log_info "Installing time synchronization package: ${TIME_SYNC}"
-    
-    case "$TIME_SYNC" in
-        "ntpd")
-            pacman -S --noconfirm "${NTP_PACKAGES[@]}"
-            ;;
-        "chrony")
-            pacman -S --noconfirm "${CHRONY_PACKAGES[@]}"
-            ;;
-        "systemd-timesyncd")
-            # Already included in systemd
-            ;;
-        *)
-            _log_warn "Unknown time sync choice: ${TIME_SYNC}"
-            ;;
-    esac
-}
-
-# Configure localization
-configure_localization_chroot() {
-    _log_info "Configuring localization..."
-    
     # Set locale
     if [[ -n "${LOCALE:-}" ]]; then
-        _log_info "Setting locale to: ${LOCALE}"
+        log_info "Setting locale to: ${LOCALE}"
         echo "${LOCALE} UTF-8" >> /etc/locale.gen
         locale-gen
         echo "LANG=${LOCALE}" > /etc/locale.conf
     fi
-    
+
     # Set timezone
-    if [[ -n "${TIMEZONE:-}" ]]; then
-        _log_info "Setting timezone to: ${TIMEZONE}"
-        ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
+    if [[ -n "${TIMEZONE_REGION:-}" && -n "${TIMEZONE:-}" ]]; then
+        local tz_path="/usr/share/zoneinfo/${TIMEZONE_REGION}/${TIMEZONE}"
+        if [[ -f "$tz_path" ]]; then
+            log_info "Setting timezone to: ${TIMEZONE_REGION}/${TIMEZONE}"
+            ln -sf "$tz_path" /etc/localtime
+        else
+            # Try without region
+            tz_path="/usr/share/zoneinfo/${TIMEZONE}"
+            if [[ -f "$tz_path" ]]; then
+                ln -sf "$tz_path" /etc/localtime
+            else
+                log_warn "Timezone not found: ${TIMEZONE_REGION}/${TIMEZONE}"
+            fi
+        fi
     fi
-    
-    # Set keymap
-    if [[ -n "${KEYMAP:-}" ]]; then
-        _log_info "Setting keymap to: ${KEYMAP}"
-        echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
-    fi
-    
+
     # Set hardware clock
     hwclock --systohc
-}
 
-# Create user account
-create_user() {
-    local username="$1"
-    _log_info "Creating user account: $username"
-    
-    useradd -m -G wheel,users "$username"
-    return $?
-}
-
-# Set passwords
-set_passwords() {
-    local username="$1"
-    local user_password="$2"
-    local root_password="$3"
-    
-    _log_info "Setting passwords..."
-    
-    # Set root password
-    if [[ -n "$root_password" ]]; then
-        echo "root:$root_password" | chpasswd
+    # Set keymap
+    if [[ -n "${KEYMAP:-}" ]]; then
+        log_info "Setting keymap to: ${KEYMAP}"
+        echo "KEYMAP=${KEYMAP}" > /etc/vconsole.conf
     fi
-    
-    # Set user password
-    if [[ -n "$user_password" ]]; then
-        echo "$username:$user_password" | chpasswd
-    fi
-    
-    return 0
+
+    log_success "Localization configured"
 }
 
-# Configure hostname
-configure_hostname_chroot() {
-    _log_info "Configuring hostname: ${SYSTEM_HOSTNAME}"
-    echo "${SYSTEM_HOSTNAME}" > /etc/hostname
-    
+configure_hostname() {
+    log_info "Configuring hostname: ${SYSTEM_HOSTNAME:-archlinux}"
+
+    local hostname="${SYSTEM_HOSTNAME:-archlinux}"
+    echo "$hostname" > /etc/hostname
+
     # Configure hosts file
     cat > /etc/hosts << EOF
-127.0.0.1	localhost
-::1		localhost
-127.0.1.1	${SYSTEM_HOSTNAME}.localdomain	${SYSTEM_HOSTNAME}
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   ${hostname}.localdomain ${hostname}
 EOF
+
+    log_success "Hostname configured"
 }
 
-# Update sudoers
-update_sudoers() {
-    _log_info "Configuring sudoers..."
-    
-    # Enable wheel group for sudo
-    sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-    return 0
+create_user_account() {
+    log_info "Creating user account: $MAIN_USERNAME"
+
+    # Create user with home directory and add to wheel group
+    if ! id "$MAIN_USERNAME" &>/dev/null; then
+        useradd -m -G wheel,users,audio,video,storage,optical -s /bin/bash "$MAIN_USERNAME"
+        log_info "User $MAIN_USERNAME created"
+    else
+        log_info "User $MAIN_USERNAME already exists"
+    fi
+
+    # Set user password
+    if [[ -n "${MAIN_USER_PASSWORD:-}" ]]; then
+        echo "$MAIN_USERNAME:$MAIN_USER_PASSWORD" | chpasswd
+        log_info "User password set"
+    fi
+
+    # Set root password
+    if [[ -n "${ROOT_PASSWORD:-}" ]]; then
+        echo "root:$ROOT_PASSWORD" | chpasswd
+        log_info "Root password set"
+    fi
+
+    log_success "User account configured"
 }
 
-# Install bootloader
-install_bootloader_chroot() {
-    _log_info "Installing bootloader: ${BOOTLOADER:-grub}"
-    
+configure_sudoers() {
+    log_info "Configuring sudoers..."
+
+    # Enable wheel group for sudo (without password for installation, can be changed later)
+    if [[ -f /etc/sudoers ]]; then
+        # Use sed to uncomment the wheel line
+        sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+        # Verify the change was made
+        if grep -q "^%wheel ALL=(ALL:ALL) ALL" /etc/sudoers; then
+            log_success "Sudoers configured - wheel group enabled"
+        else
+            # Fallback: add the line directly
+            echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
+            log_info "Sudoers configured via append"
+        fi
+    fi
+}
+
+enable_base_services() {
+    log_info "Enabling base services..."
+
+    # NetworkManager
+    systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+
+    # SSH (optional, but useful)
+    systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
+
+    # Time synchronization
+    case "${TIME_SYNC:-systemd-timesyncd}" in
+        "systemd-timesyncd"|"Yes")
+            systemctl enable systemd-timesyncd.service 2>/dev/null || true
+            ;;
+        "ntpd")
+            systemctl enable ntpd.service 2>/dev/null || true
+            ;;
+        "chrony")
+            systemctl enable chronyd.service 2>/dev/null || true
+            ;;
+    esac
+
+    # SSD trim timer (good for SSDs)
+    systemctl enable fstrim.timer 2>/dev/null || true
+
+    log_success "Base services enabled"
+}
+
+# =============================================================================
+# PHASE 2: BOOTLOADER & INITRAMFS
+# =============================================================================
+
+configure_mkinitcpio() {
+    log_info "Configuring mkinitcpio..."
+
+    # Build hooks list based on configuration
+    # Hook order matters! The order is:
+    # base udev autodetect modconf kms keyboard keymap consolefont block [mdadm_udev] [encrypt] [lvm2] [resume] filesystems [fsck]
+    local hooks="base udev autodetect modconf kms keyboard keymap consolefont block"
+
+    # Add RAID hook if using RAID (must come before encrypt/lvm2)
+    if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
+        hooks="$hooks mdadm_udev"
+        log_info "Added mdadm_udev hook for RAID"
+
+        # Save mdadm configuration
+        if command -v mdadm &>/dev/null; then
+            mdadm --detail --scan >> /etc/mdadm.conf 2>/dev/null || true
+        fi
+    fi
+
+    # Add encryption hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
+    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        hooks="$hooks encrypt"
+        log_info "Added encrypt hook for LUKS"
+    fi
+
+    # Add LVM hook if using LVM (must come after encrypt for LUKS-on-LVM)
+    if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
+        hooks="$hooks lvm2"
+        log_info "Added lvm2 hook"
+    fi
+
+    # Add Plymouth hook if enabled (must come after encrypt for plymouth-encrypt)
+    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        # Use plymouth-encrypt if encryption is enabled, otherwise just plymouth
+        if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+            # Replace encrypt with plymouth-encrypt for integrated password prompt
+            hooks="${hooks/encrypt/plymouth-encrypt}"
+            log_info "Using plymouth-encrypt hook for encrypted Plymouth"
+        else
+            hooks="$hooks plymouth"
+            log_info "Added plymouth hook"
+        fi
+    fi
+
+    # Add resume hook for hibernation (if swap exists)
+    if [[ "${WANT_SWAP:-no}" == "yes" ]]; then
+        hooks="$hooks resume"
+        log_info "Added resume hook for hibernation support"
+    fi
+
+    # Final hooks - filesystems is always needed
+    hooks="$hooks filesystems"
+
+    # Add fsck hook only for non-Btrfs filesystems (Btrfs uses its own tools)
+    if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" != "btrfs" ]]; then
+        hooks="$hooks fsck"
+        log_info "Added fsck hook"
+    else
+        log_info "Skipping fsck hook (Btrfs uses its own check tools)"
+    fi
+
+    # Update mkinitcpio.conf
+    if [[ -f /etc/mkinitcpio.conf ]]; then
+        sed -i "s/^HOOKS=.*/HOOKS=($hooks)/" /etc/mkinitcpio.conf
+        log_info "Updated HOOKS in mkinitcpio.conf: $hooks"
+
+        # Add btrfs module if using Btrfs
+        if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" == "btrfs" ]]; then
+            if ! grep -q "btrfs" /etc/mkinitcpio.conf; then
+                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 btrfs)/' /etc/mkinitcpio.conf
+                # Clean up double spaces
+                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf
+                log_info "Added btrfs module to mkinitcpio.conf"
+            fi
+        fi
+
+        # Regenerate initramfs
+        mkinitcpio -P
+        log_success "Initramfs regenerated"
+    else
+        log_error "mkinitcpio.conf not found"
+    fi
+}
+
+install_bootloader() {
+    log_info "Installing bootloader: ${BOOTLOADER:-grub}"
+
     case "${BOOTLOADER:-grub}" in
         "grub")
-            if [[ "$BOOT_MODE" == "UEFI" ]]; then
-                _log_info "Installing GRUB for UEFI..."
-                pacman -S --noconfirm "${GRUB_EFI_PACKAGES[@]}"
-                grub-install --target=x86_64-efi --bootloader-id=grub_uefi --efi-directory=/efi --recheck
-            else
-                _log_info "Installing GRUB for BIOS..."
-                pacman -S --noconfirm "${GRUB_BIOS_PACKAGES[@]}"
-                grub-install --target=i386-pc "${INSTALL_DISK}" --recheck
-            fi
+            install_grub
             ;;
         "systemd-boot")
-            if [[ "$BOOT_MODE" == "UEFI" ]]; then
-                _log_info "Installing systemd-boot for UEFI..."
-                bootctl install
-            else
-                _log_error "systemd-boot requires UEFI firmware"
-            fi
+            install_systemd_boot
             ;;
         *)
-            _log_error "Unknown bootloader: ${BOOTLOADER}"
+            log_warn "Unknown bootloader: ${BOOTLOADER}, defaulting to GRUB"
+            install_grub
             ;;
     esac
 }
 
-# Configure GRUB theme
-configure_grub_theme_chroot() {
-    _log_info "Configuring GRUB theme: $GRUB_THEME"
-    
-    if [[ "$GRUB_THEME" != "None" && "$GRUB_THEME" != "No" ]]; then
-        _log_info "GRUB theme configuration is handled by install.sh before chroot"
-        # Themes are installed by install.sh via external sources
-        # We just need to ensure GRUB config is updated
-        _log_info "Updating GRUB configuration..."
-    fi
-}
+install_grub() {
+    log_info "Installing GRUB..."
 
-# Configure Plymouth
-configure_plymouth_chroot() {
-    _log_info "Configuring Plymouth boot splash..."
-    
-    if [[ "$PLYMOUTH" == "Yes" ]]; then
-        pacman -S --noconfirm "${PLYMOUTH_PACKAGES[@]}"
-        
-        # Install theme (themes should already be copied by install.sh)
-        if [[ -n "${PLYMOUTH_THEME:-}" && "$PLYMOUTH_THEME" != "None" ]]; then
-            case "$PLYMOUTH_THEME" in
-                "arch-glow")
-                    if [ -d "/usr/share/plymouth/themes/arch-glow" ]; then
-                        plymouth-set-default-theme arch-glow
-                    else
-                        _log_warn "Plymouth theme arch-glow not found in /usr/share/plymouth/themes/"
-                    fi
-                    ;;
-                "arch-mac-style")
-                    if [ -d "/usr/share/plymouth/themes/arch-mac-style" ]; then
-                        plymouth-set-default-theme arch-mac-style
-                    else
-                        _log_warn "Plymouth theme arch-mac-style not found in /usr/share/plymouth/themes/"
-                    fi
-                    ;;
-            esac
+    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
+        # UEFI installation
+        # Determine EFI directory (check both /efi and /boot/efi)
+        local efi_dir="/efi"
+        if [[ ! -d "$efi_dir" ]]; then
+            efi_dir="/boot/efi"
         fi
-    fi
-}
-
-# Configure mkinitcpio hooks
-configure_mkinitcpio_hooks_chroot() {
-    _log_info "Configuring mkinitcpio hooks..."
-    
-    # Base hooks for all configurations
-    local hooks="base udev autodetect modconf kms keyboard keymap consolefont block"
-    
-    # Add systemd hooks for systemd-boot
-    if [[ "${BOOTLOADER:-grub}" == "systemd-boot" ]]; then
-        hooks="$hooks systemd"
-    fi
-    
-    # Add encryption hooks if needed
-    if [[ "${ENCRYPTION:-}" == "Yes" ]]; then
-        hooks="$hooks encrypt"
-    fi
-    
-    # Add LVM hooks if needed
-    if [[ "$PARTITIONING_STRATEGY" == *"lvm"* ]]; then
-        hooks="$hooks lvm2"
-    fi
-    
-    # Add RAID hooks if needed
-    if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
-        hooks="$hooks mdadm_udev"
-    fi
-    
-    # Add Plymouth hooks if enabled
-    if [[ "$PLYMOUTH" == "Yes" ]]; then
-        hooks="$hooks plymouth"
-    fi
-    
-    # Add resume hooks for hibernation (if swap is present)
-    if [[ "${SWAP:-Yes}" == "Yes" ]]; then
-        hooks="$hooks resume"
-    fi
-    
-    # Final hooks
-    if [[ "${BOOTLOADER:-grub}" == "systemd-boot" ]]; then
-        hooks="$hooks filesystems"
-    else
-        hooks="$hooks filesystems fsck"
-    fi
-    
-    # Update mkinitcpio.conf
-    sed -i "s/^HOOKS=.*/HOOKS=($hooks)/" /etc/mkinitcpio.conf
-    
-    # Regenerate initramfs
-    mkinitcpio -P
-}
-
-# Configure GRUB command line
-configure_grub_cmdline_chroot() {
-    _log_info "Configuring GRUB kernel command line..."
-    
-    local cmdline="quiet"
-    
-    # Add encryption parameters if needed
-    if [[ "${ENCRYPTION:-}" == "Yes" ]]; then
-        cmdline="$cmdline cryptdevice=UUID=$ROOT_UUID:luks"
-    fi
-    
-    # Add LVM parameters if needed
-    if [[ "$PARTITIONING_STRATEGY" == *"lvm"* ]]; then
-        cmdline="$cmdline root=/dev/mapper/vg0-root"
-    fi
-    
-    # Update GRUB_CMDLINE_LINUX_DEFAULT
-    sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"/" /etc/default/grub
-    
-    # Generate GRUB config
-    grub-mkconfig -o /boot/grub/grub.cfg
-}
-
-# Configure Secure Boot
-configure_secure_boot_chroot() {
-    _log_info "Configuring Secure Boot..."
-    
-    if [[ "${SECURE_BOOT:-}" == "Yes" ]]; then
-        _log_info "Secure Boot requested - user must configure keys manually"
-        # This is a complex process that requires manual key management
-        # For now, we'll just log that it was requested
-    else
-        _log_info "Secure Boot not requested"
-    fi
-}
-
-# Install packages
-install_packages_chroot() {
-    local packages=("$@")
-    _log_info "Installing packages: ${packages[*]}"
-    pacman -S --noconfirm "${packages[@]}"
-}
-
-# Install display manager
-install_display_manager_chroot() {
-    _log_info "Installing display manager: $DISPLAY_MANAGER"
-    
-    case "$DISPLAY_MANAGER" in
-        "gdm")
-            pacman -S --noconfirm "${GDM_PACKAGES[@]}"
-            ;;
-        "sddm")
-            pacman -S --noconfirm "${SDDM_PACKAGES[@]}"
-            ;;
-        "lightdm")
-            pacman -S --noconfirm "${LIGHTDM_PACKAGES[@]}"
-            ;;
-        "lxdm")
-            pacman -S --noconfirm "${LXDM_PACKAGES[@]}"
-            ;;
-        "none")
-            _log_info "No display manager requested"
-            return 0
-            ;;
-    esac
-}
-
-# Install GPU drivers
-install_gpu_drivers_chroot() {
-    _log_info "Installing GPU drivers: $GPU_DRIVERS"
-    
-    case "$GPU_DRIVERS" in
-        "nvidia")
-            pacman -S --noconfirm "${NVIDIA_PACKAGES[@]}"
-            ;;
-        "nvidia-lts")
-            pacman -S --noconfirm "${NVIDIA_LTS_PACKAGES[@]}"
-            ;;
-        "amd")
-            pacman -S --noconfirm "${AMD_PACKAGES[@]}"
-            ;;
-        "intel")
-            pacman -S --noconfirm "${INTEL_PACKAGES[@]}"
-            ;;
-        "nouveau")
-            pacman -S --noconfirm "${NOUVEAU_PACKAGES[@]}"
-            ;;
-    esac
-}
-
-# Install AUR helper
-install_aur_helper_chroot() {
-    _log_info "Installing AUR helper: $AUR_HELPER"
-    
-    if [[ "$AUR_HELPER" != "None" ]]; then
-        case "$AUR_HELPER" in
-            "paru")
-                # Install paru
-                cd /tmp
-                git clone https://aur.archlinux.org/paru.git
-                cd paru
-                chown -R nobody:nobody .
-                sudo -u nobody makepkg -si --noconfirm
-                ;;
-            "yay")
-                # Install yay
-                cd /tmp
-                git clone https://aur.archlinux.org/yay.git
-                cd yay
-                chown -R nobody:nobody .
-                sudo -u nobody makepkg -si --noconfirm
-                ;;
-        esac
-    fi
-}
-
-# Install Flatpak
-install_flatpak_chroot() {
-    if [[ "$FLATPAK" == "Yes" ]]; then
-        _log_info "Installing Flatpak..."
-        pacman -S --noconfirm "${FLATPAK_PACKAGES[@]}"
-    fi
-}
-
-# Install custom packages
-install_custom_packages_chroot() {
-    if [[ -n "${ADDITIONAL_PACKAGES:-}" ]]; then
-        _log_info "Installing custom packages: $ADDITIONAL_PACKAGES"
-        # Convert space-separated string to array for safe execution
-        IFS=' ' read -ra PACKAGES <<< "$ADDITIONAL_PACKAGES"
-        pacman -S --noconfirm "${PACKAGES[@]}"
-    fi
-}
-
-# Install custom AUR packages
-install_custom_aur_packages_chroot() {
-    if [[ -n "${ADDITIONAL_AUR_PACKAGES:-}" && "$AUR_HELPER" != "None" ]]; then
-        _log_info "Installing custom AUR packages: $ADDITIONAL_AUR_PACKAGES"
-        # Convert space-separated string to array for safe execution
-        IFS=' ' read -ra AUR_PACKAGES <<< "$ADDITIONAL_AUR_PACKAGES"
-        case "$AUR_HELPER" in
-            "paru")
-                sudo -u "$MAIN_USERNAME" paru -S --noconfirm "${AUR_PACKAGES[@]}"
-                ;;
-            "yay")
-                sudo -u "$MAIN_USERNAME" yay -S --noconfirm "${AUR_PACKAGES[@]}"
-                ;;
-        esac
-    fi
-}
-
-# Configure numlock on boot
-configure_numlock_chroot() {
-    if [[ "$NUMLOCK_ON_BOOT" == "Yes" ]]; then
-        _log_info "Configuring numlock on boot..."
-        pacman -S --noconfirm "${NUMLOCK_PACKAGES[@]}"
-        echo "numlockx on" >> /etc/xdg/openbox/autostart
-    fi
-}
-
-# Save mdadm configuration
-save_mdadm_conf_chroot() {
-    if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
-        _log_info "Saving mdadm configuration..."
-        mdadm --detail --scan >> /etc/mdadm.conf
-    fi
-}
-
-# Deploy dotfiles
-deploy_dotfiles_chroot() {
-    if [[ "$GIT_REPOSITORY" == "Yes" && -n "${GIT_REPOSITORY_URL:-}" ]]; then
-        _log_info "Deploying dotfiles from: $GIT_REPOSITORY_URL"
-        sudo -u "$MAIN_USERNAME" git clone "$GIT_REPOSITORY_URL" "/home/$MAIN_USERNAME/dotfiles"
-        sudo -u "$MAIN_USERNAME" bash -c "cd /home/$MAIN_USERNAME/dotfiles && ./install.sh" || _log_warn "Dotfiles deployment failed"
-    fi
-}
-
-# =============================================================================
-# MAIN CHROOT CONFIGURATION
-# =============================================================================
-
-main() {
-    _log_success "Starting chroot configuration..."
-    
-    # Get variables from PASSED_ prefixed exports (as set by install.sh)
-    [ -n "${PASSED_MAIN_USERNAME:-}" ] && MAIN_USERNAME="$PASSED_MAIN_USERNAME"
-    [ -n "${PASSED_MAIN_USER_PASSWORD:-}" ] && MAIN_USER_PASSWORD="$PASSED_MAIN_USER_PASSWORD"
-    [ -n "${PASSED_ROOT_PASSWORD:-}" ] && ROOT_PASSWORD="$PASSED_ROOT_PASSWORD"
-    [ -n "${PASSED_SYSTEM_HOSTNAME:-}" ] && SYSTEM_HOSTNAME="$PASSED_SYSTEM_HOSTNAME"
-    [ -n "${PASSED_TIMEZONE:-}" ] && TIMEZONE="$PASSED_TIMEZONE"
-    [ -n "${PASSED_LOCALE:-}" ] && LOCALE="$PASSED_LOCALE"
-    [ -n "${PASSED_KEYMAP:-}" ] && KEYMAP="$PASSED_KEYMAP"
-    [ -n "${PASSED_DESKTOP_ENVIRONMENT:-}" ] && DESKTOP_ENVIRONMENT="$PASSED_DESKTOP_ENVIRONMENT"
-    [ -n "${PASSED_DISPLAY_MANAGER:-}" ] && DISPLAY_MANAGER="$PASSED_DISPLAY_MANAGER"
-    [ -n "${PASSED_AUR_HELPER:-}" ] && AUR_HELPER="$PASSED_AUR_HELPER"
-    [ -n "${PASSED_ADDITIONAL_AUR_PACKAGES:-}" ] && ADDITIONAL_AUR_PACKAGES="$PASSED_ADDITIONAL_AUR_PACKAGES"
-    [ -n "${PASSED_FLATPAK:-}" ] && FLATPAK="$PASSED_FLATPAK"
-    [ -n "${PASSED_PLYMOUTH:-}" ] && PLYMOUTH="$PASSED_PLYMOUTH"
-    [ -n "${PASSED_PLYMOUTH_THEME:-}" ] && PLYMOUTH_THEME="$PASSED_PLYMOUTH_THEME"
-    [ -n "${PASSED_NUMLOCK_ON_BOOT:-}" ] && NUMLOCK_ON_BOOT="$PASSED_NUMLOCK_ON_BOOT"
-    [ -n "${PASSED_GIT_REPOSITORY:-}" ] && GIT_REPOSITORY="$PASSED_GIT_REPOSITORY"
-    
-    # Validate required variables
-    if [[ -z "${MAIN_USERNAME:-}" ]]; then
-        _log_error "MAIN_USERNAME is not set"
-    fi
-    
-    if [[ -z "${ROOT_PASSWORD:-}" ]]; then
-        _log_error "ROOT_PASSWORD is not set"
-    fi
-    
-    # --- Phase 1: Basic System Configuration ---
-    configure_pacman_chroot || _log_error "Pacman configuration failed."
-    
-    # Microcode before other additions
-    install_microcode_chroot || _log_error "CPU Microcode installation failed."
-    
-    # Essential extras beyond pacstrap base: editors, docs, fs utils, storage stacks
-    install_essential_extras_chroot || _log_error "Essential extra packages installation failed."
-    
-    # Set Neovim as default editor
-    _log_info "Setting Neovim as default editor..."
-    configure_default_editor_chroot || _log_error "Failed to set Neovim as default editor."
-    
-    # Enable core services early
-    enable_systemd_service_chroot "NetworkManager" || _log_error "Failed to enable NetworkManager service."
-    
-    # Ensure the chosen time sync package is present before enabling its service
-    install_time_sync_chroot || _log_warn "Time sync package installation step returned non-zero; continuing."
-    case "${TIME_SYNC:-systemd-timesyncd}" in
-        "ntpd") enable_systemd_service_chroot "ntpd" || _log_error "Failed to enable ntpd service." ;;
-        "chrony") enable_systemd_service_chroot "chronyd" || _log_error "Failed to enable chronyd service." ;;
-        "systemd-timesyncd") enable_systemd_service_chroot "systemd-timesyncd" || _log_error "Failed to enable systemd-timesyncd service." ;;
-    esac
-    
-    # Locale > Timezone as requested (initramfs moved later to avoid multiple rebuilds)
-    configure_localization_chroot || _log_error "Localization configuration failed."
-    
-    # User and password, then hostname, then sudoers
-    USERNAME="$MAIN_USERNAME"
-    USER_PASSWORD="$MAIN_USER_PASSWORD"
-    
-    if create_user "$USERNAME"; then
-        _log_success "User account creation completed successfully"
-    else
-        _log_error "User account creation failed"
-        exit 1
-    fi
-    
-    if ! set_passwords "$USERNAME" "$USER_PASSWORD" "$ROOT_PASSWORD"; then
-        _log_error "Setting passwords failed"
-        exit 1
-    fi
-    
-    configure_hostname_chroot || _log_error "Hostname configuration failed."
-    
-    if update_sudoers; then
-        _log_success "sudoers configuration completed successfully"
-    else
-        _log_error "sudoers configuration failed"
-        exit 1
-    fi
-    
-    # --- Phase 2: Bootloader & Initramfs ---
-    _log_info "Configuring bootloader, GRUB defaults, theme, and mkinitpio hooks."
-    
-    # Install bootloader (GRUB or systemd-boot)
-    install_bootloader_chroot || _log_error "Bootloader installation failed."
-    
-    # Configure GRUB theme only (final GRUB config after initramfs rebuild)
-    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-        configure_grub_theme_chroot || _log_error "GRUB theme configuration failed."
-    else
-        _log_info "Skipping GRUB-specific configurations (systemd-boot selected)"
-    fi
-    
-    # Configure Plymouth only if GRUB is selected (systemd-boot has limited Plymouth support)
-    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
-        if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-            _log_info "Configuring Plymouth boot splash..."
-            configure_plymouth_chroot || _log_error "Plymouth configuration failed."
-        else
-            _log_warn "Plymouth requested but systemd-boot selected - limited Plymouth support"
-            _log_info "Configuring Plymouth boot splash..."
-            configure_plymouth_chroot || _log_error "Plymouth configuration failed."
+        if [[ ! -d "$efi_dir" ]]; then
+            # Create it if it doesn't exist but ESP is mounted
+            mkdir -p /efi
+            efi_dir="/efi"
         fi
-    else
-        _log_info "Skipping Plymouth configuration (not requested)"
-    fi
-    
-    # With Plymouth/GPU in place, configure mkinitcpio hooks and rebuild initramfs once
-    configure_mkinitcpio_hooks_chroot || _log_error "Mkinitpio hooks configuration or initramfs rebuild failed."
-    
-    # Finalize GRUB cmdline and regenerate GRUB config once
-    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-        configure_grub_cmdline_chroot || _log_error "GRUB kernel command line configuration failed."
-    fi
-    
-    _log_info "Configuring Secure Boot..."
-    configure_secure_boot_chroot || _log_error "Secure Boot configuration failed."
-    
-    # --- Phase 3: Desktop Environment & Drivers ---
-    _log_info "Installing Desktop Environment: ${DESKTOP_ENVIRONMENT:-none}..."
-    # Install desktop environment using modular system
-    local de_name="${DESKTOP_ENVIRONMENT:-none}"
-    local de_script_path="./desktops/${de_name,,}.sh"  # ,, makes it lowercase
-    
-    if [ -f "$de_script_path" ]; then
-        _log_info "Running modular configuration for $de_name desktop environment..."
-        source "$de_script_path" || {
-            _log_error "Failed to install $de_name desktop environment"
+
+        log_info "Installing GRUB for UEFI to $efi_dir"
+        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --recheck || {
+            log_error "GRUB installation failed"
             return 1
         }
     else
-        _log_error "Desktop environment script not found: $de_script_path"
-        _log_info "Available desktop environments: gnome, kde, xfce, i3, hyprland, none"
-        return 1
+        # BIOS installation
+        log_info "Installing GRUB for BIOS to ${INSTALL_DISK:-/dev/sda}"
+        grub-install --target=i386-pc "${INSTALL_DISK:-/dev/sda}" --recheck || {
+            log_error "GRUB installation failed"
+            return 1
+        }
     fi
-    
-    # Install display manager
-    install_display_manager_chroot || _log_error "Display manager installation failed."
-    
-    # Install GPU drivers
-    install_gpu_drivers_chroot || _log_error "GPU drivers installation failed."
-    
-    # --- Phase 4: Optional Software & User Customization ---
-    _log_info "Installing AUR Helper..."
-    install_aur_helper_chroot || _log_error "AUR Helper installation failed."
-    
-    _log_info "Installing Flatpak..."
-    install_flatpak_chroot || _log_error "Flatpak installation failed."
-    
-    _log_info "Installing Custom Packages..."
-    install_custom_packages_chroot || _log_error "Custom packages installation failed."
-    
-    _log_info "Installing Custom AUR Packages..."
-    install_custom_aur_packages_chroot || _log_error "Custom AUR packages installation failed."
-    
-    _log_info "Installing AUR Numlock on Boot..."
-    configure_numlock_chroot || _log_error "Numlock on boot configuration failed."
-    
-    # --- Phase 5: Final System Services ---
-    _log_info "Enabling essential system services..."
-    enable_systemd_service_chroot "NetworkManager" || _log_error "Failed to enable NetworkManager service."
-    # Enable time synchronization service based on user choice
-    case "${TIME_SYNC:-systemd-timesyncd}" in
-        "ntpd")
-            enable_systemd_service_chroot "ntpd" || _log_error "Failed to enable ntpd service."
-            ;;
-        "chrony")
-            enable_systemd_service_chroot "chronyd" || _log_error "Failed to enable chronyd service."
-            ;;
-        "systemd-timesyncd")
-            enable_systemd_service_chroot "systemd-timesyncd" || _log_error "Failed to enable systemd-timesyncd service."
-            ;;
-    esac
-    
-    # Enable SSD trim timer
-    enable_systemd_service_chroot "fstrim.timer" || _log_error "Failed to enable SSD trim timer."
-    
-    # --- Phase 6: Final System Services ---
-    _log_info "Enabling display manager service..."
-    if [[ "${DISPLAY_MANAGER:-}" != "none" && -n "${DISPLAY_MANAGER:-}" ]]; then
-        enable_systemd_service_chroot "$DISPLAY_MANAGER" || _log_error "Failed to enable Display Manager service."
-    fi
-    
-    # --- Phase 7: Final System Services ---
-    _log_info "Installing CPU Microcode..."
-    install_microcode_chroot || _log_error "CPU microcode installation failed."
-    
-    # --- Phase 8: Finalizations ---
-    _log_info "Saving mdadm.conf for RAID arrays..."
-    save_mdadm_conf_chroot || _log_error "Mdadm.conf saving failed."
-    
-    _log_info "Deploying Dotfiles..."
-    deploy_dotfiles_chroot || _log_error "Dotfile deployment failed."
-    
-    _log_success "Chroot configuration complete."
-    
-    # Preserve logs in the chroot environment
-    if [[ -n "${LOG_FILE:-}" ]]; then
-        _log_info "Preserving chroot logs..."
-        mkdir -p "/var/log"
-        if [[ -f "$LOG_FILE" ]]; then
-            cp "$LOG_FILE" "/var/log/archinstall-chroot.log"
-            _log_info "Chroot logs preserved at: /var/log/archinstall-chroot.log"
-        fi
-    fi
+
+    log_success "GRUB installed"
 }
 
-# Execute main function only if script is run directly
+install_systemd_boot() {
+    log_info "Installing systemd-boot..."
+
+    if [[ "${BOOT_MODE:-UEFI}" != "UEFI" ]]; then
+        log_error "systemd-boot requires UEFI firmware"
+        return 1
+    fi
+
+    # Determine ESP path
+    local esp_path="/efi"
+    if [[ ! -d "$esp_path" ]]; then
+        esp_path="/boot"
+    fi
+
+    bootctl install --esp-path="$esp_path" || {
+        log_error "systemd-boot installation failed"
+        return 1
+    }
+
+    # Create boot entry
+    mkdir -p "${esp_path}/loader/entries"
+
+    # Get root partition UUID
+    local root_uuid="${ROOT_UUID:-}"
+    if [[ -z "$root_uuid" ]]; then
+        # Try to detect it
+        root_uuid=$(findmnt -n -o UUID /)
+    fi
+
+    # Create arch.conf entry
+    cat > "${esp_path}/loader/entries/arch.conf" << EOF
+title   Arch Linux
+linux   /vmlinuz-${KERNEL:-linux}
+initrd  /initramfs-${KERNEL:-linux}.img
+options root=UUID=${root_uuid} rw quiet
+EOF
+
+    # Create loader.conf
+    cat > "${esp_path}/loader/loader.conf" << EOF
+default arch.conf
+timeout 5
+console-mode max
+editor no
+EOF
+
+    log_success "systemd-boot installed"
+}
+
+configure_grub_settings() {
+    if [[ "${BOOTLOADER:-grub}" != "grub" ]]; then
+        return 0
+    fi
+
+    log_info "Configuring GRUB settings..."
+
+    local grub_default="/etc/default/grub"
+    if [[ ! -f "$grub_default" ]]; then
+        log_warn "GRUB default config not found"
+        return 0
+    fi
+
+    # Build kernel command line
+    local cmdline="quiet"
+
+    # Add encryption parameters if needed
+    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        if [[ -n "${LUKS_UUID:-}" ]]; then
+            # Determine mapper name based on strategy
+            local mapper_name="cryptroot"
+            if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
+                mapper_name="cryptlvm"
+            fi
+            cmdline="$cmdline cryptdevice=UUID=${LUKS_UUID}:${mapper_name}"
+        fi
+    fi
+
+    # Add Btrfs subvolume rootflags if using Btrfs
+    if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" == "btrfs" ]]; then
+        cmdline="$cmdline rootflags=subvol=@"
+        log_info "Added Btrfs subvolume rootflags"
+    fi
+
+    # Add resume parameter for hibernation if swap exists
+    if [[ "${WANT_SWAP:-no}" == "yes" && -n "${SWAP_UUID:-}" ]]; then
+        cmdline="$cmdline resume=UUID=${SWAP_UUID}"
+    fi
+
+    # Add Plymouth parameters if enabled
+    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        cmdline="$cmdline splash"
+    fi
+
+    # Update GRUB_CMDLINE_LINUX_DEFAULT
+    sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"/" "$grub_default"
+
+    # Enable os-prober if requested
+    if [[ "${OS_PROBER:-no}" == "yes" ]]; then
+        if ! grep -q "^GRUB_DISABLE_OS_PROBER=false" "$grub_default"; then
+            echo "GRUB_DISABLE_OS_PROBER=false" >> "$grub_default"
+        fi
+    fi
+
+    # Enable GRUB_ENABLE_CRYPTODISK for encrypted /boot
+    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
+            echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
+        fi
+    fi
+
+    # Generate GRUB config
+    grub-mkconfig -o /boot/grub/grub.cfg || {
+        log_warn "grub-mkconfig failed, trying alternate path"
+        grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+    }
+
+    log_success "GRUB configured"
+}
+
+configure_secure_boot() {
+    if [[ "${SECURE_BOOT:-No}" != "Yes" ]]; then
+        log_info "Secure Boot not requested"
+        return 0
+    fi
+
+    # Check if system is UEFI
+    if [[ ! -d /sys/firmware/efi ]]; then
+        log_warn "Secure Boot requires UEFI. System is booted in BIOS mode, skipping."
+        return 0
+    fi
+
+    log_info "Configuring Secure Boot with sbctl..."
+
+    # Install sbctl
+    pacman -S --noconfirm --needed sbctl || {
+        log_warn "Failed to install sbctl"
+        return 0
+    }
+
+    # Check sbctl status
+    log_info "Checking Secure Boot status..."
+    sbctl status || true
+
+    # Create Secure Boot keys if they don't exist
+    if [[ ! -d /usr/share/secureboot/keys ]]; then
+        log_info "Creating Secure Boot keys..."
+        sbctl create-keys || {
+            log_warn "Failed to create Secure Boot keys"
+            return 0
+        }
+        log_success "Secure Boot keys created"
+    else
+        log_info "Secure Boot keys already exist"
+    fi
+
+    # Sign EFI binaries
+    log_info "Signing EFI binaries..."
+
+    # Sign the kernel
+    local kernel="${KERNEL:-linux}"
+    if [[ -f "/boot/vmlinuz-${kernel}" ]]; then
+        sbctl sign -s "/boot/vmlinuz-${kernel}" 2>/dev/null || log_warn "Failed to sign vmlinuz-${kernel}"
+    fi
+
+    # Sign bootloader based on type
+    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
+        # Sign GRUB EFI binary
+        local grub_efi="/boot/efi/EFI/GRUB/grubx64.efi"
+        if [[ -f "$grub_efi" ]]; then
+            sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"
+        fi
+        # Also try alternate path
+        grub_efi="/boot/EFI/GRUB/grubx64.efi"
+        if [[ -f "$grub_efi" ]]; then
+            sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"
+        fi
+    else
+        # Sign systemd-boot
+        local systemd_efi="/boot/efi/EFI/systemd/systemd-bootx64.efi"
+        if [[ -f "$systemd_efi" ]]; then
+            sbctl sign -s "$systemd_efi" 2>/dev/null || log_warn "Failed to sign systemd-boot"
+        fi
+        systemd_efi="/boot/EFI/systemd/systemd-bootx64.efi"
+        if [[ -f "$systemd_efi" ]]; then
+            sbctl sign -s "$systemd_efi" 2>/dev/null || log_warn "Failed to sign systemd-boot"
+        fi
+        # Also sign the Linux EFI stub
+        local linux_efi="/boot/efi/EFI/Linux/"
+        if [[ -d "$linux_efi" ]]; then
+            for efi in "$linux_efi"/*.efi; do
+                [[ -f "$efi" ]] && sbctl sign -s "$efi" 2>/dev/null || true
+            done
+        fi
+    fi
+
+    # Create post-install script for key enrollment
+    cat > /root/enroll-secure-boot-keys.sh << 'SBEOF'
+#!/bin/bash
+# Secure Boot Key Enrollment Script
+# Run this after first boot with Secure Boot disabled
+
+echo "Secure Boot Key Enrollment"
+echo "=========================="
+echo ""
+echo "This will enroll your custom Secure Boot keys."
+echo "Make sure Secure Boot is in Setup Mode before running this."
+echo ""
+
+# Check if we can enroll keys
+if sbctl status | grep -q "Setup Mode:.*Enabled"; then
+    echo "Setup Mode is enabled. Enrolling keys..."
+    sbctl enroll-keys --microsoft || {
+        echo "Key enrollment failed!"
+        echo "You may need to enter UEFI setup and enable 'Setup Mode'"
+        exit 1
+    }
+    echo ""
+    echo "Keys enrolled successfully!"
+    echo "You can now reboot and enable Secure Boot in UEFI setup."
+else
+    echo "Setup Mode is NOT enabled."
+    echo ""
+    echo "To enroll keys:"
+    echo "1. Reboot and enter UEFI setup (usually F2, Del, or Esc)"
+    echo "2. Find Secure Boot settings"
+    echo "3. Enable 'Setup Mode' or 'Clear Secure Boot Keys'"
+    echo "4. Boot into Arch Linux and run this script again"
+fi
+SBEOF
+    chmod +x /root/enroll-secure-boot-keys.sh
+
+    # Set up pacman hook to re-sign kernel on updates
+    mkdir -p /etc/pacman.d/hooks
+    cat > /etc/pacman.d/hooks/95-secureboot.hook << 'HOOKEOF'
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = linux
+Target = linux-lts
+Target = linux-zen
+Target = linux-hardened
+Target = systemd
+
+[Action]
+Description = Signing EFI binaries for Secure Boot...
+When = PostTransaction
+Exec = /usr/bin/sbctl sign-all
+Depends = sbctl
+HOOKEOF
+
+    log_info "Created pacman hook for automatic kernel signing"
+    log_info "Created /root/enroll-secure-boot-keys.sh for key enrollment"
+    log_warn "IMPORTANT: After first boot, run /root/enroll-secure-boot-keys.sh to complete Secure Boot setup"
+
+    log_success "Secure Boot preparation complete"
+}
+
+# =============================================================================
+# PHASE 3: DESKTOP ENVIRONMENT
+# =============================================================================
+
+install_desktop_environment() {
+    local de="${DESKTOP_ENVIRONMENT:-none}"
+    de="${de,,}"  # Convert to lowercase
+
+    log_info "Installing desktop environment: $de"
+
+    case "$de" in
+        "kde"|"plasma")
+            pacman -S --noconfirm --needed plasma kde-applications || log_warn "KDE installation had warnings"
+            ;;
+        "gnome")
+            pacman -S --noconfirm --needed gnome gnome-extra || log_warn "GNOME installation had warnings"
+            ;;
+        "xfce")
+            pacman -S --noconfirm --needed xfce4 xfce4-goodies || log_warn "XFCE installation had warnings"
+            ;;
+        "i3"|"i3wm")
+            pacman -S --noconfirm --needed i3-wm i3status i3lock dmenu rofi alacritty || log_warn "i3 installation had warnings"
+            ;;
+        "hyprland")
+            pacman -S --noconfirm --needed hyprland waybar swaylock swayidle wlogout \
+                rofi-wayland grim slurp kitty xdg-desktop-portal-hyprland || log_warn "Hyprland installation had warnings"
+            ;;
+        "sway")
+            pacman -S --noconfirm --needed sway swaylock swayidle waybar \
+                rofi-wayland grim slurp foot xdg-desktop-portal-wlr || log_warn "Sway installation had warnings"
+            ;;
+        "cinnamon")
+            pacman -S --noconfirm --needed cinnamon nemo-fileroller || log_warn "Cinnamon installation had warnings"
+            ;;
+        "mate")
+            pacman -S --noconfirm --needed mate mate-extra || log_warn "MATE installation had warnings"
+            ;;
+        "budgie")
+            pacman -S --noconfirm --needed budgie-desktop budgie-extras || log_warn "Budgie installation had warnings"
+            ;;
+        "none"|"minimal"|"")
+            log_info "No desktop environment selected"
+            ;;
+        *)
+            log_warn "Unknown desktop environment: $de"
+            ;;
+    esac
+
+    log_success "Desktop environment installation complete"
+}
+
+install_display_manager() {
+    local dm="${DISPLAY_MANAGER:-none}"
+    dm="${dm,,}"  # Convert to lowercase
+
+    log_info "Installing display manager: $dm"
+
+    case "$dm" in
+        "sddm")
+            pacman -S --noconfirm --needed sddm
+            systemctl enable sddm.service
+            ;;
+        "gdm")
+            pacman -S --noconfirm --needed gdm
+            systemctl enable gdm.service
+            ;;
+        "lightdm")
+            pacman -S --noconfirm --needed lightdm lightdm-gtk-greeter
+            systemctl enable lightdm.service
+            ;;
+        "lxdm")
+            pacman -S --noconfirm --needed lxdm
+            systemctl enable lxdm.service
+            ;;
+        "ly")
+            pacman -S --noconfirm --needed ly
+            systemctl enable ly.service
+            ;;
+        "none"|"")
+            log_info "No display manager selected"
+            ;;
+        *)
+            log_warn "Unknown display manager: $dm"
+            ;;
+    esac
+
+    log_success "Display manager installation complete"
+}
+
+install_gpu_drivers() {
+    local gpu="${GPU_DRIVERS:-Auto}"
+
+    log_info "Installing GPU drivers: $gpu"
+
+    case "$gpu" in
+        "Auto"|"auto")
+            # Auto-detect GPU
+            if lspci | grep -qi nvidia; then
+                log_info "NVIDIA GPU detected"
+                pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings || true
+            fi
+            if lspci | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
+                log_info "AMD GPU detected"
+                pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-amdgpu vulkan-radeon || true
+            fi
+            if lspci | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; then
+                log_info "Intel GPU detected"
+                pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-intel vulkan-intel || true
+            fi
+            ;;
+        "nvidia"|"NVIDIA")
+            pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings
+            ;;
+        "nvidia-open")
+            pacman -S --noconfirm --needed nvidia-open nvidia-utils nvidia-settings
+            ;;
+        "amd"|"AMD")
+            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-amdgpu vulkan-radeon
+            ;;
+        "intel"|"Intel")
+            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-intel vulkan-intel
+            ;;
+        "nouveau")
+            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-nouveau
+            ;;
+        "none"|"None")
+            log_info "No GPU drivers selected"
+            ;;
+        *)
+            log_warn "Unknown GPU driver option: $gpu"
+            ;;
+    esac
+
+    log_success "GPU driver installation complete"
+}
+
+# =============================================================================
+# PHASE 4: ADDITIONAL SOFTWARE
+# =============================================================================
+
+install_aur_helper() {
+    local helper="${AUR_HELPER:-none}"
+    helper="${helper,,}"  # Convert to lowercase
+
+    if [[ "$helper" == "none" || -z "$helper" ]]; then
+        log_info "No AUR helper selected"
+        return 0
+    fi
+
+    log_info "Installing AUR helper: $helper"
+
+    # AUR helpers must be built as non-root user
+    local build_dir="/tmp/aur_build"
+    mkdir -p "$build_dir"
+    chown "$MAIN_USERNAME:$MAIN_USERNAME" "$build_dir"
+
+    case "$helper" in
+        "paru")
+            # Install paru dependencies
+            pacman -S --noconfirm --needed base-devel git
+
+            sudo -u "$MAIN_USERNAME" bash << 'AUREOF'
+cd /tmp/aur_build
+git clone https://aur.archlinux.org/paru.git
+cd paru
+makepkg -si --noconfirm
+AUREOF
+            ;;
+        "yay")
+            # Install yay dependencies
+            pacman -S --noconfirm --needed base-devel git go
+
+            sudo -u "$MAIN_USERNAME" bash << 'AUREOF'
+cd /tmp/aur_build
+git clone https://aur.archlinux.org/yay.git
+cd yay
+makepkg -si --noconfirm
+AUREOF
+            ;;
+        "pikaur")
+            pacman -S --noconfirm --needed base-devel git python
+
+            sudo -u "$MAIN_USERNAME" bash << 'AUREOF'
+cd /tmp/aur_build
+git clone https://aur.archlinux.org/pikaur.git
+cd pikaur
+makepkg -si --noconfirm
+AUREOF
+            ;;
+        *)
+            log_warn "Unknown AUR helper: $helper"
+            ;;
+    esac
+
+    # Cleanup
+    rm -rf "$build_dir"
+
+    log_success "AUR helper installation complete"
+}
+
+install_flatpak() {
+    if [[ "${FLATPAK:-No}" != "Yes" ]]; then
+        log_info "Flatpak not requested"
+        return 0
+    fi
+
+    log_info "Installing Flatpak..."
+
+    pacman -S --noconfirm --needed flatpak
+
+    # Add Flathub repository for the user
+    sudo -u "$MAIN_USERNAME" flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo || true
+
+    log_success "Flatpak installed"
+}
+
+install_additional_packages() {
+    # Install additional pacman packages
+    if [[ -n "${ADDITIONAL_PACKAGES:-}" ]]; then
+        log_info "Installing additional packages: $ADDITIONAL_PACKAGES"
+
+        # Convert space-separated string to array
+        local -a packages
+        read -ra packages <<< "$ADDITIONAL_PACKAGES"
+
+        if [[ ${#packages[@]} -gt 0 ]]; then
+            pacman -S --noconfirm --needed "${packages[@]}" || log_warn "Some packages may have failed to install"
+        fi
+    fi
+
+    # Install additional AUR packages (if AUR helper is available)
+    if [[ -n "${ADDITIONAL_AUR_PACKAGES:-}" ]]; then
+        local helper="${AUR_HELPER:-none}"
+        helper="${helper,,}"
+
+        if [[ "$helper" != "none" && -n "$helper" ]] && command -v "$helper" &>/dev/null; then
+            log_info "Installing additional AUR packages: $ADDITIONAL_AUR_PACKAGES"
+
+            local -a aur_packages
+            read -ra aur_packages <<< "$ADDITIONAL_AUR_PACKAGES"
+
+            if [[ ${#aur_packages[@]} -gt 0 ]]; then
+                sudo -u "$MAIN_USERNAME" "$helper" -S --noconfirm "${aur_packages[@]}" || log_warn "Some AUR packages may have failed to install"
+            fi
+        else
+            log_warn "AUR packages requested but no AUR helper available"
+        fi
+    fi
+
+    log_success "Additional packages installation complete"
+}
+
+configure_plymouth() {
+    if [[ "${PLYMOUTH:-No}" != "Yes" ]]; then
+        log_info "Plymouth not requested"
+        return 0
+    fi
+
+    log_info "Configuring Plymouth..."
+
+    # Install Plymouth if not already installed
+    pacman -S --noconfirm --needed plymouth || true
+
+    # Set Plymouth theme if specified
+    if [[ -n "${PLYMOUTH_THEME:-}" && "${PLYMOUTH_THEME}" != "none" ]]; then
+        if [[ -d "/usr/share/plymouth/themes/${PLYMOUTH_THEME}" ]]; then
+            plymouth-set-default-theme -R "${PLYMOUTH_THEME}" || log_warn "Failed to set Plymouth theme"
+            log_info "Plymouth theme set to: ${PLYMOUTH_THEME}"
+        else
+            log_warn "Plymouth theme not found: ${PLYMOUTH_THEME}"
+            # List available themes
+            log_info "Available themes: $(ls /usr/share/plymouth/themes/ 2>/dev/null || echo 'none')"
+        fi
+    fi
+
+    log_success "Plymouth configured"
+}
+
+configure_snapper() {
+    if [[ "${BTRFS_SNAPSHOTS:-No}" != "Yes" ]]; then
+        log_info "Btrfs snapshots not requested"
+        return 0
+    fi
+
+    # Check if filesystem is btrfs
+    if [[ "${FILESYSTEM:-}" != "btrfs" ]]; then
+        log_info "Snapper requires btrfs filesystem, skipping"
+        return 0
+    fi
+
+    log_info "Configuring Snapper for Btrfs snapshots..."
+
+    # Install snapper and related packages
+    pacman -S --noconfirm --needed snapper snap-pac || {
+        log_warn "Failed to install snapper packages"
+        return 0
+    }
+
+    # Install grub-btrfs for boot integration if using GRUB
+    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
+        pacman -S --noconfirm --needed grub-btrfs || log_warn "grub-btrfs not available"
+    fi
+
+    # Remove the @snapshots mount if it exists (snapper will recreate it)
+    if mountpoint -q /.snapshots 2>/dev/null; then
+        umount /.snapshots 2>/dev/null || true
+    fi
+
+    # Remove the .snapshots directory if it exists
+    if [[ -d /.snapshots ]]; then
+        rmdir /.snapshots 2>/dev/null || true
+    fi
+
+    # Create snapper config for root
+    if snapper -c root create-config /; then
+        log_info "Created snapper config for root"
+    else
+        log_warn "Failed to create snapper config (may already exist)"
+    fi
+
+    # Delete the subvolume snapper created and recreate .snapshots directory
+    # This is needed because snapper creates a new subvolume, but we want to use @snapshots
+    if btrfs subvolume delete /.snapshots 2>/dev/null; then
+        log_info "Removed snapper-created .snapshots subvolume"
+    fi
+    mkdir -p /.snapshots
+
+    # Remount @snapshots subvolume
+    if grep -q "@snapshots" /etc/fstab; then
+        mount /.snapshots || log_warn "Failed to remount @snapshots"
+        log_info "Remounted @snapshots subvolume"
+    fi
+
+    # Set proper permissions
+    chmod 750 /.snapshots
+
+    # Configure snapper settings
+    if [[ -f /etc/snapper/configs/root ]]; then
+        # Set timeline settings for automatic snapshots
+        sed -i 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' /etc/snapper/configs/root
+
+        # Keep reasonable number of snapshots
+        sed -i 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY="5"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY="7"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY="0"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY="0"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_LIMIT_YEARLY=.*/TIMELINE_LIMIT_YEARLY="0"/' /etc/snapper/configs/root
+
+        log_info "Configured snapper timeline settings"
+    fi
+
+    # Enable snapper timers
+    systemctl enable snapper-timeline.timer 2>/dev/null || true
+    systemctl enable snapper-cleanup.timer 2>/dev/null || true
+
+    # Enable grub-btrfs path monitoring if installed
+    if [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]]; then
+        systemctl enable grub-btrfsd.service 2>/dev/null || true
+        log_info "Enabled grub-btrfs daemon for boot menu updates"
+    fi
+
+    log_success "Snapper configured for automatic Btrfs snapshots"
+}
+
+# =============================================================================
+# PHASE 5: FINAL CONFIGURATION
+# =============================================================================
+
+configure_numlock() {
+    if [[ "${NUMLOCK_ON_BOOT:-No}" != "Yes" ]]; then
+        return 0
+    fi
+
+    log_info "Configuring numlock on boot..."
+
+    # For console (TTY)
+    if [[ -f /etc/vconsole.conf ]]; then
+        if ! grep -q "^KEYMAP_TOGGLE=" /etc/vconsole.conf; then
+            # Create a systemd service for numlock
+            cat > /etc/systemd/system/numlock.service << 'EOF'
+[Unit]
+Description=Activate numlock on boot
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'for tty in /dev/tty{1..6}; do /usr/bin/setleds -D +num < "$tty"; done'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl enable numlock.service
+        fi
+    fi
+
+    # For SDDM
+    if [[ "${DISPLAY_MANAGER:-}" == "sddm" ]]; then
+        mkdir -p /etc/sddm.conf.d
+        cat > /etc/sddm.conf.d/numlock.conf << 'EOF'
+[General]
+Numlock=on
+EOF
+    fi
+
+    log_success "Numlock configured"
+}
+
+deploy_dotfiles() {
+    if [[ "${GIT_REPOSITORY:-No}" != "Yes" || -z "${GIT_REPOSITORY_URL:-}" ]]; then
+        return 0
+    fi
+
+    log_info "Deploying dotfiles from: $GIT_REPOSITORY_URL"
+
+    local user_home="/home/$MAIN_USERNAME"
+
+    sudo -u "$MAIN_USERNAME" git clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
+        log_warn "Failed to clone dotfiles repository"
+        return 0
+    }
+
+    # Run install script if it exists
+    if [[ -x "$user_home/dotfiles/install.sh" ]]; then
+        sudo -u "$MAIN_USERNAME" bash -c "cd $user_home/dotfiles && ./install.sh" || log_warn "Dotfiles install script failed"
+    fi
+
+    log_success "Dotfiles deployed"
+}
+
+final_cleanup() {
+    log_info "Performing final cleanup..."
+
+    # Clear package cache (keep last 2 versions)
+    if command -v paccache &>/dev/null; then
+        paccache -rk2 || true
+    fi
+
+    # Update man database
+    mandb &>/dev/null || true
+
+    log_success "Final cleanup complete"
+}
+
+# =============================================================================
+# RUN MAIN FUNCTION
+# =============================================================================
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi

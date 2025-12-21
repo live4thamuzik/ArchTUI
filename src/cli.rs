@@ -241,7 +241,7 @@ pub enum NetworkToolCommands {
         #[arg(short, long)]
         action: String,
         /// Host to test (optional)
-        #[arg(short, long)]
+        #[arg(short = 'H', long)]
         host: Option<String>,
         /// Timeout in seconds
         #[arg(short, long, default_value = "5")]
@@ -279,5 +279,111 @@ pub enum NetworkToolCommands {
 impl Cli {
     pub fn parse_args() -> Self {
         <Self as clap::Parser>::parse()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn test_cli_no_args() {
+        // Running with no args should succeed (defaults to TUI mode)
+        let result = Cli::try_parse_from(["archinstall-tui"]);
+        assert!(result.is_ok());
+        let cli = result.unwrap();
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn test_cli_install_with_config() {
+        let result = Cli::try_parse_from([
+            "archinstall-tui",
+            "install",
+            "--config",
+            "/path/to/config.json",
+        ]);
+        assert!(result.is_ok());
+        let cli = result.unwrap();
+        match cli.command {
+            Some(Commands::Install { config, .. }) => {
+                assert_eq!(config.unwrap().to_str().unwrap(), "/path/to/config.json");
+            }
+            _ => panic!("Expected Install command"),
+        }
+    }
+
+    #[test]
+    fn test_cli_validate_command() {
+        let result = Cli::try_parse_from([
+            "archinstall-tui",
+            "validate",
+            "/path/to/config.json",
+        ]);
+        assert!(result.is_ok());
+        let cli = result.unwrap();
+        match cli.command {
+            Some(Commands::Validate { config }) => {
+                assert_eq!(config.to_str().unwrap(), "/path/to/config.json");
+            }
+            _ => panic!("Expected Validate command"),
+        }
+    }
+
+    #[test]
+    fn test_cli_disk_format_tool() {
+        let result = Cli::try_parse_from([
+            "archinstall-tui",
+            "tools",
+            "disk",
+            "format",
+            "--device",
+            "/dev/sda1",
+            "--filesystem",
+            "ext4",
+        ]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_system_bootloader_tool() {
+        let result = Cli::try_parse_from([
+            "archinstall-tui",
+            "tools",
+            "system",
+            "bootloader",
+            "--type",
+            "grub",
+            "--disk",
+            "/dev/sda",
+        ]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_user_add_tool() {
+        let result = Cli::try_parse_from([
+            "archinstall-tui",
+            "tools",
+            "user",
+            "add",
+            "--username",
+            "testuser",
+        ]);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_network_test_tool() {
+        let result = Cli::try_parse_from([
+            "archinstall-tui",
+            "tools",
+            "network",
+            "test",
+            "--action",
+            "ping",
+        ]);
+        assert!(result.is_ok());
     }
 }

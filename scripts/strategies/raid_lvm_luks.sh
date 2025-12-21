@@ -108,13 +108,9 @@ execute_raid_lvm_luks_partitioning() {
         format_filesystem "/dev/md/BOOT" "ext4"
     fi
     
-    # Set up LUKS encryption on data RAID array
-    log_info "Setting up LUKS encryption on data RAID array"
-    echo -n "$LUKS_PASSWORD" | cryptsetup luksFormat --key-size=512 --hash=sha512 /dev/md/DATA
-    
-    # Open encrypted RAID array
-    log_info "Opening encrypted RAID array"
-    echo -n "$LUKS_PASSWORD" | cryptsetup open /dev/md/DATA cryptdata
+    # Set up LUKS encryption on data RAID array using helper function (non-interactive)
+    local encrypted_dev
+    encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptdata")
     
     # Set up LVM on encrypted RAID array
     log_info "Setting up LVM on encrypted RAID array"
@@ -167,32 +163,37 @@ execute_raid_lvm_luks_partitioning() {
         mount "${INSTALL_DISKS[0]}1" /mnt/efi
         
         # Capture UUIDs for configuration
-        capture_device_info "/dev/md/XBOOTLDR" "XBOOTLDR"
-        capture_device_info "/dev/archvg/root" "ROOT"
-        capture_device_info "/dev/md/DATA" "LUKS"
+        capture_device_info "boot" "/dev/md/XBOOTLDR"
+        capture_device_info "root" "/dev/archvg/root"
+        capture_device_info "luks" "/dev/md/DATA"
     else
         # BIOS: Mount boot
         mkdir -p /mnt/boot
         mount /dev/md/BOOT /mnt/boot
         
         # Capture UUIDs for configuration
-        capture_device_info "/dev/md/BOOT" "BOOT"
-        capture_device_info "/dev/archvg/root" "ROOT"
-        capture_device_info "/dev/md/DATA" "LUKS"
+        capture_device_info "boot" "/dev/md/BOOT"
+        capture_device_info "root" "/dev/archvg/root"
+        capture_device_info "luks" "/dev/md/DATA"
     fi
     
     # Mount home if created
     if [[ "$WANT_HOME_PARTITION" == "yes" ]]; then
         mkdir -p /mnt/home
         mount /dev/archvg/home /mnt/home
-        capture_device_info "/dev/archvg/home" "HOME"
+        capture_device_info "home" "/dev/archvg/home"
     fi
     
     # Save RAID configuration
     log_info "Saving RAID configuration"
     mkdir -p /mnt/etc/mdadm
     mdadm --detail --scan > /mnt/etc/mdadm/mdadm.conf
-    
+
+    # Generate crypttab entry for boot-time unlocking
+    log_info "Generating crypttab entry..."
+    mkdir -p /mnt/etc
+    generate_crypttab "/dev/md/DATA" "cryptdata"
+
     log_info "RAID + LVM + LUKS partitioning completed successfully"
 }
 

@@ -58,26 +58,28 @@ execute_simple_luks_partitioning() {
     partprobe "$INSTALL_DISK"
     local luks_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
     
-    # Set up LUKS encryption
-    log_info "Setting up LUKS encryption..."
-    cryptsetup luksFormat --type luks2 "$luks_dev" || error_exit "Failed to format LUKS partition."
-    cryptsetup open "$luks_dev" cryptroot || error_exit "Failed to open LUKS partition."
-    
+    # Set up LUKS encryption using helper function (non-interactive)
+    local encrypted_dev
+    encrypted_dev=$(setup_luks_encryption "$luks_dev" "cryptroot")
+
     # Format root filesystem
-    log_info "Creating $ROOT_FILESYSTEM_TYPE filesystem on /dev/mapper/cryptroot..."
-    format_filesystem "/dev/mapper/cryptroot" "$ROOT_FILESYSTEM_TYPE"
-    capture_device_info "root" "/dev/mapper/cryptroot" "UUID"
-    safe_mount "/dev/mapper/cryptroot" "/mnt"
-    
-    # Handle Btrfs subvolumes if needed
+    log_info "Creating $ROOT_FILESYSTEM_TYPE filesystem on $encrypted_dev..."
+    format_filesystem "$encrypted_dev" "$ROOT_FILESYSTEM_TYPE"
+    capture_device_info "root" "$encrypted_dev"
+
+    # Handle Btrfs subvolumes if needed, otherwise simple mount
     if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
-        log_info "Creating Btrfs subvolumes..."
-        btrfs subvolume create /mnt/@
-        btrfs subvolume create /mnt/@home
-        btrfs subvolume create /mnt/@var
-        btrfs subvolume create /mnt/@tmp
+        # Use helper function for proper Btrfs subvolume setup
+        # Include @home subvolume only if not using separate home partition
+        local include_home="no"
+        if [ "$WANT_HOME_PARTITION" != "yes" ]; then
+            include_home="yes"
+        fi
+        setup_btrfs_subvolumes "/dev/mapper/cryptroot" "$include_home"
+    else
+        safe_mount "/dev/mapper/cryptroot" "/mnt"
     fi
-    
+
     # Separate home partition (if requested)
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
         part_num=$((part_num + 1))
@@ -91,22 +93,28 @@ execute_simple_luks_partitioning() {
         partprobe "$INSTALL_DISK"
         local luks_home_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
         
-        # Set up LUKS encryption for home
-        cryptsetup luksFormat --type luks2 "$luks_home_dev" || error_exit "Failed to format LUKS home partition."
-        cryptsetup open "$luks_home_dev" crypthome || error_exit "Failed to open LUKS home partition."
-        
+        # Set up LUKS encryption for home using helper function (non-interactive)
+        local encrypted_home_dev
+        encrypted_home_dev=$(setup_luks_encryption "$luks_home_dev" "crypthome")
+
+        # Capture LUKS home UUID separately
+        local luks_home_uuid
+        luks_home_uuid=$(blkid -s UUID -o value "$luks_home_dev" 2>/dev/null) || true
+
         # Format home filesystem
-        format_filesystem "/dev/mapper/crypthome" "$HOME_FILESYSTEM_TYPE"
-        capture_device_info "home" "/dev/mapper/crypthome" "UUID"
+        format_filesystem "$encrypted_home_dev" "$HOME_FILESYSTEM_TYPE"
+        capture_device_info "home" "$encrypted_home_dev"
         mkdir -p /mnt/home
         safe_mount "/dev/mapper/crypthome" "/mnt/home"
-        
-        # Handle Btrfs subvolumes for home if needed
-        if [ "$HOME_FILESYSTEM_TYPE" = "btrfs" ]; then
-            log_info "Creating Btrfs subvolumes for home..."
-            btrfs subvolume create /mnt/home/@
-        fi
     fi
     
+    # Generate crypttab entries for boot-time unlocking
+    log_info "Generating crypttab entries..."
+    mkdir -p /mnt/etc
+    generate_crypttab "$luks_dev" "cryptroot"
+    if [ "$WANT_HOME_PARTITION" = "yes" ]; then
+        generate_crypttab "$luks_home_dev" "crypthome"
+    fi
+
     log_partitioning_complete "Simple LUKS ESP + XBOOTLDR"
 }

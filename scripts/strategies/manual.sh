@@ -42,47 +42,46 @@ execute_manual_partitioning() {
     
     # Capture device information for mounted partitions
     log_info "Capturing device information for mounted partitions..."
-    
+
     # Capture root device
     local root_dev=$(findmnt -n -o SOURCE /mnt)
     if [ -n "$root_dev" ]; then
-        capture_device_info "root" "$root_dev" "UUID"
+        capture_device_info "root" "$root_dev"
         log_info "Captured root device: $root_dev"
     fi
-    
+
     # Capture EFI device if mounted
     if mountpoint -q /mnt/efi; then
         local efi_dev=$(findmnt -n -o SOURCE /mnt/efi)
         if [ -n "$efi_dev" ]; then
-            capture_device_info "efi" "$efi_dev" "UUID"
-            capture_device_info "efi" "$efi_dev" "PARTUUID"
+            capture_device_info "efi" "$efi_dev"
             log_info "Captured EFI device: $efi_dev"
         fi
     fi
-    
+
     # Capture boot device if mounted
     if mountpoint -q /mnt/boot; then
         local boot_dev=$(findmnt -n -o SOURCE /mnt/boot)
         if [ -n "$boot_dev" ]; then
-            capture_device_info "boot" "$boot_dev" "UUID"
+            capture_device_info "boot" "$boot_dev"
             log_info "Captured boot device: $boot_dev"
         fi
     fi
-    
+
     # Capture home device if mounted
     if mountpoint -q /mnt/home; then
         local home_dev=$(findmnt -n -o SOURCE /mnt/home)
         if [ -n "$home_dev" ]; then
-            capture_device_info "home" "$home_dev" "UUID"
+            capture_device_info "home" "$home_dev"
             log_info "Captured home device: $home_dev"
         fi
     fi
-    
+
     # Capture swap device if active
-    if [ -n "$(swapon --show --noheadings --output=NAME)" ]; then
+    if [ -n "$(swapon --show --noheadings --output=NAME 2>/dev/null)" ]; then
         local swap_dev=$(swapon --show --noheadings --output=NAME | head -1)
         if [ -n "$swap_dev" ]; then
-            capture_device_info "swap" "$swap_dev" "UUID"
+            capture_device_info "swap" "$swap_dev"
             log_info "Captured swap device: $swap_dev"
         fi
     fi
