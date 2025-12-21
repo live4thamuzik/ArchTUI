@@ -7,17 +7,28 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  shellcheck:
     runs-on: ubuntu-latest
-    
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Install shellcheck
+      run: sudo apt-get install -y shellcheck
+
+    - name: Run shellcheck on all scripts
+      run: find scripts -name "*.sh" -exec shellcheck -x {} +
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
-    
+
     - name: Run tests
       run: cargo test
-    
+
     - name: Build release
       run: cargo build --release

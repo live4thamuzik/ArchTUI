@@ -1039,7 +1039,7 @@ deploy_dotfiles() {
 
     # Run install script if it exists
     if [[ -x "$user_home/dotfiles/install.sh" ]]; then
-        sudo -u "$MAIN_USERNAME" bash -c "cd $user_home/dotfiles && ./install.sh" || log_warn "Dotfiles install script failed"
+        sudo -u "$MAIN_USERNAME" bash -c "cd \"$user_home/dotfiles\" && ./install.sh" || log_warn "Dotfiles install script failed"
     fi
 
     log_success "Dotfiles deployed"

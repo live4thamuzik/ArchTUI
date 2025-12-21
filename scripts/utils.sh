@@ -60,13 +60,6 @@ log_success() {
     echo "[$timestamp] SUCCESS: $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
-log_critical() {
-    local message="$1"
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo "[$timestamp] CRITICAL: $message" >&2
-    echo "[$timestamp] CRITICAL: $message" >> "$LOG_FILE" 2>/dev/null || true
-}
-
 # Error handling
 error_exit() {
     local message="$1"
@@ -79,13 +72,6 @@ error_exit() {
         log_error "Failed command: $command"
     fi
     exit 1
-}
-
-# Enhanced error handling with command context
-error_exit_with_command() {
-    local message="$1"
-    local command="$2"
-    error_exit "$message" "$command"
 }
 
 # Non-critical error handling (log and continue)
@@ -102,22 +88,7 @@ log_and_continue() {
     log_warn "Continuing installation..."
 }
 
-# Critical vs non-critical command execution
-execute_critical() {
-    local description="$1"
-    shift
-    local command=("$@")
-    
-    log_info "Executing critical command: $description"
-    log_debug "Command: ${command[*]}"
-    
-    if ! "${command[@]}"; then
-        error_exit_with_command "Critical command failed: $description" "${command[*]}"
-    fi
-    
-    log_success "Critical command completed: $description"
-}
-
+# Non-critical command execution helper
 execute_non_critical() {
     local description="$1"
     shift

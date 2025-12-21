@@ -105,10 +105,12 @@ if [[ -n "$mount_point" ]]; then
             log_info "Running ext4 filesystem check..."
             if umount "$DEVICE" 2>/dev/null; then
                 log_info "Unmounted device for filesystem check"
-                if fsck -n "$DEVICE" 2>/dev/null; then
+                local fsck_output
+                if fsck_output=$(fsck -n "$DEVICE" 2>&1); then
                     log_success "✅ Filesystem integrity: GOOD"
                 else
                     log_warning "⚠️  Filesystem integrity: ISSUES DETECTED"
+                    echo "$fsck_output" | head -20
                     echo "  Run 'fsck $DEVICE' to repair (after unmounting)"
                 fi
                 # Remount if it was previously mounted
@@ -122,19 +124,23 @@ if [[ -n "$mount_point" ]]; then
             ;;
         "btrfs")
             log_info "Running btrfs filesystem check..."
-            if btrfs check --readonly "$DEVICE" 2>/dev/null; then
+            local btrfs_output
+            if btrfs_output=$(btrfs check --readonly "$DEVICE" 2>&1); then
                 log_success "✅ Btrfs filesystem integrity: GOOD"
             else
                 log_warning "⚠️  Btrfs filesystem integrity: ISSUES DETECTED"
+                echo "$btrfs_output" | head -20
                 echo "  Run 'btrfs check --repair $DEVICE' to repair"
             fi
             ;;
         "xfs")
             log_info "Running xfs filesystem check..."
-            if xfs_repair -n "$DEVICE" 2>/dev/null; then
+            local xfs_output
+            if xfs_output=$(xfs_repair -n "$DEVICE" 2>&1); then
                 log_success "✅ XFS filesystem integrity: GOOD"
             else
                 log_warning "⚠️  XFS filesystem integrity: ISSUES DETECTED"
+                echo "$xfs_output" | head -20
                 echo "  Run 'xfs_repair $DEVICE' to repair"
             fi
             ;;
