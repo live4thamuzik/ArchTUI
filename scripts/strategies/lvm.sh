@@ -13,10 +13,10 @@ execute_lvm_partitioning() {
     
     # Validate requirements
     validate_partitioning_requirements
-    
-    # Wipe disk
-    wipe_disk "$INSTALL_DISK"
-    
+
+    # Wipe disk with explicit confirmation
+    wipe_disk "$INSTALL_DISK" "CONFIRMED"
+
     local current_start_mib=1
     local part_num=1
     
