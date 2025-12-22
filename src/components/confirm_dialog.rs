@@ -34,7 +34,7 @@ pub struct ConfirmDialogState {
     pub details: Vec<String>,
     /// Severity level
     pub severity: ConfirmSeverity,
-    /// Currently selected option (0 = No/Cancel, 1 = Yes/Confirm)
+    /// Currently selected option (0 = Yes/Confirm on left, 1 = No/Cancel on right)
     pub selected: usize,
     /// Callback identifier for what to do on confirm
     pub confirm_action: String,
@@ -50,7 +50,7 @@ impl ConfirmDialogState {
             message: message.to_string(),
             details: Vec::new(),
             severity,
-            selected: 0, // Default to "No" for safety
+            selected: 1, // Default to "No" (right button) for safety
             confirm_action: confirm_action.to_string(),
             action_data: None,
         }
@@ -75,17 +75,17 @@ impl ConfirmDialogState {
 
     /// Select No/Cancel
     pub fn select_no(&mut self) {
-        self.selected = 0;
+        self.selected = 1;  // No is now on right (button_chunks[1])
     }
 
     /// Select Yes/Confirm
     pub fn select_yes(&mut self) {
-        self.selected = 1;
+        self.selected = 0;  // Yes is now on left (button_chunks[0])
     }
 
     /// Check if Yes is selected
     pub fn is_confirmed(&self) -> bool {
-        self.selected == 1
+        self.selected == 0  // Yes is now on left (selected == 0)
     }
 }
 
@@ -176,22 +176,8 @@ impl ConfirmDialog {
             ])
             .split(button_area);
 
-        // No/Cancel button
-        let no_style = if state.selected == 0 {
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::White)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White)
-        };
-        let no_button = Paragraph::new("[ No / Cancel ]")
-            .style(no_style)
-            .alignment(Alignment::Center);
-        f.render_widget(no_button, button_chunks[0]);
-
-        // Yes/Confirm button
-        let yes_style = if state.selected == 1 {
+        // Yes/Confirm button (LEFT)
+        let yes_style = if state.selected == 0 {
             match state.severity {
                 ConfirmSeverity::Info => Style::default()
                     .fg(Color::Black)
@@ -222,7 +208,21 @@ impl ConfirmDialog {
         let yes_button = Paragraph::new(yes_text)
             .style(yes_style)
             .alignment(Alignment::Center);
-        f.render_widget(yes_button, button_chunks[1]);
+        f.render_widget(yes_button, button_chunks[0]);
+
+        // No/Cancel button (RIGHT)
+        let no_style = if state.selected == 1 {
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+        let no_button = Paragraph::new("[ No / Cancel ]")
+            .style(no_style)
+            .alignment(Alignment::Center);
+        f.render_widget(no_button, button_chunks[1]);
     }
 }
 
