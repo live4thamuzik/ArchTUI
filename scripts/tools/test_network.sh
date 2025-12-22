@@ -186,9 +186,9 @@ case "$ACTION" in
         log_info "Running full network connectivity test..."
         echo
         
-        local ping_success=0
-        local dns_success=0
-        local http_success=0
+        ping_success=0
+        dns_success=0
+        http_success=0
         
         # Test ping
         log_info "=== PING TESTS ==="
