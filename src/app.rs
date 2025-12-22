@@ -641,11 +641,11 @@ impl App {
             if let Some(ref mut dialog) = state.confirm_dialog {
                 match key_event.code {
                     KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
-                        // Toggle between Yes (0) and No (1)
+                        // Toggle between No (0) and Yes (1)
                         dialog.selected = if dialog.selected == 0 { 1 } else { 0 };
                     }
                     KeyCode::Enter => {
-                        let confirmed = dialog.selected == 0; // 0 = Yes
+                        let confirmed = dialog.is_confirmed(); // 1 = Yes
                         let action = dialog.confirm_action.clone();
                         let data = dialog.action_data.clone();
 
