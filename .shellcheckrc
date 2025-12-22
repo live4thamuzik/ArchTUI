@@ -1,0 +1,14 @@
+# Shellcheck configuration for ArchInstall
+# Tells shellcheck where to find sourced scripts
+
+# Look for sources relative to the script's directory
+source-path=SCRIPTDIR
+
+# Also check parent directory for strategies/ and tools/ subdirs
+source-path=SCRIPTDIR/..
+
+# Allow external sources that may resolve at runtime
+external-sources=true
+
+# Shell scripts use bash
+shell=bash
