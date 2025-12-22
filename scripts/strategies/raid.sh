@@ -30,7 +30,7 @@ execute_raid_partitioning() {
     # --- Phase 1: Partition all RAID member disks identically ---
     for disk in "${RAID_DEVICES[@]}"; do
         log_info "Partitioning RAID member disk: $disk"
-        wipe_disk "$disk"
+        wipe_disk "$disk" "CONFIRMED"
 
         local current_start_mib=1
 
