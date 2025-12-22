@@ -645,6 +645,9 @@ impl App {
                         dialog.selected = if dialog.selected == 0 { 1 } else { 0 };
                     }
                     KeyCode::Enter => {
+                        // SECURITY FIX: Use is_confirmed() method to get correct selection
+                        // selected = 0 means No/Cancel, selected = 1 means Yes/Confirm
+                        let confirmed = dialog.is_confirmed(); // Returns true if selected == 1 (Yes)
                         let confirmed = dialog.is_confirmed(); // 1 = Yes
                         let action = dialog.confirm_action.clone();
                         let data = dialog.action_data.clone();
