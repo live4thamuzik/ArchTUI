@@ -2,8 +2,6 @@
 //!
 //! Provides clean, reusable scrolling logic for all TUI components.
 
-use ratatui::layout::Rect;
-
 /// Scrolling state for any scrollable component
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScrollState {
@@ -123,11 +121,6 @@ impl ScrollState {
             let total_pages = self.total_items.div_ceil(self.visible_items);
             Some((current_page, total_pages))
         }
-    }
-
-    /// Calculate visible items from a Rect
-    pub fn visible_items_from_rect(rect: Rect) -> usize {
-        rect.height.saturating_sub(2) as usize // Account for borders
     }
 
     /// Set selected index directly (useful for external updates)

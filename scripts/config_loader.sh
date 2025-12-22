@@ -7,26 +7,23 @@ set -euo pipefail
 # Source utility functions
 source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
 
-# Pre-flight check: Ensure jq is available
-if ! command -v jq >/dev/null 2>&1; then
-    echo "❌ Error: 'jq' is required for JSON configuration parsing but is not installed."
-    echo "   Please install jq: pacman -S jq"
-    echo "   Or run this installer with the TUI mode instead."
-    exit 1
-fi
+# NOTE: jq is only required for JSON config file mode, not for TUI mode
+# TUI mode passes all configuration as environment variables
 
-# Check if jq is available
+# Check if jq is available (called only when loading JSON config files)
 check_jq_available() {
     if ! command -v jq >/dev/null 2>&1; then
-        log_error "jq is required for JSON configuration parsing but is not installed"
-        log_info "Installing jq..."
+        log_error "jq is required for parsing JSON configuration files"
+        log_info "Note: The TUI (archinstall-tui) does not require jq - only direct bash script usage needs it"
+        log_info "Attempting to install jq automatically..."
         if command -v pacman >/dev/null 2>&1; then
             pacman -Sy --noconfirm jq
             if ! command -v jq >/dev/null 2>&1; then
-                error_exit "Failed to install jq"
+                error_exit "Failed to install jq. Run: pacman -S jq"
             fi
+            log_info "Successfully installed jq"
         else
-            error_exit "Error: 'jq' is not installed and pacman is not available. Please install jq manually."
+            error_exit "jq is not installed and pacman is unavailable. Install with: pacman -S jq or apt-get install jq"
         fi
     fi
 }

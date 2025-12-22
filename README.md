@@ -288,7 +288,7 @@ make clean          # Clean build artifacts
 ### **Dependencies**
 - **Runtime**: None (statically compiled binary)
 - **Development**: Rust toolchain, bash, standard Unix tools
-- **Installation**: pacman, curl, jq (automatically handled)
+- **Installation**: pacman, curl (jq only needed for direct bash script usage, not required for TUI)
 
 ## 🔐 Security Features
 
