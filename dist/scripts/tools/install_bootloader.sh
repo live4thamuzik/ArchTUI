@@ -105,7 +105,7 @@ fi
 if [[ "$BOOT_MODE" == "uefi" && -z "$EFI_PATH" ]]; then
     # Try common EFI mount points
     for path in "/efi" "/boot/efi" "/boot"; do
-        if [[ -d "$ROOT_PATH$path" ]] && mountpoint -q "$ROOT_PATH$path" 2>/dev/null; then
+        if [[ -d "$ROOT_PATH$path" && mountpoint -q "$ROOT_PATH$path" 2>/dev/null ]]; then
             EFI_PATH="$path"
             log_info "Auto-detected EFI path: $EFI_PATH"
             break
