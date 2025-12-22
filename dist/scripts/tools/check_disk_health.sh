@@ -80,7 +80,7 @@ fi
 
 # Show device size if available
 if [[ -r "$DEVICE" ]]; then
-    size=$(blockdev --getsize64 "$DEVICE" 2>/dev/null | numfmt --to=iec 2>/dev/null || echo "unknown")
+    local size=$(blockdev --getsize64 "$DEVICE" 2>/dev/null | numfmt --to=iec 2>/dev/null || echo "unknown")
     echo "  Size: $size"
 fi
 
@@ -105,7 +105,7 @@ if [[ -n "$mount_point" ]]; then
             log_info "Running ext4 filesystem check..."
             if umount "$DEVICE" 2>/dev/null; then
                 log_info "Unmounted device for filesystem check"
-                fsck_output=""
+                local fsck_output
                 if fsck_output=$(fsck -n "$DEVICE" 2>&1); then
                     log_success "✅ Filesystem integrity: GOOD"
                 else
@@ -124,7 +124,7 @@ if [[ -n "$mount_point" ]]; then
             ;;
         "btrfs")
             log_info "Running btrfs filesystem check..."
-            btrfs_output=""
+            local btrfs_output
             if btrfs_output=$(btrfs check --readonly "$DEVICE" 2>&1); then
                 log_success "✅ Btrfs filesystem integrity: GOOD"
             else
@@ -135,7 +135,7 @@ if [[ -n "$mount_point" ]]; then
             ;;
         "xfs")
             log_info "Running xfs filesystem check..."
-            xfs_output=""
+            local xfs_output
             if xfs_output=$(xfs_repair -n "$DEVICE" 2>&1); then
                 log_success "✅ XFS filesystem integrity: GOOD"
             else
