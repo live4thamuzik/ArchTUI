@@ -115,18 +115,18 @@ cd archinstall
 │  - Installer  │  - Configuration   │  - Disk Tools          │
 │  - Tools      │  - Validation      │  - System Tools        │
 │  - Quit       │  - Installation    │  - User Tools          │
-│               │                   │  - Network Tools        │
+│               │                    │  - Network Tools       │
 └─────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    Bash Backend                             │
 ├─────────────────────────────────────────────────────────────┤
-│  Installation Scripts    │  System Administration Scripts  │
-│  - install.sh           │  - scripts/tools/               │
-│  - disk_strategies.sh   │  - 19 specialized tools         │
-│  - chroot_config.sh     │  - Full CLI integration         │
-│  - Package management   │  - Real-time output             │
+│  Installation Scripts    │  System Administration Scripts   │
+│  - install.sh            │  - scripts/tools/                │
+│  - disk_strategies.sh    │  - 19 specialized tools          │
+│  - chroot_config.sh      │  - Full CLI integration          │
+│  - Package management    │  - Real-time output              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
