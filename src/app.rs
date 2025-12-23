@@ -642,7 +642,10 @@ impl App {
                 match key_event.code {
                     KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
                         // Toggle between Yes (0) and No (1)
+                        let old_selected = dialog.selected;
                         dialog.selected = if dialog.selected == 0 { 1 } else { 0 };
+                        log::debug!("ConfirmDialog toggle: {} -> {} (0=Yes/left, 1=No/right)",
+                            old_selected, dialog.selected);
                     }
                     KeyCode::Enter => {
                         // SECURITY FIX: Use is_confirmed() method to get correct selection
@@ -651,6 +654,9 @@ impl App {
                         let action = dialog.confirm_action.clone();
                         let data = dialog.action_data.clone();
 
+                        log::info!("ConfirmDialog Enter: selected={}, is_confirmed={}, action={}",
+                            dialog.selected, confirmed, action);
+
                         // Clear dialog and restore previous mode
                         state.confirm_dialog = None;
                         if let Some(prev_mode) = state.pre_dialog_mode.take() {
@@ -658,9 +664,12 @@ impl App {
                         }
 
                         if confirmed {
+                            log::info!("Executing confirmed action: {}", action);
                             // Drop the lock before executing action
                             drop(state);
                             self.execute_confirmed_action(&action, data)?;
+                        } else {
+                            log::info!("Action cancelled, returning to previous mode");
                         }
                     }
                     KeyCode::Esc => {
@@ -936,7 +945,7 @@ impl App {
                 }
                 "start_installation" => {
                     log::info!("Confirmed: starting installation");
-                    // Start installation
+                    self.start_installation()?;
                 }
                 _ => {
                     log::warn!("Unknown confirm action: {}", action);
