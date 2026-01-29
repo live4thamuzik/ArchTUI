@@ -641,16 +641,16 @@ impl App {
             if let Some(ref mut dialog) = state.confirm_dialog {
                 match key_event.code {
                     KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
-                        // Toggle between Yes (0) and No (1)
+                        // Toggle between No (0) and Yes (1)
                         let old_selected = dialog.selected;
                         dialog.selected = if dialog.selected == 0 { 1 } else { 0 };
-                        log::debug!("ConfirmDialog toggle: {} -> {} (0=Yes/left, 1=No/right)",
+                        log::debug!("ConfirmDialog toggle: {} -> {} (0=No/left, 1=Yes/right)",
                             old_selected, dialog.selected);
                     }
                     KeyCode::Enter => {
                         // SECURITY FIX: Use is_confirmed() method to get correct selection
-                        // selected = 0 means Yes/Confirm (left), selected = 1 means No/Cancel (right)
-                        let confirmed = dialog.is_confirmed(); // Returns true if selected == 0 (Yes on left)
+                        // selected = 0 means No/Cancel (left), selected = 1 means Yes/Confirm (right)
+                        let confirmed = dialog.is_confirmed(); // Returns true if selected == 1 (Yes on right)
                         let action = dialog.confirm_action.clone();
                         let data = dialog.action_data.clone();
 
