@@ -2,9 +2,10 @@
 //!
 //! Provides a TUI file browser for navigating directories and selecting files.
 
+use crate::theme::Colors;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
@@ -257,11 +258,11 @@ impl FileBrowser {
         let path_block = Block::default()
             .borders(Borders::ALL)
             .title(" Select Configuration File ")
-            .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            .border_style(Style::default().fg(Color::Cyan));
+            .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+            .border_style(Style::default().fg(Colors::PRIMARY));
 
         let path_paragraph = Paragraph::new(path_display)
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(Colors::SECONDARY))
             .block(path_block);
         f.render_widget(path_paragraph, chunks[0]);
 
@@ -275,13 +276,13 @@ impl FileBrowser {
             .take(visible_height)
             .map(|(i, entry)| {
                 let (icon, color) = if entry.is_dir {
-                    ("", Color::Blue)
+                    ("", Colors::INFO)
                 } else if entry.name.ends_with(".toml") {
-                    ("", Color::Green)
+                    ("", Colors::SUCCESS)
                 } else if entry.name.ends_with(".json") {
-                    ("", Color::Yellow)
+                    ("", Colors::SECONDARY)
                 } else {
-                    ("", Color::White)
+                    ("", Colors::FG_PRIMARY)
                 };
 
                 let size_str = if entry.is_dir {
@@ -292,8 +293,8 @@ impl FileBrowser {
 
                 let style = if i == state.selected {
                     Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::Cyan)
+                        .fg(Colors::SELECTED_FG)
+                        .bg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(color)
@@ -314,7 +315,7 @@ impl FileBrowser {
 
         let list_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Gray));
+            .border_style(Style::default().fg(Colors::FG_MUTED));
 
         let list = List::new(items).block(list_block);
         f.render_widget(list, chunks[1]);
@@ -327,14 +328,14 @@ impl FileBrowser {
         };
 
         let help_style = if state.error.is_some() {
-            Style::default().fg(Color::Red)
+            Style::default().fg(Colors::ERROR)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(Colors::FG_MUTED)
         };
 
         let help_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Gray));
+            .border_style(Style::default().fg(Colors::FG_MUTED));
 
         let help_paragraph = Paragraph::new(help_text)
             .style(help_style)

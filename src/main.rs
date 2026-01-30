@@ -12,6 +12,7 @@ mod input;
 mod installer;
 mod package_utils;
 mod scrolling;
+mod theme;
 mod ui;
 
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};

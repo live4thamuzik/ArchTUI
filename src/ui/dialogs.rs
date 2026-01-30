@@ -8,9 +8,10 @@ use crate::components::confirm_dialog::ConfirmDialog;
 use crate::components::floating_window::{FloatingWindow, FloatingWindowConfig};
 use crate::components::pty_terminal::PtyTerminal;
 use crate::input::InputHandler;
+use crate::theme::Colors;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
@@ -35,7 +36,7 @@ pub fn render_embedded_terminal(
         let block = Block::default()
             .borders(Borders::ALL)
             .title(" Terminal ")
-            .style(Style::default().bg(Color::Black));
+            .style(Style::default().bg(Colors::SELECTED_FG));
         f.render_widget(block, area);
     }
 }
@@ -80,7 +81,7 @@ pub fn render_file_browser(f: &mut Frame, state: &AppState) {
 /// Render tool dialog in specified area
 pub fn render_tool_dialog_in_area(f: &mut Frame, state: &AppState, area: Rect) {
     // Render background
-    let bg = Block::default().style(Style::default().bg(Color::Black));
+    let bg = Block::default().style(Style::default().bg(Colors::SELECTED_FG));
     f.render_widget(bg, area);
 
     // Delegate to tool dialog renderer
@@ -105,7 +106,7 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
             Block::default()
                 .borders(Borders::ALL)
                 .title(format!("Configure {}", dialog.tool_name))
-                .style(Style::default().bg(Color::DarkGray)),
+                .style(Style::default().bg(Colors::FG_MUTED)),
             dialog_rect,
         );
 
@@ -120,7 +121,7 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
         let mut param_items = Vec::new();
         for (i, param) in dialog.parameters.iter().enumerate() {
             let style = if i == dialog.current_param {
-                Style::default().fg(Color::Yellow)
+                Style::default().fg(Colors::SECONDARY)
             } else {
                 Style::default()
             };
@@ -132,13 +133,13 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
             };
 
             param_items.push(ListItem::new(Line::from(vec![
-                Span::styled(format!("{}: ", param.name), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("{}: ", param.name), Style::default().fg(Colors::PRIMARY)),
                 Span::styled(value.to_string(), style),
             ])));
         }
 
         let param_list =
-            List::new(param_items).highlight_style(Style::default().fg(Color::Yellow));
+            List::new(param_items).highlight_style(Style::default().fg(Colors::SECONDARY));
 
         f.render_widget(param_list, param_area);
 
@@ -152,7 +153,7 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
 
         f.render_widget(
             Paragraph::new("Enter: Next parameter | b: Back to tools")
-                .style(Style::default().fg(Color::Gray)),
+                .style(Style::default().fg(Colors::FG_SECONDARY)),
             instruction_area,
         );
     }
@@ -173,7 +174,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
         // Fill entire screen with black background
         let background = Block::default()
             .borders(Borders::NONE)
-            .style(Style::default().bg(Color::Black).fg(Color::Black));
+            .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::SELECTED_FG));
         f.render_widget(background, area);
 
         // Calculate dialog size and position (centered)
@@ -198,21 +199,21 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
         // Render dialog with black background and white border
         let dialog_bg = Block::default()
             .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Black).fg(Color::White));
+            .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::FG_PRIMARY));
         f.render_widget(dialog_bg, dialog_area);
 
         // Title
         let title = Paragraph::new(dialog.title.clone())
             .block(Block::default().borders(Borders::NONE))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Yellow));
+            .style(Style::default().fg(Colors::SECONDARY));
         f.render_widget(title, chunks[0]);
 
         // Instructions
         let instructions = Paragraph::new(dialog.instructions.clone())
             .block(Block::default().borders(Borders::NONE))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::White));
+            .style(Style::default().fg(Colors::FG_PRIMARY));
         f.render_widget(instructions, chunks[1]);
 
         // Content based on input type
@@ -228,7 +229,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
 
                 let input_widget = Paragraph::new(input_display)
                     .block(Block::default().borders(Borders::ALL).title("Input"))
-                    .style(Style::default().fg(Color::Green));
+                    .style(Style::default().fg(Colors::SUCCESS));
                 f.render_widget(input_widget, chunks[2]);
             }
             crate::input::InputType::Selection {
@@ -244,7 +245,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                     .take(end - start)
                     .map(|(index, option)| {
                         let style = if index == selected_index {
-                            Style::default().fg(Color::Yellow)
+                            Style::default().fg(Colors::SECONDARY)
                         } else {
                             Style::default()
                         };
@@ -264,7 +265,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                     .enumerate()
                     .map(|(index, disk)| {
                         let style = if index == selected_index {
-                            Style::default().fg(Color::Yellow)
+                            Style::default().fg(Colors::SECONDARY)
                         } else {
                             Style::default()
                         };
@@ -301,11 +302,11 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                     .title(title)
                     .title_style(
                         Style::default()
-                            .fg(Color::Cyan)
+                            .fg(Colors::PRIMARY)
                             .add_modifier(Modifier::BOLD),
                     )
                     .title_bottom("Type commands, Enter to execute, Esc to exit")
-                    .style(Style::default().bg(Color::Black).fg(Color::White));
+                    .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::FG_PRIMARY));
 
                 if *show_search_results && !search_results.is_empty() {
                     // Display search results with scrolling
@@ -331,7 +332,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                             // Style selected packages differently
                             let style = if is_selected {
                                 Style::default()
-                                    .fg(Color::Green)
+                                    .fg(Colors::SUCCESS)
                                     .add_modifier(Modifier::BOLD)
                             } else {
                                 Style::default()
@@ -347,7 +348,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                         ))
                         .highlight_style(
                             Style::default()
-                                .fg(Color::LightGreen)
+                                .fg(Colors::SUCCESS_LIGHT)
                                 .add_modifier(Modifier::BOLD),
                         )
                         .highlight_symbol(">> ");
@@ -371,12 +372,12 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                     };
                     let input_line = format!("{}{}", prompt, current_input);
                     list_items.push(
-                        ListItem::new(input_line).style(Style::default().fg(Color::Yellow)),
+                        ListItem::new(input_line).style(Style::default().fg(Colors::SECONDARY)),
                     );
 
                     let list = List::new(list_items)
                         .block(block)
-                        .style(Style::default().bg(Color::Black).fg(Color::White));
+                        .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::FG_PRIMARY));
 
                     f.render_widget(list, chunks[2]);
                 }
@@ -386,7 +387,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                 let warning_text = message.join("\n");
                 let warning_widget = Paragraph::new(warning_text)
                     .block(Block::default().borders(Borders::ALL).title("⚠️  WARNING"))
-                    .style(Style::default().fg(Color::Red))
+                    .style(Style::default().fg(Colors::ERROR))
                     .alignment(Alignment::Center)
                     .wrap(ratatui::widgets::Wrap { trim: true });
                 f.render_widget(warning_widget, chunks[2]);
@@ -401,7 +402,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
 
                 let input_widget = Paragraph::new(input_display)
                     .block(Block::default().borders(Borders::ALL).title("Password"))
-                    .style(Style::default().fg(Color::Green));
+                    .style(Style::default().fg(Colors::SUCCESS));
                 f.render_widget(input_widget, chunks[2]);
             }
             crate::input::InputType::MultiDiskSelection {
@@ -422,11 +423,11 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                         let item_text = format!("{} {}", status, disk);
 
                         ListItem::new(item_text).style(if i == scroll_state.selected_index {
-                            Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                            Style::default().fg(Colors::SECONDARY).bg(Colors::FG_MUTED)
                         } else if is_selected {
-                            Style::default().fg(Color::Green)
+                            Style::default().fg(Colors::SUCCESS)
                         } else {
-                            Style::default().fg(Color::White)
+                            Style::default().fg(Colors::FG_PRIMARY)
                         })
                     })
                     .collect();
@@ -439,7 +440,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                         min_disks,
                         max_disks
                     )))
-                    .highlight_style(Style::default().fg(Color::Yellow).bg(Color::DarkGray));
+                    .highlight_style(Style::default().fg(Colors::SECONDARY).bg(Colors::FG_MUTED));
 
                 f.render_widget(list, chunks[2]);
             }
@@ -449,7 +450,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
         let status = Paragraph::new("Enter: Confirm | Esc: Cancel")
             .block(Block::default().borders(Borders::NONE))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Cyan));
+            .style(Style::default().fg(Colors::PRIMARY));
         f.render_widget(status, chunks[3]);
     }
 }

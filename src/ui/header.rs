@@ -7,9 +7,10 @@ use crate::app::AppState;
 use crate::components::help_overlay::HelpOverlay;
 use crate::components::keybindings::KeybindingContext;
 use crate::components::nav_bar::NavBar;
+use crate::theme::Colors;
 use ratatui::{
     layout::{Alignment, Rect},
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Gauge, Paragraph, Wrap},
     Frame,
@@ -52,7 +53,7 @@ impl HeaderRenderer {
         let title_widget = Paragraph::new(title)
             .block(Block::default().borders(Borders::ALL))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Cyan));
+            .style(Style::default().fg(Colors::PRIMARY));
         f.render_widget(title_widget, area);
     }
 
@@ -61,27 +62,27 @@ impl HeaderRenderer {
         vec![
             Line::from(vec![Span::styled(
                 "  █████╗ ██████╗  ██████╗██╗  ██╗██╗███╗   ██╗███████╗████████╗ █████╗ ██╗     ██╗     ",
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(Colors::PRIMARY),
             )]),
             Line::from(vec![Span::styled(
                 " ██╔══██╗██╔══██╗██╔════╝██║  ██║██║████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██║     ██║     ",
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(Colors::PRIMARY),
             )]),
             Line::from(vec![Span::styled(
                 " ███████║██████╔╝██║     ███████║██║██╔██╗ ██║███████╗   ██║   ███████║██║     ██║     ",
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(Colors::PRIMARY),
             )]),
             Line::from(vec![Span::styled(
                 " ██╔══██║██╔══██╗██║     ██╔══██║██║██║╚██╗██║╚════██║   ██║   ██╔══██║██║     ██║     ",
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(Colors::PRIMARY),
             )]),
             Line::from(vec![Span::styled(
                 " ██║  ██║██║  ██║╚██████╗██║  ██║██║██║ ╚████║███████║   ██║   ██║  ██║███████╗███████╗",
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(Colors::PRIMARY),
             )]),
             Line::from(vec![Span::styled(
                 " ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝",
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(Colors::PRIMARY),
             )]),
         ]
     }
@@ -92,7 +93,7 @@ pub fn render_instructions(f: &mut Frame, area: Rect, text: &str) {
     let instructions = Paragraph::new(text)
         .block(Block::default().borders(Borders::NONE))
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Yellow));
+        .style(Style::default().fg(Colors::SECONDARY));
     f.render_widget(instructions, area);
 }
 
@@ -104,7 +105,7 @@ pub fn render_progress_bar(f: &mut Frame, area: Rect, progress: u16) {
                 .borders(Borders::ALL)
                 .title("Installation Progress"),
         )
-        .gauge_style(Style::default().fg(Color::Blue))
+        .gauge_style(Style::default().fg(Colors::INFO))
         .percent(progress);
     f.render_widget(gauge, area);
 }

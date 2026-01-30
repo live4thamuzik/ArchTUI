@@ -307,16 +307,36 @@ prepare_system() {
     log_info "Preparing system..."
 
     # Update system clock
+    log_info "Enabling NTP time synchronization..."
     timedatectl set-ntp true
 
     # Wait for time sync
+    log_info "Waiting for time sync..."
     sleep 2
 
     # Configure mirrors
     configure_mirrors
 
     # Update package database
-    pacman -Sy --noconfirm
+    log_info "Updating package database (pacman -Sy)..."
+    pacman -Sy --noconfirm 2>&1 | while IFS= read -r line; do
+        case "$line" in
+            *"error"*|*"Error"*|*"ERROR"*)
+                echo -e "${LOG_COLORS[ERROR]}  [pacman] $line${COLORS[RESET]}"
+                ;;
+            *"warning"*|*"Warning"*|*"WARNING"*)
+                echo -e "${LOG_COLORS[WARN]}  [pacman] $line${COLORS[RESET]}"
+                ;;
+            *)
+                echo -e "${LOG_COLORS[COMMAND]}  [pacman] $line${COLORS[RESET]}"
+                ;;
+        esac
+    done
+
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+        log_error "pacman -Sy failed"
+        return 1
+    fi
 
     log_success "System prepared"
     return 0
@@ -326,59 +346,89 @@ configure_mirrors() {
     log_info "Configuring package mirrors..."
 
     # Backup original mirrorlist
+    log_info "Backing up original mirrorlist..."
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
     # Use reflector if available, otherwise use default mirrors
     if command -v reflector >/dev/null 2>&1; then
-        log_info "Using reflector to rank mirrors..."
-        reflector --country "$MIRROR_COUNTRY" --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist || {
+        log_info "Using reflector to rank mirrors for country: ${MIRROR_COUNTRY:-US}..."
+        log_info "This may take a minute while mirrors are tested..."
+        reflector --country "${MIRROR_COUNTRY:-US}" --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 2>&1 | while IFS= read -r line; do
+            case "$line" in
+                *"error"*|*"Error"*)
+                    echo -e "${LOG_COLORS[ERROR]}  [reflector] $line${COLORS[RESET]}"
+                    ;;
+                *"warning"*|*"Warning"*)
+                    echo -e "${LOG_COLORS[WARN]}  [reflector] $line${COLORS[RESET]}"
+                    ;;
+                *)
+                    echo -e "${LOG_COLORS[COMMAND]}  [reflector] $line${COLORS[RESET]}"
+                    ;;
+            esac
+        done
+        if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
             log_warn "Reflector failed, using default mirrors"
             cp /etc/pacman.d/mirrorlist.backup /etc/pacman.d/mirrorlist
-        }
+        else
+            log_success "Mirrors ranked and saved"
+        fi
     else
-        log_info "Using default mirrors"
+        log_info "Reflector not available, using default mirrors"
     fi
 
     # Enable multilib if requested
     if [[ "$MULTILIB" == "Yes" ]]; then
         log_info "Enabling multilib repository..."
         sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf
+        log_success "Multilib repository enabled"
     fi
 }
 
 # --- Disk Partitioning ---
 partition_disk() {
     log_info "Starting disk partitioning..."
+    log_info "Target disk: $INSTALL_DISK"
+    log_info "Partitioning strategy: $PARTITIONING_STRATEGY"
+    log_info "Boot mode: $BOOT_MODE"
 
     # Map TUI partitioning options to disk strategy functions
     local strategy_func=""
     case "$PARTITIONING_STRATEGY" in
         "auto_simple")
             strategy_func="do_auto_simple_partitioning_efi_xbootldr"
+            log_info "Using auto simple partitioning (EFI + XBOOTLDR)"
             ;;
         "auto_simple_luks")
             strategy_func="do_auto_simple_luks_partitioning"
+            log_info "Using auto simple LUKS encrypted partitioning"
             ;;
         "auto_lvm")
             strategy_func="do_auto_lvm_partitioning_efi_xbootldr"
+            log_info "Using auto LVM partitioning (EFI + XBOOTLDR)"
             ;;
         "auto_luks_lvm")
             strategy_func="do_auto_luks_lvm_partitioning"
+            log_info "Using auto LUKS + LVM partitioning"
             ;;
         "auto_raid")
             strategy_func="do_auto_raid_partitioning"
+            log_info "Using auto RAID partitioning"
             ;;
         "auto_raid_luks")
             strategy_func="do_auto_raid_luks_partitioning"
+            log_info "Using auto RAID + LUKS partitioning"
             ;;
         "auto_raid_lvm")
             strategy_func="do_auto_raid_lvm_partitioning"
+            log_info "Using auto RAID + LVM partitioning"
             ;;
         "auto_raid_lvm_luks")
             strategy_func="do_auto_raid_lvm_luks_partitioning"
+            log_info "Using auto RAID + LVM + LUKS partitioning"
             ;;
         "manual")
             strategy_func="do_manual_partitioning_guided"
+            log_info "Using manual partitioning (guided)"
             ;;
         *)
             log_error "Unknown partitioning strategy: $PARTITIONING_STRATEGY"
@@ -387,6 +437,7 @@ partition_disk() {
     esac
 
     # Execute the disk strategy
+    log_info "Executing disk strategy: $strategy_func"
     execute_disk_strategy "$strategy_func"
 
     log_success "Disk partitioning complete"
@@ -484,15 +535,37 @@ install_base_system() {
         "${microcode_packages[@]}"
     )
 
-    log_info "Installing packages: ${all_packages[*]}"
+    log_info "Total packages to install: ${#all_packages[@]}"
+    log_info "Package list: ${all_packages[*]}"
+    log_info "Starting pacstrap - this will take several minutes..."
+    log_info "Downloading and installing packages to /mnt..."
 
-    # Run pacstrap with array expansion
-    pacstrap -K /mnt "${all_packages[@]}" || {
+    # Run pacstrap with array expansion and show output
+    pacstrap -K /mnt "${all_packages[@]}" 2>&1 | while IFS= read -r line; do
+        # Filter and format pacstrap output for readability with colors
+        case "$line" in
+            *"error"*|*"Error"*|*"ERROR"*|*"failed"*)
+                echo -e "${LOG_COLORS[ERROR]}  [pacstrap] $line${COLORS[RESET]}"
+                ;;
+            *"warning"*|*"Warning"*|*"WARNING"*)
+                echo -e "${LOG_COLORS[WARN]}  [pacstrap] $line${COLORS[RESET]}"
+                ;;
+            *"downloading"*|*"installing"*|*"Packages"*|*"Total"*|*"::"*)
+                echo -e "${LOG_COLORS[COMMAND]}  [pacstrap] $line${COLORS[RESET]}"
+                ;;
+            *)
+                # Show other lines dimmed
+                echo -e "${COLORS[DIM]}  $line${COLORS[RESET]}"
+                ;;
+        esac
+    done
+
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
         log_error "pacstrap failed"
         return 1
-    }
+    fi
 
-    log_success "Base system installed"
+    log_success "Base system installed successfully"
     return 0
 }
 
@@ -519,8 +592,10 @@ generate_fstab() {
 # --- Chroot Configuration ---
 configure_chroot() {
     log_info "Configuring system in chroot..."
+    log_info "This phase includes: timezone, locale, users, bootloader, desktop environment..."
 
     # Copy necessary scripts to target system
+    log_info "Copying configuration scripts to /mnt/root/..."
     cp "$SCRIPT_DIR/chroot_config.sh" /mnt/root/
     cp "$SCRIPT_DIR/utils.sh" /mnt/root/
     mkdir -p /mnt/root/desktops
@@ -578,13 +653,41 @@ CONFIGEOF
     chmod +x /mnt/root/install_config.sh
 
     # Execute chroot configuration
+    log_info "Entering chroot environment..."
+    log_info "Running chroot_config.sh inside /mnt..."
+
     arch-chroot /mnt /bin/bash -c "
         source /root/install_config.sh
         cd /root
         ./chroot_config.sh
-    "
+    " 2>&1 | while IFS= read -r line; do
+        # Pass through colored output from chroot, or colorize based on content
+        if [[ "$line" == *$'\033'* ]]; then
+            # Line already has ANSI codes, pass through with prefix
+            echo -e "  [chroot] $line"
+        else
+            # Add colors based on content
+            case "$line" in
+                *"ERROR"*|*"error"*|*"Error"*|*"failed"*|*"FAILED"*)
+                    echo -e "${LOG_COLORS[ERROR]}  [chroot] $line${COLORS[RESET]}"
+                    ;;
+                *"WARN"*|*"warning"*|*"Warning"*)
+                    echo -e "${LOG_COLORS[WARN]}  [chroot] $line${COLORS[RESET]}"
+                    ;;
+                *"SUCCESS"*|*"success"*|*"complete"*|*"Complete"*)
+                    echo -e "${LOG_COLORS[SUCCESS]}  [chroot] $line${COLORS[RESET]}"
+                    ;;
+                *"==="*)
+                    echo -e "${LOG_COLORS[PHASE]}  [chroot] $line${COLORS[RESET]}"
+                    ;;
+                *)
+                    echo -e "${LOG_COLORS[COMMAND]}  [chroot] $line${COLORS[RESET]}"
+                    ;;
+            esac
+        fi
+    done
 
-    local chroot_exit=$?
+    local chroot_exit=${PIPESTATUS[0]}
 
     # Clean up copied scripts
     rm -f /mnt/root/chroot_config.sh

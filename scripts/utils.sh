@@ -3,7 +3,51 @@
 
 set -euo pipefail
 
-# Logging configuration
+# =============================================================================
+# COLOR DEFINITIONS
+# =============================================================================
+# ANSI color codes for terminal output
+# Usage: echo -e "${COLOR_RED}Error message${COLOR_RESET}"
+
+declare -A COLORS=(
+    [RESET]='\033[0m'
+    [BOLD]='\033[1m'
+    [DIM]='\033[2m'
+    # Standard colors
+    [BLACK]='\033[30m'
+    [RED]='\033[31m'
+    [GREEN]='\033[32m'
+    [YELLOW]='\033[33m'
+    [BLUE]='\033[34m'
+    [MAGENTA]='\033[35m'
+    [CYAN]='\033[36m'
+    [WHITE]='\033[37m'
+    # Bright colors
+    [BRIGHT_RED]='\033[91m'
+    [BRIGHT_GREEN]='\033[92m'
+    [BRIGHT_YELLOW]='\033[93m'
+    [BRIGHT_BLUE]='\033[94m'
+    [BRIGHT_MAGENTA]='\033[95m'
+    [BRIGHT_CYAN]='\033[96m'
+    [BRIGHT_WHITE]='\033[97m'
+)
+
+# Semantic color aliases for log levels
+declare -A LOG_COLORS=(
+    [DEBUG]="${COLORS[DIM]}${COLORS[WHITE]}"
+    [INFO]="${COLORS[WHITE]}"
+    [WARN]="${COLORS[YELLOW]}"
+    [WARNING]="${COLORS[YELLOW]}"
+    [ERROR]="${COLORS[BRIGHT_RED]}"
+    [SUCCESS]="${COLORS[BRIGHT_GREEN]}"
+    [PHASE]="${COLORS[BRIGHT_CYAN]}"
+    [COMMAND]="${COLORS[DIM]}${COLORS[CYAN]}"
+)
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
 LOG_FILE="/tmp/archinstall.log"
 
 # Enhanced logging with automatic log file creation
@@ -22,12 +66,16 @@ setup_logging() {
     }
 }
 
-# Enhanced logging functions with levels
+# =============================================================================
+# LOGGING FUNCTIONS
+# =============================================================================
+# All log functions output colored text to terminal and plain text to log file
+
 log_debug() {
     if [[ "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
         local message="$1"
         local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        echo "[$timestamp] DEBUG: $message"
+        echo -e "${LOG_COLORS[DEBUG]}[$timestamp] DEBUG: $message${COLORS[RESET]}"
         echo "[$timestamp] DEBUG: $message" >> "$LOG_FILE" 2>/dev/null || true
     fi
 }
@@ -35,29 +83,49 @@ log_debug() {
 log_info() {
     local message="$1"
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo "[$timestamp] INFO: $message"
+    echo -e "${LOG_COLORS[INFO]}[$timestamp] INFO: $message${COLORS[RESET]}"
     echo "[$timestamp] INFO: $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 log_warn() {
     local message="$1"
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo "[$timestamp] WARN: $message" >&2
+    echo -e "${LOG_COLORS[WARN]}[$timestamp] WARN: $message${COLORS[RESET]}" >&2
     echo "[$timestamp] WARN: $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# Alias for consistency
+log_warning() {
+    log_warn "$1"
 }
 
 log_error() {
     local message="$1"
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo "[$timestamp] ERROR: $message" >&2
+    echo -e "${LOG_COLORS[ERROR]}[$timestamp] ERROR: $message${COLORS[RESET]}" >&2
     echo "[$timestamp] ERROR: $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 log_success() {
     local message="$1"
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo "[$timestamp] SUCCESS: $message"
+    echo -e "${LOG_COLORS[SUCCESS]}[$timestamp] SUCCESS: $message${COLORS[RESET]}"
     echo "[$timestamp] SUCCESS: $message" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# Log a phase/section header (bright cyan, bold)
+log_phase() {
+    local message="$1"
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${COLORS[BOLD]}${LOG_COLORS[PHASE]}[$timestamp] === $message ===${COLORS[RESET]}"
+    echo "[$timestamp] === $message ===" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# Log a command being executed (dimmed)
+log_cmd() {
+    local message="$1"
+    echo -e "${LOG_COLORS[COMMAND]}  > $message${COLORS[RESET]}"
+    echo "  > $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 # Error handling
@@ -405,7 +473,7 @@ capture_device_info() {
 # Package dependency checking and installation
 check_and_install_dependencies() {
     log_info "Checking required packages for installation..."
-    
+
     local required_packages=(
         "dosfstools"      # For mkfs.fat (FAT32 formatting)
         "exfatprogs"      # For exFAT support and FAT32 utilities
@@ -420,26 +488,43 @@ check_and_install_dependencies() {
         "grub"            # For GRUB bootloader
         "efibootmgr"      # For UEFI boot management
     )
-    
+
     local missing_packages=()
-    
+
+    log_info "Checking ${#required_packages[@]} required packages..."
     for package in "${required_packages[@]}"; do
         if ! pacman -Qi "$package" &>/dev/null; then
+            echo -e "${LOG_COLORS[WARN]}  Package missing: $package${COLORS[RESET]}"
             missing_packages+=("$package")
+        else
+            echo -e "${LOG_COLORS[SUCCESS]}  Package OK: $package${COLORS[RESET]}"
         fi
     done
-    
+
     if [ ${#missing_packages[@]} -gt 0 ]; then
-        log_info "Installing missing packages: ${missing_packages[*]}"
-        pacman -Sy --noconfirm "${missing_packages[@]}" || {
+        log_info "Installing ${#missing_packages[@]} missing packages: ${missing_packages[*]}"
+        pacman -Sy --noconfirm "${missing_packages[@]}" 2>&1 | while IFS= read -r line; do
+            case "$line" in
+                *"error"*|*"Error"*|*"ERROR"*)
+                    echo -e "${LOG_COLORS[ERROR]}  [pacman] $line${COLORS[RESET]}"
+                    ;;
+                *"warning"*|*"Warning"*|*"WARNING"*)
+                    echo -e "${LOG_COLORS[WARN]}  [pacman] $line${COLORS[RESET]}"
+                    ;;
+                *)
+                    echo -e "${LOG_COLORS[COMMAND]}  [pacman] $line${COLORS[RESET]}"
+                    ;;
+            esac
+        done
+        if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
             log_error "Failed to install required packages: ${missing_packages[*]}"
             return 1
-        }
+        fi
         log_success "All required packages installed successfully"
     else
-        log_info "All required packages are already installed"
+        log_success "All ${#required_packages[@]} required packages are already installed"
     fi
-    
+
     return 0
 }
 

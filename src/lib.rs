@@ -12,6 +12,7 @@ pub mod input;
 pub mod installer;
 pub mod package_utils;
 pub mod scrolling;
+pub mod theme;
 pub mod ui;
 
 // Re-export main types for convenience

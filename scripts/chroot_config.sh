@@ -12,19 +12,88 @@ if [[ -f "$SCRIPT_DIR/utils.sh" ]]; then
     source "$SCRIPT_DIR/utils.sh"
 fi
 
-# Logging functions (in case utils.sh wasn't sourced)
-_log() {
-    local level="$1"
-    local message="$2"
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] [$level] $message"
-}
+# =============================================================================
+# COLOR DEFINITIONS (fallback if utils.sh not sourced)
+# =============================================================================
+if [[ -z "${COLORS[RESET]:-}" ]]; then
+    declare -A COLORS=(
+        [RESET]='\033[0m'
+        [BOLD]='\033[1m'
+        [DIM]='\033[2m'
+        [WHITE]='\033[37m'
+        [RED]='\033[31m'
+        [GREEN]='\033[32m'
+        [YELLOW]='\033[33m'
+        [CYAN]='\033[36m'
+        [BRIGHT_RED]='\033[91m'
+        [BRIGHT_GREEN]='\033[92m'
+        [BRIGHT_CYAN]='\033[96m'
+    )
 
-log_info() { _log "INFO" "$1"; }
-log_warn() { _log "WARN" "$1"; }
-log_error() { _log "ERROR" "$1"; }
-log_success() { _log "SUCCESS" "$1"; }
+    declare -A LOG_COLORS=(
+        [INFO]="${COLORS[WHITE]}"
+        [WARN]="${COLORS[YELLOW]}"
+        [ERROR]="${COLORS[BRIGHT_RED]}"
+        [SUCCESS]="${COLORS[BRIGHT_GREEN]}"
+        [PHASE]="${COLORS[BRIGHT_CYAN]}"
+        [COMMAND]="${COLORS[DIM]}${COLORS[CYAN]}"
+    )
+fi
+
+# Logging functions (fallback if utils.sh wasn't sourced)
+if ! declare -f log_info > /dev/null 2>&1; then
+    _log() {
+        local level="$1"
+        local message="$2"
+        local timestamp
+        local color="${LOG_COLORS[$level]:-${COLORS[WHITE]}}"
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        echo -e "${color}[$timestamp] $level: $message${COLORS[RESET]}"
+    }
+
+    log_info() { _log "INFO" "$1"; }
+    log_warn() { _log "WARN" "$1"; }
+    log_error() { _log "ERROR" "$1"; }
+    log_success() { _log "SUCCESS" "$1"; }
+fi
+
+# Verbose package installation wrapper
+# Shows package installation progress for user visibility
+install_packages() {
+    local description="$1"
+    shift
+    local packages=("$@")
+
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        log_info "No packages to install for: $description"
+        return 0
+    fi
+
+    log_info "Installing $description (${#packages[@]} packages)..."
+    log_info "Packages: ${packages[*]}"
+
+    pacman -S --noconfirm --needed "${packages[@]}" 2>&1 | while IFS= read -r line; do
+        case "$line" in
+            *"error"*|*"Error"*|*"ERROR"*)
+                echo -e "${LOG_COLORS[ERROR]}  [pacman] $line${COLORS[RESET]}"
+                ;;
+            *"warning"*|*"Warning"*|*"WARNING"*)
+                echo -e "${LOG_COLORS[WARN]}  [pacman] $line${COLORS[RESET]}"
+                ;;
+            *"downloading"*|*"installing"*|*"::"*|*"Packages"*|*"Total"*)
+                echo -e "${LOG_COLORS[COMMAND]}  [pacman] $line${COLORS[RESET]}"
+                ;;
+        esac
+    done
+
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+        log_warn "$description installation had issues"
+        return 1
+    fi
+
+    log_success "$description installed"
+    return 0
+}
 
 # =============================================================================
 # MAIN CONFIGURATION FUNCTION
@@ -627,39 +696,39 @@ install_desktop_environment() {
 
     case "$de" in
         "kde"|"plasma")
-            pacman -S --noconfirm --needed plasma kde-applications || log_warn "KDE installation had warnings"
+            install_packages "KDE Plasma" plasma kde-applications
             ;;
         "gnome")
-            pacman -S --noconfirm --needed gnome gnome-extra || log_warn "GNOME installation had warnings"
+            install_packages "GNOME" gnome gnome-extra
             ;;
         "xfce")
-            pacman -S --noconfirm --needed xfce4 xfce4-goodies || log_warn "XFCE installation had warnings"
+            install_packages "XFCE" xfce4 xfce4-goodies
             ;;
         "i3"|"i3wm")
-            pacman -S --noconfirm --needed i3-wm i3status i3lock dmenu rofi alacritty || log_warn "i3 installation had warnings"
+            install_packages "i3 Window Manager" i3-wm i3status i3lock dmenu rofi alacritty
             ;;
         "hyprland")
-            pacman -S --noconfirm --needed hyprland waybar swaylock swayidle wlogout \
-                rofi-wayland grim slurp kitty xdg-desktop-portal-hyprland || log_warn "Hyprland installation had warnings"
+            install_packages "Hyprland" hyprland waybar swaylock swayidle wlogout \
+                rofi-wayland grim slurp kitty xdg-desktop-portal-hyprland
             ;;
         "sway")
-            pacman -S --noconfirm --needed sway swaylock swayidle waybar \
-                rofi-wayland grim slurp foot xdg-desktop-portal-wlr || log_warn "Sway installation had warnings"
+            install_packages "Sway" sway swaylock swayidle waybar \
+                rofi-wayland grim slurp foot xdg-desktop-portal-wlr
             ;;
         "cinnamon")
-            pacman -S --noconfirm --needed cinnamon nemo-fileroller || log_warn "Cinnamon installation had warnings"
+            install_packages "Cinnamon" cinnamon nemo-fileroller
             ;;
         "mate")
-            pacman -S --noconfirm --needed mate mate-extra || log_warn "MATE installation had warnings"
+            install_packages "MATE" mate mate-extra
             ;;
         "budgie")
-            pacman -S --noconfirm --needed budgie-desktop budgie-extras || log_warn "Budgie installation had warnings"
+            install_packages "Budgie" budgie-desktop budgie-extras
             ;;
         "none"|"minimal"|"")
-            log_info "No desktop environment selected"
+            log_info "No desktop environment selected - skipping"
             ;;
         *)
-            log_warn "Unknown desktop environment: $de"
+            log_warn "Unknown desktop environment: $de - skipping"
             ;;
     esac
 
@@ -674,27 +743,32 @@ install_display_manager() {
 
     case "$dm" in
         "sddm")
-            pacman -S --noconfirm --needed sddm
+            install_packages "SDDM" sddm
+            log_info "Enabling SDDM service..."
             systemctl enable sddm.service
             ;;
         "gdm")
-            pacman -S --noconfirm --needed gdm
+            install_packages "GDM" gdm
+            log_info "Enabling GDM service..."
             systemctl enable gdm.service
             ;;
         "lightdm")
-            pacman -S --noconfirm --needed lightdm lightdm-gtk-greeter
+            install_packages "LightDM" lightdm lightdm-gtk-greeter
+            log_info "Enabling LightDM service..."
             systemctl enable lightdm.service
             ;;
         "lxdm")
-            pacman -S --noconfirm --needed lxdm
+            install_packages "LXDM" lxdm
+            log_info "Enabling LXDM service..."
             systemctl enable lxdm.service
             ;;
         "ly")
-            pacman -S --noconfirm --needed ly
+            install_packages "Ly" ly
+            log_info "Enabling Ly service..."
             systemctl enable ly.service
             ;;
         "none"|"")
-            log_info "No display manager selected"
+            log_info "No display manager selected - skipping"
             ;;
         *)
             log_warn "Unknown display manager: $dm"

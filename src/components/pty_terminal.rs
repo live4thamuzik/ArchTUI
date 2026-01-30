@@ -6,6 +6,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use crate::theme::Colors;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -267,11 +268,11 @@ impl PtyTerminal {
             .title(title)
             .title_style(
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             )
-            .border_style(Style::default().fg(Color::Cyan))
-            .style(Style::default().bg(Color::Black));
+            .border_style(Style::default().fg(Colors::PRIMARY))
+            .style(Style::default().bg(Colors::BG_PRIMARY));
 
         let inner = block.inner(area);
         f.render_widget(block, area);

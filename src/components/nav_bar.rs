@@ -5,9 +5,10 @@
 #![allow(dead_code)]
 
 use super::keybindings::NavBarItem;
+use crate::theme::Colors;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -36,24 +37,24 @@ impl NavBar {
             if i > 0 {
                 spans.push(Span::styled(
                     "  ",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Colors::FG_MUTED),
                 ));
             }
 
             // Key in brackets with cyan color
             spans.push(Span::styled(
                 "[",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Colors::FG_MUTED),
             ));
             spans.push(Span::styled(
                 &item.key_display,
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ));
             spans.push(Span::styled(
                 "]",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Colors::FG_MUTED),
             ));
 
             // Action label
@@ -63,7 +64,7 @@ impl NavBar {
             ));
             spans.push(Span::styled(
                 &item.action_label,
-                Style::default().fg(Color::White),
+                Style::default().fg(Colors::FG_PRIMARY),
             ));
         }
 
@@ -72,9 +73,9 @@ impl NavBar {
             .block(
                 Block::default()
                     .borders(Borders::NONE)
-                    .style(Style::default().bg(Color::Rgb(30, 30, 40))),
+                    .style(Style::default().bg(Colors::BG_SECONDARY)),
             )
-            .style(Style::default().bg(Color::Rgb(30, 30, 40)));
+            .style(Style::default().bg(Colors::BG_SECONDARY));
 
         f.render_widget(paragraph, area);
     }
