@@ -16,28 +16,60 @@ mod theme;
 mod ui;
 
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use log::{debug, error, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::stdout;
 
 use crate::cli::Cli;
 use crate::config_file::InstallationConfig;
 
+/// Initialize the logger with appropriate settings
+fn init_logger() {
+    use env_logger::Builder;
+    use std::io::Write;
+
+    Builder::from_default_env()
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "[{} {}:{}] {}",
+                record.level(),
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                record.args()
+            )
+        })
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env() // Allows RUST_LOG env var to override
+        .init();
+}
+
 /// Main application entry point
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging first
+    init_logger();
+    info!("ArchInstall TUI starting up");
+
     let cli = Cli::parse_args();
+    debug!("CLI arguments parsed");
 
     match cli.command {
         Some(crate::cli::Commands::Validate { config }) => {
-            // Validate configuration file
+            info!("Validating configuration file: {:?}", config);
             match InstallationConfig::load_from_file(&config) {
                 Ok(config) => match config.validate() {
-                    Ok(_) => println!("✓ Configuration file is valid: {:?}", config),
+                    Ok(_) => {
+                        info!("Configuration validation successful");
+                        println!("✓ Configuration file is valid: {:?}", config);
+                    }
                     Err(e) => {
+                        error!("Configuration validation failed: {}", e);
                         eprintln!("✗ Configuration validation failed: {}", e);
                         std::process::exit(1);
                     }
                 },
                 Err(e) => {
+                    error!("Failed to load configuration file: {}", e);
                     eprintln!("✗ Failed to load configuration file: {}", e);
                     std::process::exit(1);
                 }
@@ -48,22 +80,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_config,
         }) => {
             if let Some(config_path) = config {
-                // Run installer with config file (skip TUI)
+                info!("Running headless installation with config: {:?}", config_path);
                 run_installer_with_config(&config_path)?;
             } else if let Some(save_path) = save_config {
-                // Run TUI and save config when done
+                info!("Running TUI installer with config save path: {:?}", save_path);
                 run_tui_installer_with_save(&save_path)?;
             } else {
-                // Run normal TUI installer
+                info!("Running TUI installer in interactive mode");
                 run_tui_installer()?;
             }
         }
         Some(crate::cli::Commands::Tools { tool }) => {
-            // Handle tool commands
+            debug!("Running tool command");
             run_tool_command(&tool)?;
         }
         None => {
-            // Run the TUI installer (default behavior)
+            info!("No command specified, launching TUI installer");
             run_tui_installer()?;
         }
     }
@@ -73,6 +105,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Run the TUI installer
 fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
+    debug!("Initializing terminal for TUI mode");
+
     // Initialize terminal
     enable_raw_mode()
         .map_err(|e| error::general_error(format!("Failed to enable raw mode: {}", e)))?;
@@ -102,14 +136,19 @@ fn run_installer_with_config(
     use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio};
 
+    info!("Loading configuration from: {:?}", config_path);
+
     // Load and validate configuration
     let config = InstallationConfig::load_from_file(config_path)?;
     config.validate()?;
 
+    info!("Configuration validated successfully");
     println!("✓ Configuration loaded and validated");
     println!("🚀 Starting installation with configuration file...");
 
     let script_path = "./scripts/install.sh";
+    info!("Spawning installer script: {}", script_path);
+
     let mut child = Command::new("bash")
         .arg(script_path)
         .arg("--config")
@@ -117,7 +156,10 @@ fn run_installer_with_config(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("Failed to spawn installer script");
+        .map_err(|e| {
+            error!("Failed to spawn installer script: {}", e);
+            error::ArchInstallError::script(format!("Failed to spawn installer: {}", e))
+        })?;
 
     // Capture and print stdout in real-time
     if let Some(stdout) = child.stdout.take() {
@@ -138,11 +180,15 @@ fn run_installer_with_config(
     let output = child.wait_with_output()?;
 
     if output.status.success() {
+        info!("Installation completed successfully");
         println!("\n✓ Installation completed successfully!");
     } else {
-        eprintln!("\n✗ Installation failed");
-        // Print any remaining stderr
         let stderr = String::from_utf8_lossy(&output.stderr);
+        error!("Installation failed. Exit code: {:?}", output.status.code());
+        if !stderr.is_empty() {
+            error!("Stderr: {}", stderr);
+        }
+        eprintln!("\n✗ Installation failed");
         if !stderr.is_empty() {
             eprintln!("--- Errors ---");
             eprintln!("{}", stderr);
@@ -428,6 +474,7 @@ fn execute_tool_script(script_name: &str, args: &[&str]) -> Result<(), Box<dyn s
     use std::process::{Command, Stdio};
 
     let script_path = format!("scripts/tools/{}", script_name);
+    info!("Executing tool script: {} with args: {:?}", script_path, args);
     println!("🔧 Executing: {} {}", script_path, args.join(" "));
 
     let output = Command::new("bash")
@@ -450,8 +497,10 @@ fn execute_tool_script(script_name: &str, args: &[&str]) -> Result<(), Box<dyn s
     }
 
     if output.status.success() {
+        info!("Tool {} executed successfully", script_name);
         println!("✅ Tool executed successfully");
     } else {
+        error!("Tool {} execution failed with exit code: {:?}", script_name, output.status.code());
         eprintln!("❌ Tool execution failed");
         std::process::exit(1);
     }

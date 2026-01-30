@@ -1,6 +1,15 @@
 //! Application state management and main event loop
 //!
 //! Handles the main application lifecycle, event processing, and state transitions.
+//!
+//! # Architecture Note
+//! This module is large (~3000 lines) and would benefit from being split into:
+//! - `state.rs` - AppState, AppMode, and related types
+//! - `handlers.rs` - Event handling methods
+//! - `navigation.rs` - Menu navigation methods
+//! - `tools.rs` - Tool execution methods
+//!
+//! This refactoring is planned for a future iteration.
 
 #![allow(dead_code)]
 
@@ -16,6 +25,7 @@ use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use log::{debug, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -185,6 +195,7 @@ impl App {
 
     /// Create a new application instance
     pub fn new(save_config_path: Option<std::path::PathBuf>) -> Self {
+        info!("Creating new App instance");
         Self {
             state: Arc::new(Mutex::new(AppState::default())),
             installer: None,
@@ -399,6 +410,8 @@ impl App {
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Starting main application loop");
+
         loop {
             // Poll PTY if in embedded terminal mode
             self.poll_pty()?;
@@ -1016,6 +1029,8 @@ impl App {
             let state = self.lock_state()?;
             state.main_menu_selection
         };
+
+        debug!("Main menu selection: {}", selection);
 
         let mut state = self.lock_state_mut()?;
         match selection {
@@ -1671,8 +1686,11 @@ impl App {
 
     /// Start the installation process
     fn start_installation(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("Starting installation process");
+
         // Check if we need to save the config before starting
         if let Some(save_path) = &self.save_config_path {
+            info!("Saving configuration to: {:?}", save_path);
             let state = self.lock_state()?;
             let file_config = crate::config_file::InstallationConfig::from(&state.config);
             file_config.save_to_file(save_path)?;
