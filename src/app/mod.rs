@@ -1,17 +1,15 @@
-//! Application state management and main event loop
+//! Application module
 //!
-//! Handles the main application lifecycle, event processing, and state transitions.
+//! Contains the main application logic, state management, and event handling.
 //!
-//! # Architecture Note
-//! This module is large (~3000 lines) and would benefit from being split into:
-//! - `state.rs` - AppState, AppMode, and related types
-//! - `handlers.rs` - Event handling methods
-//! - `navigation.rs` - Menu navigation methods
-//! - `tools.rs` - Tool execution methods
-//!
-//! This refactoring is planned for a future iteration.
+//! # Module Structure
+//! - `state` - Application state types (AppState, AppMode, ToolDialogState, etc.)
+//! - Main module - App struct and event loop
 
-#![allow(dead_code)]
+mod state;
+
+// Re-export state types for external use
+pub use state::{AppMode, AppState, ToolDialogState, ToolParam, ToolParameter};
 
 use crate::components::confirm_dialog::{
     format_partition_confirm, start_install_confirm, wipe_disk_confirm,
@@ -29,137 +27,6 @@ use log::{debug, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-/// Tool parameter types for input dialogs
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub enum ToolParameter {
-    Text(String),
-    Number(i32),
-    Boolean(bool),
-    Selection(Vec<String>, usize),
-}
-
-/// Tool parameter definition
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct ToolParam {
-    pub name: String,
-    pub description: String,
-    pub param_type: ToolParameter,
-    pub required: bool,
-}
-
-/// Tool parameter collection state
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub struct ToolDialogState {
-    pub tool_name: String,
-    pub parameters: Vec<ToolParam>,
-    pub current_param: usize,
-    pub param_values: Vec<String>,
-    pub is_executing: bool,
-}
-
-/// Main application state
-#[derive(Debug, Clone)]
-pub struct AppState {
-    /// Current application mode
-    pub mode: AppMode,
-    /// Configuration options
-    pub config: Configuration,
-    /// Scroll state for configuration list
-    pub config_scroll: crate::scrolling::ScrollState,
-    /// Status message for user feedback
-    pub status_message: String,
-    /// Installer output lines
-    pub installer_output: Vec<String>,
-    /// Installation progress percentage
-    pub installation_progress: u8,
-    /// Main menu selection state
-    pub main_menu_selection: usize,
-    /// Tools menu selection state
-    pub tools_menu_selection: usize,
-    /// Current tool being executed
-    pub current_tool: Option<String>,
-    /// Tool execution output
-    pub tool_output: Vec<String>,
-    /// Tool dialog state for parameter collection
-    pub tool_dialog: Option<ToolDialogState>,
-    /// Whether help overlay is visible
-    pub help_visible: bool,
-    /// Floating output window state
-    pub floating_output: Option<FloatingOutputState>,
-    /// Embedded terminal state
-    pub embedded_terminal: Option<PtyTerminalState>,
-    /// File browser state
-    pub file_browser: Option<crate::components::file_browser::FileBrowserState>,
-    /// Confirmation dialog state
-    pub confirm_dialog: Option<crate::components::confirm_dialog::ConfirmDialogState>,
-    /// Previous mode to return to after dialog
-    pub pre_dialog_mode: Option<AppMode>,
-}
-
-/// Application operating modes
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AppMode {
-    /// Main menu - entry point for all functionality
-    MainMenu,
-    /// Guided installer - step-by-step configuration
-    GuidedInstaller,
-    /// Automated install - run from configuration file
-    AutomatedInstall,
-    /// Tools menu - system administration tools
-    ToolsMenu,
-    /// Disk tools submenu
-    DiskTools,
-    /// System tools submenu
-    SystemTools,
-    /// User tools submenu
-    UserTools,
-    /// Network tools submenu
-    NetworkTools,
-    /// Tool parameter input dialog
-    ToolDialog,
-    /// Tool execution in progress
-    ToolExecution,
-    /// Installation phase - running the actual installation
-    Installation,
-    /// Installation complete
-    Complete,
-    /// Embedded terminal for interactive tools
-    EmbeddedTerminal,
-    /// Floating output window
-    FloatingOutput,
-    /// File browser for selecting config files
-    FileBrowser,
-    /// Confirmation dialog for destructive operations
-    ConfirmDialog,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            mode: AppMode::MainMenu,
-            config: Configuration::default(),
-            config_scroll: crate::scrolling::ScrollState::new(42, 30), // 42 config options, default 30 visible
-            status_message: "Welcome to Arch Linux Toolkit".to_string(),
-            installer_output: Vec::new(),
-            installation_progress: 0,
-            main_menu_selection: 0,
-            tools_menu_selection: 0,
-            current_tool: None,
-            tool_output: Vec::new(),
-            tool_dialog: None,
-            help_visible: false,
-            floating_output: None,
-            embedded_terminal: None,
-            file_browser: None,
-            confirm_dialog: None,
-            pre_dialog_mode: None,
-        }
-    }
-}
 
 /// Main application struct
 pub struct App {
