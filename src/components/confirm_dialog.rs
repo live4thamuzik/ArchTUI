@@ -4,9 +4,10 @@
 
 #![allow(dead_code)]
 
+use crate::theme::{Styles, Theme, Severity, UiText};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -34,7 +35,7 @@ pub struct ConfirmDialogState {
     pub details: Vec<String>,
     /// Severity level
     pub severity: ConfirmSeverity,
-    /// Currently selected option (0 = Yes/Confirm on left, 1 = No/Cancel on right)
+    /// Currently selected option (0 = No/Cancel on left, 1 = Yes/Confirm on right)
     pub selected: usize,
     /// Callback identifier for what to do on confirm
     pub confirm_action: String,
@@ -50,7 +51,7 @@ impl ConfirmDialogState {
             message: message.to_string(),
             details: Vec::new(),
             severity,
-            selected: 1, // Default to "No" (right button) for safety
+            selected: 0, // Default to "No" (left button) for safety
             confirm_action: confirm_action.to_string(),
             action_data: None,
         }
@@ -75,17 +76,17 @@ impl ConfirmDialogState {
 
     /// Select No/Cancel
     pub fn select_no(&mut self) {
-        self.selected = 1;  // No is now on right (button_chunks[1])
+        self.selected = 0;  // No is on left (button_chunks[0])
     }
 
     /// Select Yes/Confirm
     pub fn select_yes(&mut self) {
-        self.selected = 0;  // Yes is now on left (button_chunks[0])
+        self.selected = 1;  // Yes is on right (button_chunks[1])
     }
 
     /// Check if Yes is selected
     pub fn is_confirmed(&self) -> bool {
-        self.selected == 0  // Yes is now on left (selected == 0)
+        self.selected == 1  // Yes is on right (selected == 1)
     }
 }
 
@@ -109,12 +110,14 @@ impl ConfirmDialog {
         // Clear the area
         f.render_widget(Clear, dialog_area);
 
-        // Get colors based on severity
-        let (border_color, icon) = match state.severity {
-            ConfirmSeverity::Info => (Color::Cyan, "ℹ️ "),
-            ConfirmSeverity::Warning => (Color::Yellow, "⚠️ "),
-            ConfirmSeverity::Danger => (Color::Red, "🚨"),
+        // Get colors based on severity using theme
+        let severity = match state.severity {
+            ConfirmSeverity::Info => Severity::Info,
+            ConfirmSeverity::Warning => Severity::Warning,
+            ConfirmSeverity::Danger => Severity::Danger,
         };
+        let border_color = Theme::severity_color(severity);
+        let icon = Theme::severity_icon(severity);
 
         // Create the dialog block
         let block = Block::default()
@@ -122,7 +125,7 @@ impl ConfirmDialog {
             .title(format!(" {} {} ", icon, state.title))
             .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
             .border_style(Style::default().fg(border_color))
-            .style(Style::default().bg(Color::Rgb(30, 20, 20)));
+            .style(Styles::panel_bg_danger());
 
         let inner = block.inner(dialog_area);
         f.render_widget(block, dialog_area);
@@ -139,11 +142,7 @@ impl ConfirmDialog {
             .split(inner);
 
         // Render message
-        let message_style = match state.severity {
-            ConfirmSeverity::Info => Style::default().fg(Color::White),
-            ConfirmSeverity::Warning => Style::default().fg(Color::Yellow),
-            ConfirmSeverity::Danger => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-        };
+        let message_style = Theme::severity_style(severity);
 
         let message = Paragraph::new(state.message.clone())
             .style(message_style)
@@ -156,8 +155,8 @@ impl ConfirmDialog {
             let detail_lines: Vec<Line> = state.details
                 .iter()
                 .map(|d| Line::from(vec![
-                    Span::styled("  • ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(d.clone(), Style::default().fg(Color::Gray)),
+                    Span::styled("  • ", Styles::text_muted()),
+                    Span::styled(d.clone(), Styles::text_secondary()),
                 ]))
                 .collect();
 
@@ -176,53 +175,33 @@ impl ConfirmDialog {
             ])
             .split(button_area);
 
-        // Yes/Confirm button (LEFT)
-        let yes_style = if state.selected == 0 {
-            match state.severity {
-                ConfirmSeverity::Info => Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-                ConfirmSeverity::Warning => Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-                ConfirmSeverity::Danger => Style::default()
-                    .fg(Color::White)
-                    .bg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
-            }
+        // No/Cancel button (LEFT) - standard UX: cancel on left
+        let no_style = if state.selected == 0 {
+            Styles::button_cancel()
         } else {
-            match state.severity {
-                ConfirmSeverity::Info => Style::default().fg(Color::Cyan),
-                ConfirmSeverity::Warning => Style::default().fg(Color::Yellow),
-                ConfirmSeverity::Danger => Style::default().fg(Color::Red),
-            }
+            Styles::button_inactive()
+        };
+        let no_button = Paragraph::new(UiText::BTN_NO_CANCEL)
+            .style(no_style)
+            .alignment(Alignment::Center);
+        f.render_widget(no_button, button_chunks[0]);
+
+        // Yes/Confirm button (RIGHT) - standard UX: confirm on right
+        let yes_style = if state.selected == 1 {
+            Theme::severity_button_active(severity)
+        } else {
+            Theme::severity_button_inactive(severity)
         };
 
         let yes_text = match state.severity {
-            ConfirmSeverity::Info => "[ Yes / Continue ]",
-            ConfirmSeverity::Warning => "[ Yes / Proceed ]",
-            ConfirmSeverity::Danger => "[ CONFIRM DELETE ]",
+            ConfirmSeverity::Info => UiText::BTN_YES_CONTINUE,
+            ConfirmSeverity::Warning => UiText::BTN_YES_PROCEED,
+            ConfirmSeverity::Danger => UiText::BTN_CONFIRM_DELETE,
         };
         let yes_button = Paragraph::new(yes_text)
             .style(yes_style)
             .alignment(Alignment::Center);
-        f.render_widget(yes_button, button_chunks[0]);
-
-        // No/Cancel button (RIGHT)
-        let no_style = if state.selected == 1 {
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::White)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::White)
-        };
-        let no_button = Paragraph::new("[ No / Cancel ]")
-            .style(no_style)
-            .alignment(Alignment::Center);
-        f.render_widget(no_button, button_chunks[1]);
+        f.render_widget(yes_button, button_chunks[1]);
     }
 }
 

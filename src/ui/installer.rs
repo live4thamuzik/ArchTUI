@@ -9,9 +9,10 @@
 
 use super::header::{render_installer_output, render_progress_bar, HeaderRenderer};
 use crate::app::AppState;
+use crate::theme::Colors;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame,
@@ -69,64 +70,64 @@ pub fn render_automated_install_ui_in_area(
     let description_lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  ⚡ ", Style::default().fg(Color::Yellow)),
+            Span::styled("  ⚡ ", Style::default().fg(Colors::SECONDARY)),
             Span::styled(
                 "Quick, Reproducible Installs",
                 Style::default()
-                    .fg(Color::White)
+                    .fg(Colors::FG_PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Automated installation uses a configuration file",
-            Style::default().fg(Color::Gray),
+            Style::default().fg(Colors::FG_SECONDARY),
         )]),
         Line::from(vec![Span::styled(
             "  to install Arch Linux with your preferred settings.",
-            Style::default().fg(Color::Gray),
+            Style::default().fg(Colors::FG_SECONDARY),
         )]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+            Span::styled("  ✓ ", Style::default().fg(Colors::SUCCESS)),
             Span::styled(
                 "Disk partitioning & formatting",
-                Style::default().fg(Color::White),
+                Style::default().fg(Colors::FG_PRIMARY),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+            Span::styled("  ✓ ", Style::default().fg(Colors::SUCCESS)),
             Span::styled(
                 "Bootloader installation (GRUB/systemd-boot)",
-                Style::default().fg(Color::White),
+                Style::default().fg(Colors::FG_PRIMARY),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+            Span::styled("  ✓ ", Style::default().fg(Colors::SUCCESS)),
             Span::styled(
                 "User account creation",
-                Style::default().fg(Color::White),
+                Style::default().fg(Colors::FG_PRIMARY),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+            Span::styled("  ✓ ", Style::default().fg(Colors::SUCCESS)),
             Span::styled(
                 "Desktop environment setup",
-                Style::default().fg(Color::White),
+                Style::default().fg(Colors::FG_PRIMARY),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+            Span::styled("  ✓ ", Style::default().fg(Colors::SUCCESS)),
             Span::styled(
                 "Custom package installation",
-                Style::default().fg(Color::White),
+                Style::default().fg(Colors::FG_PRIMARY),
             ),
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  📁 ", Style::default().fg(Color::Cyan)),
-            Span::styled("Supported formats: ", Style::default().fg(Color::Gray)),
-            Span::styled(".toml, .json", Style::default().fg(Color::Cyan)),
+            Span::styled("  📁 ", Style::default().fg(Colors::PRIMARY)),
+            Span::styled("Supported formats: ", Style::default().fg(Colors::FG_SECONDARY)),
+            Span::styled(".toml, .json", Style::default().fg(Colors::PRIMARY)),
         ]),
     ];
 
@@ -137,12 +138,12 @@ pub fn render_automated_install_ui_in_area(
                 .title(" Overview ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
     f.render_widget(description, content_chunks[0]);
 
     // Right panel - Config file format example
@@ -150,57 +151,57 @@ pub fn render_automated_install_ui_in_area(
         Line::from(""),
         Line::from(vec![Span::styled(
             "  # Example config.toml",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Colors::FG_MUTED),
         )]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  hostname", Style::default().fg(Color::Cyan)),
-            Span::styled(" = ", Style::default().fg(Color::White)),
-            Span::styled("\"archlinux\"", Style::default().fg(Color::Green)),
+            Span::styled("  hostname", Style::default().fg(Colors::PRIMARY)),
+            Span::styled(" = ", Style::default().fg(Colors::FG_PRIMARY)),
+            Span::styled("\"archlinux\"", Style::default().fg(Colors::SUCCESS)),
         ]),
         Line::from(vec![
-            Span::styled("  username", Style::default().fg(Color::Cyan)),
-            Span::styled(" = ", Style::default().fg(Color::White)),
-            Span::styled("\"user\"", Style::default().fg(Color::Green)),
+            Span::styled("  username", Style::default().fg(Colors::PRIMARY)),
+            Span::styled(" = ", Style::default().fg(Colors::FG_PRIMARY)),
+            Span::styled("\"user\"", Style::default().fg(Colors::SUCCESS)),
         ]),
         Line::from(vec![
-            Span::styled("  install_disk", Style::default().fg(Color::Cyan)),
-            Span::styled(" = ", Style::default().fg(Color::White)),
-            Span::styled("\"/dev/sda\"", Style::default().fg(Color::Green)),
+            Span::styled("  install_disk", Style::default().fg(Colors::PRIMARY)),
+            Span::styled(" = ", Style::default().fg(Colors::FG_PRIMARY)),
+            Span::styled("\"/dev/sda\"", Style::default().fg(Colors::SUCCESS)),
         ]),
         Line::from(vec![
-            Span::styled("  bootloader", Style::default().fg(Color::Cyan)),
-            Span::styled(" = ", Style::default().fg(Color::White)),
-            Span::styled("\"grub\"", Style::default().fg(Color::Green)),
+            Span::styled("  bootloader", Style::default().fg(Colors::PRIMARY)),
+            Span::styled(" = ", Style::default().fg(Colors::FG_PRIMARY)),
+            Span::styled("\"grub\"", Style::default().fg(Colors::SUCCESS)),
         ]),
         Line::from(vec![
-            Span::styled("  desktop_environment", Style::default().fg(Color::Cyan)),
-            Span::styled(" = ", Style::default().fg(Color::White)),
-            Span::styled("\"gnome\"", Style::default().fg(Color::Green)),
+            Span::styled("  desktop_environment", Style::default().fg(Colors::PRIMARY)),
+            Span::styled(" = ", Style::default().fg(Colors::FG_PRIMARY)),
+            Span::styled("\"gnome\"", Style::default().fg(Colors::SUCCESS)),
         ]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  [packages]",
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(Colors::SECONDARY),
         )]),
         Line::from(vec![
-            Span::styled("  base", Style::default().fg(Color::Cyan)),
-            Span::styled(" = [", Style::default().fg(Color::White)),
-            Span::styled("\"vim\", \"git\"", Style::default().fg(Color::Green)),
-            Span::styled("]", Style::default().fg(Color::White)),
+            Span::styled("  base", Style::default().fg(Colors::PRIMARY)),
+            Span::styled(" = [", Style::default().fg(Colors::FG_PRIMARY)),
+            Span::styled("\"vim\", \"git\"", Style::default().fg(Colors::SUCCESS)),
+            Span::styled("]", Style::default().fg(Colors::FG_PRIMARY)),
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Press ", Style::default().fg(Color::DarkGray)),
+            Span::styled("  Press ", Style::default().fg(Colors::FG_MUTED)),
             Span::styled(
                 "Enter",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 " to browse for config files",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Colors::FG_MUTED),
             ),
         ]),
     ];
@@ -212,12 +213,12 @@ pub fn render_automated_install_ui_in_area(
                 .title(" Config Format ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
     f.render_widget(config_example, content_chunks[1]);
 }
 
@@ -303,7 +304,7 @@ pub fn render_completion_ui_in_area(
     let message = Paragraph::new(state.status_message.clone())
         .block(Block::default().borders(Borders::ALL).title("Status"))
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::Green));
+        .style(Style::default().fg(Colors::SUCCESS));
     f.render_widget(message, chunks[2]);
 }
 
@@ -361,7 +362,7 @@ fn create_config_item(
 
     let text = format!("{}: {}", option.name, display_value);
     let style = if index == current_step {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Colors::SECONDARY)
     } else {
         Style::default()
     };
@@ -380,10 +381,10 @@ fn render_start_button(f: &mut Frame, area: Rect, state: &AppState) {
 
     let style = if is_selected {
         Style::default()
-            .fg(Color::Yellow)
-            .bg(Color::Rgb(0, 100, 0))
+            .fg(Colors::SECONDARY)
+            .bg(Colors::SUCCESS)
     } else {
-        Style::default().fg(Color::Green)
+        Style::default().fg(Colors::SUCCESS)
     };
 
     let button = Paragraph::new(button_text)

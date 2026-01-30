@@ -7,9 +7,10 @@
 use super::floating_window::{FloatingWindow, FloatingWindowConfig};
 use super::keybindings::{HelpSection, KeybindingContext};
 use crate::app::AppMode;
+use crate::theme::Colors;
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     Frame,
 };
@@ -53,7 +54,7 @@ impl HelpOverlay {
         lines.push(Line::from(vec![Span::styled(
             "  Arch Linux Toolkit Help  ",
             Style::default()
-                .fg(Color::Cyan)
+                .fg(Colors::PRIMARY)
                 .add_modifier(Modifier::BOLD),
         )]));
         lines.push(Line::from(""));
@@ -78,10 +79,10 @@ impl HelpOverlay {
             AppMode::ConfirmDialog => "Confirmation",
         };
         lines.push(Line::from(vec![
-            Span::styled("Current: ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Current: ", Style::default().fg(Colors::FG_MUTED)),
             Span::styled(
                 mode_name.to_string(),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(Colors::SECONDARY),
             ),
         ]));
         lines.push(Line::from(""));
@@ -92,7 +93,7 @@ impl HelpOverlay {
             lines.push(Line::from(vec![Span::styled(
                 format!("  {}  ", section.title),
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(Colors::SUCCESS)
                     .add_modifier(Modifier::BOLD),
             )]));
             lines.push(Line::from(""));
@@ -104,10 +105,10 @@ impl HelpOverlay {
                     Span::styled(
                         format!("{:<10}", key),
                         Style::default()
-                            .fg(Color::Cyan)
+                            .fg(Colors::PRIMARY)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(description.clone(), Style::default().fg(Color::White)),
+                    Span::styled(description.clone(), Style::default().fg(Colors::FG_PRIMARY)),
                 ]));
             }
             lines.push(Line::from(""));
@@ -117,7 +118,7 @@ impl HelpOverlay {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![Span::styled(
             "Press ? or Esc to close",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Colors::FG_MUTED),
         )]));
 
         lines

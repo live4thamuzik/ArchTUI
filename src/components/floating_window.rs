@@ -5,9 +5,10 @@
 #![allow(dead_code)]
 
 use crate::scrolling::ScrollState;
+use crate::theme::Colors;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::Line,
     widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap},
     Frame,
@@ -96,7 +97,7 @@ impl FloatingWindow {
 
         // Draw background
         let bg_block = Block::default()
-            .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+            .style(Style::default().bg(Colors::BG_PRIMARY));
         f.render_widget(bg_block, area);
 
         // Create layout
@@ -131,11 +132,11 @@ impl FloatingWindow {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-                .border_style(Style::default().fg(Color::Cyan))
-                .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+                .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                .border_style(Style::default().fg(Colors::PRIMARY))
+                .style(Style::default().bg(Colors::BG_PRIMARY))
         } else {
-            Block::default().style(Style::default().bg(Color::Rgb(20, 20, 30)))
+            Block::default().style(Style::default().bg(Colors::BG_PRIMARY))
         };
 
         // Calculate inner area for content
@@ -154,13 +155,13 @@ impl FloatingWindow {
             .map(|line| ListItem::new(line.as_str()))
             .collect();
 
-        let list = List::new(visible_content).style(Style::default().fg(Color::White));
+        let list = List::new(visible_content).style(Style::default().fg(Colors::FG_PRIMARY));
         f.render_widget(list, inner_area);
 
         // Render footer if present
         if let Some(footer_text) = footer {
             let footer_para = Paragraph::new(footer_text)
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(Colors::FG_MUTED))
                 .alignment(Alignment::Center);
             f.render_widget(footer_para, chunks[1]);
         }
@@ -175,7 +176,7 @@ impl FloatingWindow {
 
         // Draw background
         let bg_block = Block::default()
-            .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+            .style(Style::default().bg(Colors::BG_PRIMARY));
         f.render_widget(bg_block, area);
 
         // Create layout
@@ -201,11 +202,11 @@ impl FloatingWindow {
             Block::default()
                 .borders(Borders::ALL)
                 .title(self.config.title.clone())
-                .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-                .border_style(Style::default().fg(Color::Cyan))
-                .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+                .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                .border_style(Style::default().fg(Colors::PRIMARY))
+                .style(Style::default().bg(Colors::BG_PRIMARY))
         } else {
-            Block::default().style(Style::default().bg(Color::Rgb(20, 20, 30)))
+            Block::default().style(Style::default().bg(Colors::BG_PRIMARY))
         };
 
         let inner_area = block.inner(content_area);
@@ -225,7 +226,7 @@ impl FloatingWindow {
         // Render footer if present
         if let Some(footer_text) = footer {
             let footer_para = Paragraph::new(footer_text)
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(Colors::FG_MUTED))
                 .alignment(Alignment::Center);
             f.render_widget(footer_para, chunks[1]);
         }
@@ -247,7 +248,7 @@ impl FloatingWindow {
 
         // Draw background
         let bg_block = Block::default()
-            .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+            .style(Style::default().bg(Colors::BG_PRIMARY));
         f.render_widget(bg_block, area);
 
         // Create layout with progress bar
@@ -266,11 +267,11 @@ impl FloatingWindow {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(self.config.title.clone())
-                    .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-                    .border_style(Style::default().fg(Color::Cyan))
-                    .style(Style::default().bg(Color::Rgb(20, 20, 30))),
+                    .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                    .border_style(Style::default().fg(Colors::PRIMARY))
+                    .style(Style::default().bg(Colors::BG_PRIMARY)),
             )
-            .gauge_style(Style::default().fg(Color::Green).bg(Color::Rgb(40, 40, 50)))
+            .gauge_style(Style::default().fg(Colors::SUCCESS).bg(Colors::BG_SECONDARY))
             .percent(progress as u16)
             .label(format!("{}%", progress));
         f.render_widget(gauge, chunks[0]);
@@ -278,8 +279,8 @@ impl FloatingWindow {
         // Render content
         let content_block = Block::default()
             .borders(Borders::LEFT | Borders::RIGHT)
-            .border_style(Style::default().fg(Color::Cyan))
-            .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+            .border_style(Style::default().fg(Colors::PRIMARY))
+            .style(Style::default().bg(Colors::BG_PRIMARY));
         let inner_area = content_block.inner(chunks[1]);
         f.render_widget(content_block, chunks[1]);
 
@@ -295,13 +296,13 @@ impl FloatingWindow {
             .iter()
             .map(|line| {
                 let style = if line.contains("ERROR") || line.contains("error") {
-                    Style::default().fg(Color::Red)
+                    Style::default().fg(Colors::ERROR)
                 } else if line.contains("WARNING") || line.contains("warning") {
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(Colors::WARNING)
                 } else if line.starts_with("==>") || line.starts_with("::") {
-                    Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+                    Style::default().fg(Colors::INFO).add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White)
+                    Style::default().fg(Colors::FG_PRIMARY)
                 };
                 ListItem::new(line.as_str()).style(style)
             })
@@ -313,13 +314,13 @@ impl FloatingWindow {
         // Render status
         let status_block = Block::default()
             .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::Cyan))
-            .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+            .border_style(Style::default().fg(Colors::PRIMARY))
+            .style(Style::default().bg(Colors::BG_PRIMARY));
         let status_inner = status_block.inner(chunks[2]);
         f.render_widget(status_block, chunks[2]);
 
         let status_para = Paragraph::new(status)
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(Colors::WARNING))
             .alignment(Alignment::Center);
         f.render_widget(status_para, status_inner);
     }

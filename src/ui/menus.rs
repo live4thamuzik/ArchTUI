@@ -6,9 +6,10 @@
 use super::descriptions;
 use super::header::HeaderRenderer;
 use crate::app::AppState;
+use crate::theme::Colors;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
@@ -45,7 +46,7 @@ pub fn render_main_menu_in_area(
         .map(|(index, item)| {
             let style = if index == state.main_menu_selection {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
@@ -58,8 +59,8 @@ pub fn render_main_menu_in_area(
         .block(Block::default().borders(Borders::ALL).title("Main Menu"))
         .highlight_style(
             Style::default()
-                .bg(Color::Blue)
-                .fg(Color::White)
+                .bg(Colors::INFO)
+                .fg(Colors::FG_PRIMARY)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol(">> ");
@@ -106,10 +107,10 @@ pub fn render_tools_menu_in_area(
         .map(|(index, (icon, name))| {
             let style = if index == state.tools_menu_selection {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Colors::FG_PRIMARY)
             };
             let prefix = if index == state.tools_menu_selection {
                 "▸ "
@@ -127,12 +128,12 @@ pub fn render_tools_menu_in_area(
                 .title(" Select Category ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
 
     f.render_widget(menu, content_chunks[0]);
 
@@ -145,12 +146,12 @@ pub fn render_tools_menu_in_area(
                 .title(" Category Overview ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+        .style(Style::default().bg(Colors::BG_PRIMARY))
         .wrap(Wrap { trim: false });
 
     f.render_widget(desc_widget, content_chunks[1]);
@@ -196,10 +197,10 @@ pub fn render_disk_tools_menu_in_area(
         .map(|(index, (icon, name, _))| {
             let style = if index == state.tools_menu_selection {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Colors::FG_PRIMARY)
             };
             let prefix = if index == state.tools_menu_selection {
                 "▸ "
@@ -217,12 +218,12 @@ pub fn render_disk_tools_menu_in_area(
                 .title(" Select Tool ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
 
     f.render_widget(menu, content_chunks[0]);
 
@@ -235,12 +236,12 @@ pub fn render_disk_tools_menu_in_area(
                 .title(" Tool Information ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+        .style(Style::default().bg(Colors::BG_PRIMARY))
         .wrap(Wrap { trim: false });
 
     f.render_widget(desc_widget, content_chunks[1]);
@@ -286,10 +287,10 @@ pub fn render_system_tools_menu_in_area(
         .map(|(index, (icon, name))| {
             let style = if index == state.tools_menu_selection {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Colors::FG_PRIMARY)
             };
             let prefix = if index == state.tools_menu_selection {
                 "▸ "
@@ -307,12 +308,12 @@ pub fn render_system_tools_menu_in_area(
                 .title(" Select Tool ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
 
     f.render_widget(menu, content_chunks[0]);
 
@@ -325,12 +326,12 @@ pub fn render_system_tools_menu_in_area(
                 .title(" Tool Information ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+        .style(Style::default().bg(Colors::BG_PRIMARY))
         .wrap(Wrap { trim: false });
 
     f.render_widget(desc_widget, content_chunks[1]);
@@ -376,10 +377,10 @@ pub fn render_user_tools_menu_in_area(
         .map(|(index, (icon, name))| {
             let style = if index == state.tools_menu_selection {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Colors::FG_PRIMARY)
             };
             let prefix = if index == state.tools_menu_selection {
                 "▸ "
@@ -397,12 +398,12 @@ pub fn render_user_tools_menu_in_area(
                 .title(" Select Tool ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
 
     f.render_widget(menu, content_chunks[0]);
 
@@ -415,12 +416,12 @@ pub fn render_user_tools_menu_in_area(
                 .title(" Tool Information ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+        .style(Style::default().bg(Colors::BG_PRIMARY))
         .wrap(Wrap { trim: false });
 
     f.render_widget(desc_widget, content_chunks[1]);
@@ -465,10 +466,10 @@ pub fn render_network_tools_menu_in_area(
         .map(|(index, (icon, name))| {
             let style = if index == state.tools_menu_selection {
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Colors::SECONDARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(Colors::FG_PRIMARY)
             };
             let prefix = if index == state.tools_menu_selection {
                 "▸ "
@@ -486,12 +487,12 @@ pub fn render_network_tools_menu_in_area(
                 .title(" Select Tool ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        .style(Style::default().bg(Colors::BG_PRIMARY));
 
     f.render_widget(menu, content_chunks[0]);
 
@@ -504,12 +505,12 @@ pub fn render_network_tools_menu_in_area(
                 .title(" Tool Information ")
                 .title_style(
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 )
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(Style::default().fg(Colors::PRIMARY)),
         )
-        .style(Style::default().bg(Color::Rgb(20, 20, 30)))
+        .style(Style::default().bg(Colors::BG_PRIMARY))
         .wrap(Wrap { trim: false });
 
     f.render_widget(desc_widget, content_chunks[1]);
