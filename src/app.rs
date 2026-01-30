@@ -2046,13 +2046,17 @@ impl App {
             if current_step < state.config.options.len() {
                 // Parse disk selection to extract only device path
                 let parsed_value = if option_name == "Disk" {
-                    // Check if this is multi-disk selection (contains commas)
-                    if value.contains(',') {
+                    // Check if this is multi-disk selection by counting /dev/ occurrences
+                    // (can't just check for commas since disk info may contain commas like "VBOX HARDDISK, 512B")
+                    let dev_count = value.matches("/dev/").count();
+                    if dev_count > 1 {
                         // Multi-disk selection - extract all disk paths
+                        // Split by /dev/ and reconstruct paths
                         let disk_paths: Vec<String> = value
-                            .split(',')
-                            .map(|d| d.split_whitespace().next().unwrap_or("").to_string())
-                            .filter(|d| !d.is_empty())
+                            .split("/dev/")
+                            .skip(1) // Skip empty first element
+                            .map(|d| format!("/dev/{}", d.split_whitespace().next().unwrap_or("")))
+                            .filter(|d| d.len() > 5) // Filter out just "/dev/"
                             .collect();
 
                         // Check if this is manual partitioning
