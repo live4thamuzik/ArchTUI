@@ -3,6 +3,8 @@
 //! Provides centralized error handling with proper error types using thiserror.
 //! All errors in the application should use these types for consistency.
 
+#![allow(dead_code)] // Error variants and helpers are available for future use
+
 use thiserror::Error;
 
 /// Main error type for the ArchInstall TUI
