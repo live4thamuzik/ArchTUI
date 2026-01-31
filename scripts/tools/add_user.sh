@@ -1,6 +1,10 @@
 #!/bin/bash
 # add_user.sh - Add user to system using ISO tools
 # Usage: ./add_user.sh --username <user> [options]
+#
+# SECURITY: Password is read from STDIN, not command-line args.
+# This prevents password exposure in `ps aux` or /proc/<pid>/cmdline.
+# Example: echo "mypassword" | ./add_user.sh --username john
 
 set -euo pipefail
 
@@ -21,6 +25,13 @@ CREATE_HOME=true
 SYSTEM_USER=false
 NO_LOGIN=false
 PASSWORD=""
+
+# Read password from stdin if available (non-blocking check)
+# This is the secure way to pass passwords - they never appear in process list
+if [[ ! -t 0 ]]; then
+    # stdin is not a terminal, read password from it
+    read -r PASSWORD || true
+fi
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -69,10 +80,6 @@ while [[ $# -gt 0 ]]; do
             NO_LOGIN=true
             shift
             ;;
-        --password)
-            PASSWORD="$2"
-            shift 2
-            ;;
         --help)
             echo "Usage: $0 --username <user> [options]"
             echo ""
@@ -90,12 +97,15 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-create-home      Don't create home directory"
             echo "  --system              Create system user"
             echo "  --no-login            Disable login (no password)"
-            echo "  --password <pass>     Set password (interactive if not provided)"
+            echo ""
+            echo "Password:"
+            echo "  Password is read from STDIN for security (not visible in ps aux)"
+            echo "  Example: echo 'mypassword' | $0 --username john"
             echo ""
             echo "Examples:"
             echo "  $0 --username john --full-name 'John Doe' --groups wheel,users"
             echo "  $0 --username service --system --no-login --shell /bin/false"
-            echo "  $0 --username admin --groups wheel --password mypass"
+            echo "  echo 'secret' | $0 --username admin --groups wheel"
             echo ""
             echo "Note: Uses tools available on Arch ISO (useradd, passwd, usermod)"
             exit 0
@@ -243,17 +253,23 @@ if [[ -n "$GROUPS" ]]; then
     done
 fi
 
-# Set password
+# Set password (received securely via stdin)
+PASSWORD_WAS_SET=""
 if [[ "$NO_LOGIN" == false ]]; then
     if [[ -n "$PASSWORD" ]]; then
         log_info "🔐 Setting password for '$USERNAME'..."
-        if echo "$USERNAME:$PASSWORD" | chpasswd; then
+        # Use chpasswd to set password securely
+        # Password was read from stdin, never exposed in process list
+        if printf '%s:%s\n' "$USERNAME" "$PASSWORD" | chpasswd 2>/dev/null; then
             log_success "✅ Password set for '$USERNAME'"
+            PASSWORD_WAS_SET="yes"
         else
             log_warning "⚠️  Failed to set password for '$USERNAME'"
         fi
+        # Clear password from memory
+        PASSWORD=""
     else
-        log_info "🔐 Please set password for '$USERNAME'..."
+        log_info "🔐 No password provided via stdin"
         log_info "Run: passwd $USERNAME"
     fi
 fi
@@ -280,10 +296,10 @@ if [[ "$CREATE_HOME" == true ]]; then
     fi
 fi
 
-if [[ "$NO_LOGIN" == false && -n "$PASSWORD" ]]; then
-    echo "Password: Set"
-elif [[ "$NO_LOGIN" == true ]]; then
+if [[ "$NO_LOGIN" == true ]]; then
     echo "Login: Disabled"
+elif [[ -n "${PASSWORD_WAS_SET:-}" ]]; then
+    echo "Password: Set"
 else
     echo "Password: Not set (use 'passwd $USERNAME')"
 fi

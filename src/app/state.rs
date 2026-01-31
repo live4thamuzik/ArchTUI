@@ -19,6 +19,9 @@ pub enum ToolParameter {
     Number(i32),
     Boolean(bool),
     Selection(Vec<String>, usize),
+    /// Password input - NOT passed via command-line args (security)
+    /// Instead, passed via stdin to prevent exposure in `ps aux`
+    Password(String),
 }
 
 /// Tool parameter definition

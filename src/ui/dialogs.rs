@@ -3,6 +3,7 @@
 //! This module handles rendering of all dialogs: input dialogs,
 //! confirmation dialogs, embedded terminal, floating output, and file browser.
 
+use crate::app::ToolParameter;
 use crate::app::AppState;
 use crate::components::confirm_dialog::ConfirmDialog;
 use crate::components::floating_window::{FloatingWindow, FloatingWindowConfig};
@@ -126,15 +127,22 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
                 Style::default()
             };
 
-            let value = if i < dialog.param_values.len() {
+            let raw_value = if i < dialog.param_values.len() {
                 &dialog.param_values[i]
             } else {
                 ""
             };
 
+            // Mask password fields with asterisks for security
+            let display_value = if matches!(param.param_type, ToolParameter::Password(_)) {
+                "*".repeat(raw_value.len())
+            } else {
+                raw_value.to_string()
+            };
+
             param_items.push(ListItem::new(Line::from(vec![
                 Span::styled(format!("{}: ", param.name), Style::default().fg(Colors::PRIMARY)),
-                Span::styled(value.to_string(), style),
+                Span::styled(display_value, style),
             ])));
         }
 

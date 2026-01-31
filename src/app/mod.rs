@@ -25,7 +25,7 @@ use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use log::{debug, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -2602,6 +2602,12 @@ impl App {
                     required: true,
                 },
                 ToolParam {
+                    name: "password".to_string(),
+                    description: "User password (passed securely via stdin)".to_string(),
+                    param_type: ToolParameter::Password("".to_string()),
+                    required: false,
+                },
+                ToolParam {
                     name: "full_name".to_string(),
                     description: "Full name (optional)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
@@ -3020,6 +3026,112 @@ impl App {
         Ok(())
     }
 
+    /// Spawn a tool script with optional stdin data (for secure password passing)
+    /// This prevents passwords from being visible in `ps aux` or `/proc/<pid>/cmdline`
+    fn spawn_tool_script_with_stdin(
+        &self,
+        script_path: &str,
+        args: Vec<String>,
+        stdin_data: Option<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let tx = self.tool_tx.clone();
+        let script_path = script_path.to_string();
+
+        thread::spawn(move || {
+            // Choose stdin mode based on whether we have data to pass
+            let stdin_mode = if stdin_data.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            };
+
+            // Spawn the child process
+            let child_result = Command::new("bash")
+                .arg(&script_path)
+                .args(&args)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .stdin(stdin_mode)
+                .spawn();
+
+            let mut child = match child_result {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = tx.send(ToolMessage::Error(format!(
+                        "Failed to start script: {}",
+                        e
+                    )));
+                    return;
+                }
+            };
+
+            // Write stdin data if provided (securely pass password)
+            if let Some(data) = stdin_data {
+                if let Some(mut stdin) = child.stdin.take() {
+                    // Write and immediately drop to close the pipe
+                    let _ = stdin.write_all(data.as_bytes());
+                    // stdin is dropped here, closing the pipe
+                }
+            }
+
+            // Stream stdout in a separate thread
+            let stdout_tx = tx.clone();
+            let stdout_handle = if let Some(stdout) = child.stdout.take() {
+                Some(thread::spawn(move || {
+                    let reader = BufReader::new(stdout);
+                    for line in reader.lines().map_while(Result::ok) {
+                        if stdout_tx.send(ToolMessage::Stdout(line)).is_err() {
+                            break;
+                        }
+                    }
+                }))
+            } else {
+                None
+            };
+
+            // Stream stderr in a separate thread
+            let stderr_tx = tx.clone();
+            let stderr_handle = if let Some(stderr) = child.stderr.take() {
+                Some(thread::spawn(move || {
+                    let reader = BufReader::new(stderr);
+                    for line in reader.lines().map_while(Result::ok) {
+                        if stderr_tx.send(ToolMessage::Stderr(line)).is_err() {
+                            break;
+                        }
+                    }
+                }))
+            } else {
+                None
+            };
+
+            // Wait for stdout/stderr threads to finish
+            if let Some(h) = stdout_handle {
+                let _ = h.join();
+            }
+            if let Some(h) = stderr_handle {
+                let _ = h.join();
+            }
+
+            // Wait for child process to complete
+            match child.wait() {
+                Ok(status) => {
+                    let _ = tx.send(ToolMessage::Complete {
+                        success: status.success(),
+                        exit_code: status.code(),
+                    });
+                }
+                Err(e) => {
+                    let _ = tx.send(ToolMessage::Error(format!(
+                        "Failed to wait for script: {}",
+                        e
+                    )));
+                }
+            }
+        });
+
+        Ok(())
+    }
+
     /// Execute a tool with the collected parameters
     pub fn execute_tool_with_params(
         &mut self,
@@ -3150,23 +3262,27 @@ impl App {
                 }
             }
             "add_user" => {
+                // Parameter order: username, password, full_name, groups, shell, system_user
+                // NOTE: Password (params[1]) is NOT passed as command-line arg for security
+                // It will be passed via stdin to prevent exposure in `ps aux`
                 if !params.is_empty() {
                     args.push("--username".to_string());
                     args.push(params[0].clone());
                 }
-                if params.len() >= 2 && !params[1].is_empty() {
-                    args.push("--full-name".to_string());
-                    args.push(params[1].clone());
-                }
+                // params[1] is password - handled separately via stdin (security)
                 if params.len() >= 3 && !params[2].is_empty() {
-                    args.push("--groups".to_string());
+                    args.push("--full-name".to_string());
                     args.push(params[2].clone());
                 }
                 if params.len() >= 4 && !params[3].is_empty() {
-                    args.push("--shell".to_string());
+                    args.push("--groups".to_string());
                     args.push(params[3].clone());
                 }
-                if params.len() >= 5 && params[4] == "true" {
+                if params.len() >= 5 && !params[4].is_empty() {
+                    args.push("--shell".to_string());
+                    args.push(params[4].clone());
+                }
+                if params.len() >= 6 && params[5] == "true" {
                     args.push("--system".to_string());
                 }
             }
@@ -3204,9 +3320,9 @@ impl App {
             }
             _ => {
                 // Generic parameter handling for other tools
-                for param in params {
+                for param in &params {
                     if !param.is_empty() {
-                        args.push(param);
+                        args.push(param.clone());
                     }
                 }
             }
@@ -3282,7 +3398,18 @@ impl App {
         }
 
         // Spawn the tool in a background thread
-        self.spawn_tool_script(&script_path, args)?;
+        // For add_user, pass password via stdin (security: not visible in `ps aux`)
+        if tool_name == "add_user" {
+            // Extract password from params[1] if present and non-empty
+            let stdin_data = if params.len() >= 2 && !params[1].is_empty() {
+                Some(params[1].clone())
+            } else {
+                None
+            };
+            self.spawn_tool_script_with_stdin(&script_path, args, stdin_data)?;
+        } else {
+            self.spawn_tool_script(&script_path, args)?;
+        }
 
         Ok(())
     }
