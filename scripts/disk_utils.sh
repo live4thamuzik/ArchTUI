@@ -5,7 +5,8 @@ set -euo pipefail
 
 # --- Source-Once Guard ---
 if [[ -n "${_DISK_UTILS_SH_SOURCED:-}" ]]; then
-    return 0 2>/dev/null || exit 0
+    # shellcheck disable=SC2317
+    return 0 2>/dev/null || true
 fi
 readonly _DISK_UTILS_SH_SOURCED=1
 
@@ -57,17 +58,18 @@ get_partition_path() {
 }
 
 get_swap_size_mib() {
-    local ram_gb="$1"
-    
+    # shellcheck disable=SC2120
+    local ram_gb="${1:-${RAM_GB:-}}"
+
     # Handle both "16" and "16G" formats
     local ram_val="${ram_gb%[Gg]*}"
-    
-    # Fallback if not a number
-    if [[ ! "$ram_val" =~ ^[0-9]+$ ]]; then
+
+    # Fallback if not a number or empty
+    if [[ -z "$ram_val" || ! "$ram_val" =~ ^[0-9]+$ ]]; then
         echo "$DEFAULT_SWAP_SIZE_MIB"
         return
     fi
-    
+
     # Calculate swap size: Ram <= 4GB ? 2x RAM : 1x RAM (Capped at 8GB usually, but simplified here)
     if (( ram_val <= 4 )); then
         echo $(( ram_val * 1024 * 2 ))
@@ -268,7 +270,8 @@ get_device_uuid() {
 }
 
 validate_partitioning_requirements() {
-    local config_file="$1"
+    # shellcheck disable=SC2120
+    local config_file="${1:-}"
     # Basic check stub
     log_info "Validating partitioning requirements..."
 }
