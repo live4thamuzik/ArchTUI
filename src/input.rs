@@ -3,7 +3,12 @@
 //! Handles different types of user input including popups, text input, and selection dialogs.
 
 use crate::config::Package;
+use crate::types::{
+    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
+    GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
+};
 use ratatui::widgets::ListState;
+use strum::IntoEnumIterator;
 
 /// Information about a partition
 #[derive(Debug, Clone)]
@@ -1245,10 +1250,41 @@ impl InputHandler {
     }
 
     /// Get predefined options for common configuration fields
+    ///
+    /// Uses enum iteration where possible for type-safe option generation.
+    /// Options that have too many values (locales, timezones, countries) remain as static lists.
     pub fn get_predefined_options(field_name: &str) -> Vec<String> {
         match field_name {
-            "Boot Mode" => vec!["Auto".to_string(), "UEFI".to_string(), "BIOS".to_string()],
-            "Secure Boot" => vec!["No".to_string(), "Yes".to_string()],
+            // Type-safe enum-based options
+            "Boot Mode" => BootMode::iter().map(|v| v.to_string()).collect(),
+            "Secure Boot" => Toggle::iter().rev().map(|v| v.to_string()).collect(), // No first
+            "Partitioning Strategy" => PartitionScheme::iter().map(|v| v.to_string()).collect(),
+            "Encryption" => AutoToggle::iter().map(|v| v.to_string()).collect(),
+            "Root Filesystem" => Filesystem::iter().map(|v| v.to_string()).collect(),
+            "Home Filesystem" => Filesystem::iter().map(|v| v.to_string()).collect(),
+            "Separate Home Partition" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Swap" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Btrfs Snapshots" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Btrfs Frequency" => SnapshotFrequency::iter().map(|v| v.to_string()).collect(),
+            "Btrfs Assistant" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Time Sync (NTP)" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Kernel" => Kernel::iter().map(|v| v.to_string()).collect(),
+            "Multilib" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "GPU Drivers" => GpuDriver::iter().map(|v| v.to_string()).collect(),
+            "AUR Helper" => AurHelper::iter().map(|v| v.to_string()).collect(),
+            "Flatpak" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Bootloader" => Bootloader::iter().map(|v| v.to_string()).collect(),
+            "OS Prober" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "GRUB Theme" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "GRUB Theme Selection" => GrubTheme::iter().map(|v| v.to_string()).collect(),
+            "Desktop Environment" => DesktopEnvironment::iter().map(|v| v.to_string()).collect(),
+            "Display Manager" => DisplayManager::iter().map(|v| v.to_string()).collect(),
+            "Plymouth" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Plymouth Theme" => PlymouthTheme::iter().map(|v| v.to_string()).collect(),
+            "Numlock on Boot" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Git Repository" => Toggle::iter().map(|v| v.to_string()).collect(),
+
+            // Static lists for options with too many values to enumerate
             "Locale" => vec![
                 "en_US.UTF-8".to_string(),
                 "en_GB.UTF-8".to_string(),
@@ -1272,22 +1308,6 @@ impl InputHandler {
                 "ru".to_string(),
                 "jp".to_string(),
             ],
-            "Partitioning Strategy" => vec![
-                "auto_simple".to_string(),
-                "auto_simple_luks".to_string(),
-                "auto_lvm".to_string(),
-                "auto_luks_lvm".to_string(),
-                "auto_raid".to_string(),
-                "auto_raid_luks".to_string(),
-                "auto_raid_lvm".to_string(),
-                "auto_raid_lvm_luks".to_string(),
-                "manual".to_string(),
-            ],
-            "Encryption" => vec!["Auto".to_string(), "Yes".to_string(), "No".to_string()],
-            "Root Filesystem" => vec!["ext4".to_string(), "xfs".to_string(), "btrfs".to_string()],
-            "Separate Home Partition" => vec!["Yes".to_string(), "No".to_string()],
-            "Home Filesystem" => vec!["ext4".to_string(), "xfs".to_string(), "btrfs".to_string()],
-            "Swap" => vec!["Yes".to_string(), "No".to_string()],
             "Swap Size" => vec![
                 "1GB".to_string(),
                 "2GB".to_string(),
@@ -1298,20 +1318,12 @@ impl InputHandler {
                 "Equal to RAM".to_string(),
                 "Double RAM".to_string(),
             ],
-            "Btrfs Snapshots" => vec!["Yes".to_string(), "No".to_string()],
-            "Btrfs Frequency" => vec![
-                "hourly".to_string(),
-                "daily".to_string(),
-                "weekly".to_string(),
-                "monthly".to_string(),
-            ],
             "Btrfs Keep Count" => vec![
                 "3".to_string(),
                 "5".to_string(),
                 "10".to_string(),
                 "20".to_string(),
             ],
-            "Btrfs Assistant" => vec!["Yes".to_string(), "No".to_string()],
             "Timezone Region" => vec![
                 "Africa".to_string(),
                 "America".to_string(),
@@ -1326,10 +1338,9 @@ impl InputHandler {
                 "US".to_string(),
             ],
             "Timezone" => {
-                // This will be dynamically populated based on selected region
+                // Dynamically populated based on selected region
                 vec!["Please select a timezone region first".to_string()]
             }
-            "Time Sync (NTP)" => vec!["Yes".to_string(), "No".to_string()],
             "Mirror Country" => vec![
                 "Australia".to_string(),
                 "Austria".to_string(),
@@ -1382,47 +1393,9 @@ impl InputHandler {
                 "United Kingdom".to_string(),
                 "United States".to_string(),
             ],
-            "Kernel" => vec![
-                "linux".to_string(),
-                "linux-lts".to_string(),
-                "linux-zen".to_string(),
-                "linux-hardened".to_string(),
-            ],
-            "Multilib" => vec!["Yes".to_string(), "No".to_string()],
-            "GPU Drivers" => vec![
-                "Auto".to_string(),
-                "NVIDIA".to_string(),
-                "AMD".to_string(),
-                "Intel".to_string(),
-            ],
-            "AUR Helper" => vec!["paru".to_string(), "yay".to_string(), "none".to_string()],
-            "Flatpak" => vec!["Yes".to_string(), "No".to_string()],
-            "Bootloader" => vec!["grub".to_string(), "systemd-boot".to_string()],
-            "OS Prober" => vec!["Yes".to_string(), "No".to_string()],
-            "GRUB Theme" => vec!["Yes".to_string(), "No".to_string()],
-            "GRUB Theme Selection" => vec![
-                "PolyDark".to_string(),
-                "CyberEXS".to_string(),
-                "CyberPunk".to_string(),
-                "HyperFluent".to_string(),
-                "none".to_string(),
-            ],
-            "Desktop Environment" => vec![
-                "none".to_string(),
-                "gnome".to_string(),
-                "kde".to_string(),
-                "hyprland".to_string(),
-            ],
-            "Display Manager" => vec!["none".to_string(), "gdm".to_string(), "sddm".to_string()],
-            "Plymouth" => vec!["Yes".to_string(), "No".to_string()],
-            "Plymouth Theme" => vec![
-                "arch-glow".to_string(),
-                "arch-mac-style".to_string(),
-                "none".to_string(),
-            ],
-            "Numlock on Boot" => vec!["Yes".to_string(), "No".to_string()],
-            "Git Repository" => vec!["Yes".to_string(), "No".to_string()],
-            _ => vec!["Yes".to_string(), "No".to_string()],
+
+            // Default fallback for unknown fields
+            _ => Toggle::iter().map(|v| v.to_string()).collect(),
         }
     }
 
