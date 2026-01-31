@@ -57,13 +57,13 @@ teardown() {
     grep -q "configure_localization().*" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
-@test "chroot_config.sh defines configure_timezone function" {
-    # Match function name followed by optional space then parenthesis
-    grep -q "configure_timezone" "$SCRIPTS_DIR/chroot_config.sh"
+@test "chroot_config.sh defines configure_hostname function" {
+    # Timezone is handled within configure_localization; test hostname separately
+    grep -q "configure_hostname" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
-@test "chroot_config.sh defines create_users function" {
-    grep -q "create_users" "$SCRIPTS_DIR/chroot_config.sh"
+@test "chroot_config.sh defines create_user_account function" {
+    grep -q "create_user_account" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines configure_mkinitcpio function" {

@@ -21,6 +21,7 @@ pub mod ui;
 pub use config::{ConfigOption, Configuration, Package};
 pub use config_file::InstallationConfig;
 pub use error::ArchInstallError;
+pub use process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,

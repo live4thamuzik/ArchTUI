@@ -14,6 +14,7 @@
 //! - On parent exit (Drop, SIGTERM, SIGINT), send SIGTERM to all children
 //! - Children have 5 seconds to cleanup before SIGKILL
 
+use nix::libc;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::collections::HashSet;
@@ -77,13 +78,19 @@ impl ChildRegistry {
             self.pids.len()
         );
 
-        // First pass: send SIGTERM to all children
+        // First pass: send SIGTERM to all process GROUPS
+        // Using group signaling ensures children (sgdisk, cryptsetup, etc.) also receive the signal
         let pids_to_kill: Vec<u32> = self.pids.iter().copied().collect();
         for &pid in &pids_to_kill {
-            if let Err(e) = send_signal(pid, Signal::SIGTERM) {
-                log::warn!("Failed to send SIGTERM to PID {}: {}", pid, e);
+            // Try group signal first (catches entire process tree)
+            if let Err(e) = send_signal_to_group(pid, Signal::SIGTERM) {
+                log::warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
+                // Fall back to direct signal if group signal fails
+                if let Err(e2) = send_signal(pid, Signal::SIGTERM) {
+                    log::warn!("Failed to send SIGTERM to PID {}: {}", pid, e2);
+                }
             } else {
-                log::debug!("Sent SIGTERM to PID {}", pid);
+                log::debug!("Sent SIGTERM to process group {}", pid);
             }
         }
 
@@ -106,12 +113,15 @@ impl ChildRegistry {
             std::thread::sleep(Duration::from_millis(100));
         }
 
-        // Second pass: SIGKILL any remaining processes
+        // Second pass: SIGKILL any remaining process groups
         for &pid in &pids_to_kill {
             if is_process_alive(pid) {
-                log::warn!("Process {} did not terminate, sending SIGKILL", pid);
-                if let Err(e) = send_signal(pid, Signal::SIGKILL) {
-                    log::error!("Failed to send SIGKILL to PID {}: {}", pid, e);
+                log::warn!("Process group {} did not terminate, sending SIGKILL", pid);
+                // Try group signal first
+                if let Err(e) = send_signal_to_group(pid, Signal::SIGKILL) {
+                    log::error!("Failed to send SIGKILL to process group {}: {}", pid, e);
+                    // Fall back to direct signal
+                    let _ = send_signal(pid, Signal::SIGKILL);
                 }
             }
         }
@@ -126,10 +136,33 @@ fn send_signal(pid: u32, signal: Signal) -> Result<(), nix::Error> {
     signal::kill(Pid::from_raw(pid as i32), signal)
 }
 
-/// Check if a process is still alive
+/// Send a signal to an entire process group
+/// Uses negative PID to signal all processes in the group, ensuring children
+/// of bash (like sgdisk, cryptsetup, etc.) also receive the signal
+fn send_signal_to_group(pgid: u32, signal: Signal) -> Result<(), nix::Error> {
+    signal::kill(Pid::from_raw(-(pgid as i32)), signal)
+}
+
+/// Check if a process is still alive (not dead or zombie)
 fn is_process_alive(pid: u32) -> bool {
-    // Sending signal 0 checks if process exists without actually signaling
-    signal::kill(Pid::from_raw(pid as i32), None).is_ok()
+    // First check if process exists at all
+    if signal::kill(Pid::from_raw(pid as i32), None).is_err() {
+        return false;
+    }
+
+    // Check for zombie state via /proc - zombies are "dead" for our purposes
+    // A zombie can still receive signals but isn't running
+    if let Ok(stat) = std::fs::read_to_string(format!("/proc/{}/stat", pid)) {
+        // Field 3 of /proc/pid/stat is the state: R=running, S=sleeping, Z=zombie, etc.
+        let fields: Vec<&str> = stat.split_whitespace().collect();
+        if fields.len() > 2 {
+            // 'Z' = zombie, 'X' = dead - neither is "alive"
+            return !matches!(fields[2], "Z" | "X");
+        }
+    }
+
+    // If we can't read /proc, assume alive (safe default)
+    true
 }
 
 /// RAII guard that terminates all children on drop
@@ -185,19 +218,37 @@ impl Drop for ProcessGuard {
 }
 
 /// Initialize global signal handlers for graceful shutdown
+/// Handles SIGINT (Ctrl+C), SIGTERM, and SIGHUP
 /// Call this once at program start
-pub fn init_signal_handlers() -> Result<(), ctrlc::Error> {
-    ctrlc::set_handler(move || {
-        log::info!("Received interrupt signal, cleaning up...");
+pub fn init_signal_handlers() -> Result<(), std::io::Error> {
+    use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+    use signal_hook::iterator::Signals;
+    use std::thread;
 
-        // Terminate all children
-        if let Ok(mut registry) = ChildRegistry::global().lock() {
-            registry.terminate_all(Duration::from_secs(3));
+    let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP])?;
+
+    thread::spawn(move || {
+        for sig in signals.forever() {
+            let signal_name = match sig {
+                SIGINT => "SIGINT",
+                SIGTERM => "SIGTERM",
+                SIGHUP => "SIGHUP",
+                _ => "UNKNOWN",
+            };
+
+            log::info!("Received {} signal, cleaning up...", signal_name);
+
+            // Terminate all children
+            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                registry.terminate_all(Duration::from_secs(3));
+            }
+
+            // Exit with appropriate code (128 + signal number)
+            std::process::exit(128 + sig);
         }
+    });
 
-        // Exit with appropriate code
-        std::process::exit(130); // 128 + SIGINT(2)
-    })
+    Ok(())
 }
 
 /// Extension trait for std::process::Command to set up process groups
@@ -217,6 +268,14 @@ impl CommandProcessGroup for std::process::Command {
                 // This makes this process the leader of a new process group
                 nix::unistd::setpgid(Pid::from_raw(0), Pid::from_raw(0))
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+                // CRITICAL: Set death signal so child dies if parent dies
+                // This prevents orphaned processes from continuing destructive operations
+                // (e.g., sgdisk --zap-all continuing after TUI crash)
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+
                 Ok(())
             });
         }

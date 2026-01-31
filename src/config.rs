@@ -271,8 +271,11 @@ impl Configuration {
                 "GPU Drivers" => "GPU_DRIVERS",
                 "Hostname" => "SYSTEM_HOSTNAME",
                 "Username" => "MAIN_USERNAME",
-                "User Password" => "MAIN_USER_PASSWORD",
-                "Root Password" => "ROOT_PASSWORD",
+                // SECURITY: Passwords are NOT passed via environment variables
+                // They are passed via stdin to prevent /proc/<pid>/environ exposure
+                // See get_passwords() method and installer.rs for secure handling
+                "User Password" => continue,
+                "Root Password" => continue,
                 "AUR Helper" => "AUR_HELPER",
                 "Additional AUR Packages" => "ADDITIONAL_AUR_PACKAGES",
                 "Flatpak" => "FLATPAK",
@@ -294,6 +297,36 @@ impl Configuration {
         }
 
         env_vars
+    }
+
+    /// Extract passwords for secure stdin passing
+    ///
+    /// SECURITY: Passwords should NEVER be passed via environment variables
+    /// as they are visible in /proc/<pid>/environ. Instead, pass them via stdin
+    /// to child processes and close the pipe immediately after writing.
+    ///
+    /// Returns (user_password, root_password, encryption_password)
+    pub fn get_passwords(&self) -> (String, String, Option<String>) {
+        let mut user_password = String::new();
+        let mut root_password = String::new();
+        let mut encryption_password: Option<String> = None;
+
+        for option in &self.options {
+            match option.name.as_str() {
+                "User Password" => user_password = option.get_value(),
+                "Root Password" => root_password = option.get_value(),
+                // Encryption password may be set via the Encryption option or LUKS config
+                "Encryption Password" | "LUKS Password" => {
+                    let val = option.get_value();
+                    if !val.is_empty() {
+                        encryption_password = Some(val);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (user_password, root_password, encryption_password)
     }
 }
 
@@ -361,5 +394,55 @@ mod tests {
         assert!(env_vars.contains_key("ROOT_FILESYSTEM"));
         // Note: HOSTNAME and USERNAME may not be in the mapping if they're not configured
         assert!(env_vars.contains_key("INSTALL_DISK")); // At least one should be present
+    }
+
+    #[test]
+    fn test_passwords_not_in_env_vars() {
+        let mut config = Configuration::default();
+
+        // Set passwords
+        for opt in &mut config.options {
+            match opt.name.as_str() {
+                "User Password" => opt.value = "secret_user_pw".to_string(),
+                "Root Password" => opt.value = "secret_root_pw".to_string(),
+                _ => {}
+            }
+        }
+
+        let env_vars = config.to_env_vars();
+
+        // SECURITY: Verify passwords are NOT in environment variables
+        assert!(
+            !env_vars.contains_key("MAIN_USER_PASSWORD"),
+            "User password should not be in env vars"
+        );
+        assert!(
+            !env_vars.contains_key("ROOT_PASSWORD"),
+            "Root password should not be in env vars"
+        );
+        assert!(
+            !env_vars.values().any(|v| v.contains("secret")),
+            "No env var should contain password values"
+        );
+    }
+
+    #[test]
+    fn test_get_passwords() {
+        let mut config = Configuration::default();
+
+        // Set passwords
+        for opt in &mut config.options {
+            match opt.name.as_str() {
+                "User Password" => opt.value = "user123".to_string(),
+                "Root Password" => opt.value = "root456".to_string(),
+                _ => {}
+            }
+        }
+
+        let (user_pw, root_pw, encrypt_pw) = config.get_passwords();
+
+        assert_eq!(user_pw, "user123");
+        assert_eq!(root_pw, "root456");
+        assert!(encrypt_pw.is_none()); // No encryption password set
     }
 }

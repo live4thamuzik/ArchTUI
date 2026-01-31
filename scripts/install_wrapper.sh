@@ -12,6 +12,10 @@ export TERM=dumb
 export LANG=C
 export LC_ALL=C
 
+# Signal to install.sh that we're running from the TUI
+# This triggers secure password reading from stdin
+export ARCHINSTALL_TUI=1
+
 # Redirect stderr to stdout so all output goes through the same pipe
 exec 2>&1
 
