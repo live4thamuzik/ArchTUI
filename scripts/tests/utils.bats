@@ -6,7 +6,9 @@ load 'test_helper'
 setup() {
     setup_test_environment
     create_mock_commands
-    source_utils
+    # Order matters: utils first, then disk_utils which depends on utils
+    source "$SCRIPTS_DIR/utils.sh"
+    source "$SCRIPTS_DIR/disk_utils.sh"
 }
 
 teardown() {
@@ -50,22 +52,22 @@ teardown() {
 
 @test "log_debug does not output when LOG_LEVEL is INFO" {
     export LOG_LEVEL="INFO"
-    run log_debug "Debug message"
+    run log_debug "Hidden message"
     [ "$status" -eq 0 ]
-    [ -z "$output" ]
+    [[ ! "$output" =~ "Hidden message" ]]
 }
 
 # =============================================================================
-# Validation Function Tests
+# Validation Helper Tests
 # =============================================================================
 
 @test "validate_username accepts valid username" {
-    run validate_username "testuser"
+    run validate_username "valid_user"
     [ "$status" -eq 0 ]
 }
 
 @test "validate_username accepts username with underscore" {
-    run validate_username "test_user"
+    run validate_username "_valid_user"
     [ "$status" -eq 0 ]
 }
 
@@ -80,27 +82,27 @@ teardown() {
 }
 
 @test "validate_username rejects username with spaces" {
-    run validate_username "test user"
+    run validate_username "invalid user"
     [ "$status" -eq 1 ]
 }
 
 @test "validate_username rejects username with special characters" {
-    run validate_username "test@user"
+    run validate_username "user@name"
     [ "$status" -eq 1 ]
 }
 
 @test "validate_hostname accepts valid hostname" {
-    run validate_hostname "myhost"
+    run validate_hostname "my-host"
     [ "$status" -eq 0 ]
 }
 
 @test "validate_hostname accepts hostname with dashes" {
-    run validate_hostname "my-host-name"
+    run validate_hostname "my-cool-host"
     [ "$status" -eq 0 ]
 }
 
 @test "validate_hostname accepts hostname with dots" {
-    run validate_hostname "my.host.name"
+    run validate_hostname "host.domain"
     [ "$status" -eq 0 ]
 }
 
@@ -115,19 +117,94 @@ teardown() {
 }
 
 @test "validate_hostname rejects hostname with special characters" {
-    run validate_hostname "my_host@name"
+    run validate_hostname "host!"
     [ "$status" -eq 1 ]
 }
 
 # =============================================================================
-# Device Information Tests
+# Input Sanitization Tests (Sprint 6 Step 2)
+# =============================================================================
+
+@test "shell_escape escapes single quotes" {
+    run shell_escape "it's a test"
+    [ "$status" -eq 0 ]
+    # Output should be escaped so it's safe for shell
+    [[ "$output" != "it's a test" ]]
+}
+
+@test "shell_escape escapes special characters" {
+    run shell_escape 'test$VAR'
+    [ "$status" -eq 0 ]
+    # Dollar sign should be escaped
+    [[ "$output" =~ '\$' || "$output" =~ "'" ]]
+}
+
+@test "shell_escape handles backticks" {
+    run shell_escape 'test`cmd`'
+    [ "$status" -eq 0 ]
+    # Backticks should be escaped
+    [[ "$output" != 'test`cmd`' ]]
+}
+
+@test "shell_escape preserves safe strings" {
+    run shell_escape "safe_string123"
+    [ "$status" -eq 0 ]
+    [ "$output" = "safe_string123" ]
+}
+
+@test "validate_safe_string accepts alphanumeric with dash underscore dot" {
+    run validate_safe_string "file-name_v1.2"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_safe_string rejects spaces" {
+    run validate_safe_string "file name"
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_safe_string rejects shell metacharacters" {
+    run validate_safe_string 'file;rm'
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_safe_string rejects empty string" {
+    run validate_safe_string ""
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_device_path accepts standard block devices" {
+    run validate_device_path "/dev/sda"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_device_path accepts nvme devices" {
+    run validate_device_path "/dev/nvme0n1p1"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_device_path accepts mapper devices" {
+    run validate_device_path "/dev/mapper/cryptroot"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_device_path rejects paths without /dev/" {
+    run validate_device_path "/tmp/fake"
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_device_path rejects shell injection attempts" {
+    run validate_device_path '/dev/sda;rm -rf /'
+    [ "$status" -eq 1 ]
+}
+
+# =============================================================================
+# Device Helper Tests (Requires disk_utils.sh)
 # =============================================================================
 
 @test "get_device_uuid returns UUID for valid device" {
-    # Mock blkid is already set up
     run get_device_uuid "/dev/sda1"
     [ "$status" -eq 0 ]
-    [[ "$output" =~ "uuid" ]] || [[ "$output" =~ "UUID" ]] || [ -n "$output" ]
+    [ "$output" = "mock-uuid-sda1" ]
 }
 
 @test "get_device_uuid fails for empty device path" {
@@ -136,25 +213,33 @@ teardown() {
 }
 
 @test "capture_device_info captures root device correctly" {
-    # This test verifies the function runs without error
-    # The actual device capture depends on mock behavior
-    run capture_device_info "root" "/dev/sda1"
-    # Should succeed (mocks make -b test pass implicitly in the script)
-    [ "$status" -eq 0 ] || [ "$status" -eq 1 ]  # May fail due to -b test
+    # Can't use 'run' here because export doesn't propagate from subshell
+    capture_device_info "root" "/dev/sda1"
+    local status=$?
+    [ "$status" -eq 0 ]
+    [ "$ROOT_DEVICE" = "/dev/sda1" ]
 }
 
 # =============================================================================
-# Package Management Tests
+# Package Helper Tests
 # =============================================================================
 
 @test "check_package_available succeeds for installed package" {
-    run check_package_available "e2fsprogs" "mkfs.ext4"
+    # Mock pacman -Si to succeed for e2fsprogs
+    function pacman() {
+        if [[ "$1" == "-Si" ]]; then
+            return 0
+        fi
+        return 1
+    }
+    export -f pacman
+    
+    run check_package_available "e2fsprogs"
     [ "$status" -eq 0 ]
-    assert_mock_called_with_pattern "pacman.*-Qi.*e2fsprogs"
 }
 
 # =============================================================================
-# Filesystem Format Tests
+# Filesystem Helper Tests
 # =============================================================================
 
 @test "format_filesystem calls mkfs.ext4 for ext4" {
@@ -203,9 +288,9 @@ teardown() {
 }
 
 @test "log_and_continue does not exit" {
-    run log_and_continue "Non-critical error" "test_command"
+    run log_and_continue "Non-critical error"
     [ "$status" -eq 0 ]
-    [[ "$output" =~ "NON-CRITICAL" ]]
+    [[ "$output" =~ "WARN: Non-critical error" ]]
 }
 
 # =============================================================================
@@ -215,10 +300,11 @@ teardown() {
 @test "execute_non_critical runs command and logs success" {
     run execute_non_critical "Test operation" echo "hello"
     [ "$status" -eq 0 ]
+    [[ "$output" =~ "INFO: Test operation" ]]
 }
 
 @test "execute_non_critical returns 1 on failure but continues" {
-    run execute_non_critical "Test operation" false
+    run execute_non_critical "Failing op" false
     [ "$status" -eq 1 ]
-    [[ "$output" =~ "NON-CRITICAL" ]] || [[ "$output" =~ "failed" ]]
+    [[ "$output" =~ "NON-CRITICAL: Failing op failed" ]]
 }

@@ -182,7 +182,7 @@ teardown() {
     export BOOT_MODE="UEFI"
     run create_partition_table "/dev/sda"
     [ "$status" -eq 0 ]
-    assert_mock_called_with_pattern "sgdisk.*-Z.*/dev/sda"
+    assert_mock_called_with_pattern "sgdisk.*--zap-all.*/dev/sda"
 }
 
 # =============================================================================

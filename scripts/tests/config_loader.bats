@@ -29,7 +29,9 @@ teardown() {
 # =============================================================================
 
 @test "check_jq_available succeeds when jq is installed" {
-    # jq mock is already set up
+    # Source the script so the function exists!
+    source "$SCRIPTS_DIR/config_loader.sh" 2>/dev/null || true
+    
     run check_jq_available
     [ "$status" -eq 0 ]
 }

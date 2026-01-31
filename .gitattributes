@@ -1,0 +1,7 @@
+# .gitattributes
+# Force unix line endings for scripts, even if you edit them on Windows
+*.sh text eol=lf
+*.bash text eol=lf
+*.bats text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf

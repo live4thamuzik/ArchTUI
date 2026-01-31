@@ -93,7 +93,7 @@ teardown() {
     source "$SCRIPTS_DIR/disk_utils.sh"
     source "$SCRIPTS_DIR/disk_strategies.sh"
     # Check that strategy dispatcher is available
-    type prepare_disk &>/dev/null
+    type execute_disk_strategy &>/dev/null
 }
 
 # =============================================================================
