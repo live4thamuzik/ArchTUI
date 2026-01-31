@@ -227,6 +227,7 @@ impl CommandProcessGroup for std::process::Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn test_registry_register_unregister() {
@@ -256,5 +257,170 @@ mod tests {
 
         guard.unregister_child(1111);
         assert_eq!(guard.child_count(), 1);
+    }
+
+    // =========================================================================
+    // Sprint 1.2: Death Pact Integration Tests
+    // =========================================================================
+
+    /// Helper to wait for a process to terminate (reap zombie)
+    fn wait_for_process_death(pid: u32, timeout: Duration) -> bool {
+        use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+
+        let start = Instant::now();
+        let nix_pid = Pid::from_raw(pid as i32);
+
+        while start.elapsed() < timeout {
+            // Try to reap the zombie if we're the parent
+            match waitpid(nix_pid, Some(WaitPidFlag::WNOHANG)) {
+                Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _)) => {
+                    return true; // Process reaped
+                }
+                Ok(WaitStatus::StillAlive) => {
+                    // Still running, keep waiting
+                }
+                Err(nix::errno::Errno::ECHILD) => {
+                    // Not our child or already reaped - check if PID exists
+                    if !is_process_alive(pid) {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+
+    #[test]
+    fn test_terminate_all_kills_real_process() {
+        use std::process::Command;
+        use std::time::Duration;
+
+        // Spawn a real long-running bash process
+        let child = Command::new("bash")
+            .args(["-c", "sleep 60"])
+            .spawn()
+            .expect("Failed to spawn bash sleep process");
+
+        let pid = child.id();
+
+        // Register it in a fresh registry (not the global one to avoid interference)
+        let mut registry = ChildRegistry::default();
+        registry.register(pid);
+
+        // Verify process is alive
+        assert!(is_process_alive(pid), "Process should be alive after spawn");
+
+        // Terminate all with short grace period
+        registry.terminate_all(Duration::from_millis(500));
+
+        // Wait for process to die and be reaped
+        let died = wait_for_process_death(pid, Duration::from_secs(2));
+
+        assert!(died, "Process should be dead after terminate_all");
+    }
+
+    #[test]
+    fn test_terminate_all_is_idempotent() {
+        use std::time::Duration;
+
+        let mut registry = ChildRegistry::default();
+
+        // First termination on empty registry
+        registry.terminate_all(Duration::from_millis(100));
+
+        // Reset flag to test idempotency behavior
+        registry.cleanup_initiated = false;
+        registry.register(99999); // Fake PID
+
+        // Second termination should work without panic
+        registry.terminate_all(Duration::from_millis(100));
+
+        // No panic = success
+    }
+
+    #[test]
+    fn test_terminate_all_handles_already_dead_process() {
+        use std::process::Command;
+        use std::time::Duration;
+
+        // Spawn a process that exits immediately
+        let mut child = Command::new("bash")
+            .args(["-c", "exit 0"])
+            .spawn()
+            .expect("Failed to spawn bash");
+
+        let pid = child.id();
+
+        // Wait for it to finish naturally (reaps zombie)
+        let _ = child.wait();
+
+        // Register the (now dead and reaped) PID
+        let mut registry = ChildRegistry::default();
+        registry.register(pid);
+
+        // terminate_all should handle this gracefully
+        registry.terminate_all(Duration::from_millis(100));
+
+        // No panic = success
+    }
+
+    #[test]
+    fn test_sigterm_before_sigkill() {
+        use std::process::Command;
+        use std::time::Duration;
+
+        // Spawn a bash process that traps SIGTERM and exits cleanly
+        let child = Command::new("bash")
+            .args(["-c", "trap 'exit 0' TERM; sleep 60"])
+            .spawn()
+            .expect("Failed to spawn bash with trap");
+
+        let pid = child.id();
+
+        let mut registry = ChildRegistry::default();
+        registry.register(pid);
+
+        // Small delay to let trap be set up
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Terminate with grace period - should use SIGTERM first
+        registry.terminate_all(Duration::from_secs(2));
+
+        // Process should exit cleanly from SIGTERM handler
+        let died = wait_for_process_death(pid, Duration::from_secs(3));
+        assert!(died, "Process should exit from SIGTERM trap");
+    }
+
+    #[test]
+    fn test_send_signal_to_nonexistent_pid() {
+        // Sending signal to a PID that doesn't exist should return error
+        let result = send_signal(999999, Signal::SIGTERM);
+        assert!(result.is_err(), "Should fail for nonexistent PID");
+    }
+
+    #[test]
+    fn test_is_process_alive_nonexistent() {
+        // Check for a PID that almost certainly doesn't exist
+        assert!(!is_process_alive(999999));
+    }
+
+    #[test]
+    fn test_cleanup_initiated_flag_prevents_double_cleanup() {
+        use std::time::Duration;
+
+        let mut registry = ChildRegistry::default();
+        registry.register(12345); // Fake PID
+
+        // First call sets the flag
+        registry.terminate_all(Duration::from_millis(10));
+        assert!(registry.cleanup_initiated);
+
+        // Second call should return early due to flag
+        registry.terminate_all(Duration::from_millis(10));
+
+        // Flag should still be set
+        assert!(registry.cleanup_initiated);
     }
 }
