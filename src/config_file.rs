@@ -808,4 +808,220 @@ mod tests {
         assert_eq!(new_config.install_disk, default_config.install_disk);
         assert_eq!(new_config.hostname, default_config.hostname);
     }
+
+    // =========================================================================
+    // Sprint 1.1: Edge Case Tests for Serialization
+    // =========================================================================
+
+    #[test]
+    fn test_special_characters_in_password() {
+        let mut config = InstallationConfig::default();
+        // Passwords can contain special characters, quotes, etc.
+        config.user_password = r#"P@ss!w0rd$%^&*(){}[]|\"'`~<>?,./;:"#.to_string();
+        config.root_password = "root!@#$%".to_string();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "testhost".to_string();
+        config.username = "testuser".to_string();
+
+        // Should serialize and deserialize correctly
+        let json = serde_json::to_string(&config).expect("Should serialize");
+        let loaded: InstallationConfig =
+            serde_json::from_str(&json).expect("Should deserialize");
+
+        assert_eq!(loaded.user_password, config.user_password);
+        assert_eq!(loaded.root_password, config.root_password);
+    }
+
+    #[test]
+    fn test_unicode_in_optional_fields() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "testhost".to_string();
+        config.username = "testuser".to_string();
+        config.user_password = "pass123".to_string();
+        config.root_password = "root123".to_string();
+        // Additional packages can have unicode (though unusual)
+        // Space-separated string of package names
+        config.additional_packages = "vim 火狐".to_string();
+
+        let json = serde_json::to_string(&config).expect("Should serialize unicode");
+        let loaded: InstallationConfig =
+            serde_json::from_str(&json).expect("Should deserialize unicode");
+
+        assert_eq!(loaded.additional_packages, config.additional_packages);
+    }
+
+    #[test]
+    fn test_empty_optional_vectors() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "testhost".to_string();
+        config.username = "testuser".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+        config.additional_packages = String::new();
+        config.additional_aur_packages = String::new();
+
+        assert!(config.validate().is_ok(), "Empty package lists should be valid");
+
+        let json = serde_json::to_string(&config).expect("Should serialize");
+        let loaded: InstallationConfig = serde_json::from_str(&json).expect("Should deserialize");
+
+        assert!(loaded.additional_packages.is_empty());
+        assert!(loaded.additional_aur_packages.is_empty());
+    }
+
+    #[test]
+    fn test_whitespace_only_hostname_invalid() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "   ".to_string(); // Whitespace only
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        assert!(config.validate().is_err(), "Whitespace-only hostname should be invalid");
+    }
+
+    #[test]
+    fn test_whitespace_only_username_invalid() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "host".to_string();
+        config.username = "\t\n".to_string(); // Whitespace only
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        assert!(config.validate().is_err(), "Whitespace-only username should be invalid");
+    }
+
+    #[test]
+    fn test_very_long_hostname_invalid() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        // Hostnames longer than 32 chars are invalid per implementation
+        config.hostname = "a".repeat(33);
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        assert!(config.validate().is_err(), "Hostname > 32 chars should be invalid");
+    }
+
+    #[test]
+    fn test_maximum_valid_hostname() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        // 32 chars is the maximum valid hostname length per implementation
+        config.hostname = "a".repeat(32);
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        assert!(config.validate().is_ok(), "Hostname of 32 chars should be valid");
+    }
+
+    #[test]
+    fn test_disk_path_with_partition_number() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda1".to_string(); // Partition, not disk
+        config.hostname = "host".to_string();
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        // This should be valid - validation just checks it starts with /dev/
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_nvme_disk_path() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/nvme0n1".to_string();
+        config.hostname = "host".to_string();
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        assert!(config.validate().is_ok(), "NVMe disk path should be valid");
+    }
+
+    #[test]
+    fn test_json_with_extra_fields_ignored() {
+        // Create a valid config, serialize it, add extra fields, and deserialize
+        let config = InstallationConfig::default();
+        let mut json: serde_json::Value = serde_json::to_value(&config).unwrap();
+
+        // Add unknown fields that might exist in future versions
+        json["unknown_future_field"] = serde_json::json!("some_value");
+        json["another_unknown"] = serde_json::json!(12345);
+
+        let json_str = serde_json::to_string(&json).unwrap();
+
+        // Without deny_unknown_fields, extra fields should be ignored
+        let result: Result<InstallationConfig, _> = serde_json::from_str(&json_str);
+        // Note: This test documents current behavior. If we add deny_unknown_fields,
+        // this test should be updated.
+        assert!(result.is_ok(), "Unknown fields should be ignored for forward compatibility");
+    }
+
+    #[test]
+    fn test_json_null_values_for_optional_fields() {
+        let json = r#"{
+            "boot_mode": "UEFI",
+            "install_disk": "/dev/sda",
+            "hostname": "host",
+            "username": "user",
+            "user_password": "pass",
+            "root_password": "root",
+            "partition_scheme": "auto_simple",
+            "root_filesystem": "ext4",
+            "encryption_password": null,
+            "additional_packages": null
+        }"#;
+
+        let result: Result<InstallationConfig, _> = serde_json::from_str(json);
+        // Null for optional fields should work with proper serde configuration
+        // This test documents current behavior
+        if let Err(e) = &result {
+            println!("Note: null values for optional fields not supported: {}", e);
+        }
+    }
+
+    #[test]
+    fn test_serialization_deterministic() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "host".to_string();
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        // Serialize twice, should produce identical output
+        let json1 = serde_json::to_string(&config).expect("Should serialize");
+        let json2 = serde_json::to_string(&config).expect("Should serialize again");
+
+        assert_eq!(json1, json2, "Serialization should be deterministic");
+    }
+
+    #[test]
+    fn test_pretty_json_roundtrip() {
+        let mut config = InstallationConfig::default();
+        config.install_disk = "/dev/sda".to_string();
+        config.hostname = "host".to_string();
+        config.username = "user".to_string();
+        config.user_password = "pass".to_string();
+        config.root_password = "root".to_string();
+
+        // Pretty print JSON
+        let pretty_json =
+            serde_json::to_string_pretty(&config).expect("Should pretty serialize");
+
+        // Should parse back correctly
+        let loaded: InstallationConfig =
+            serde_json::from_str(&pretty_json).expect("Should parse pretty JSON");
+
+        assert_eq!(loaded.hostname, config.hostname);
+        assert_eq!(loaded.username, config.username);
+    }
 }

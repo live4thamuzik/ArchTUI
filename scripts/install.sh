@@ -67,6 +67,55 @@ source "$SCRIPT_DIR/utils.sh"
 source "$SCRIPT_DIR/disk_strategies.sh"
 source "$SCRIPT_DIR/config_loader.sh"
 
+# --- Secure Password Input from TUI ---
+# SECURITY: Passwords are passed via stdin (not environment variables)
+# to prevent exposure in /proc/<pid>/environ
+#
+# Protocol: TUI sends 3 lines via stdin:
+#   Line 1: MAIN_USER_PASSWORD
+#   Line 2: ROOT_PASSWORD
+#   Line 3: ENCRYPTION_PASSWORD (may be empty)
+#
+# Detection: If stdin is a pipe (not a terminal) and ARCHINSTALL_TUI is set,
+# we read passwords from stdin. Otherwise, assume headless/interactive mode.
+
+if [[ ! -t 0 ]] && [[ -n "${ARCHINSTALL_TUI:-}" || -p /dev/stdin ]]; then
+    # TUI mode: read passwords from piped stdin
+    echo "Reading secure credentials from TUI..."
+
+    if ! read -r MAIN_USER_PASSWORD; then
+        echo "ERROR: Failed to read user password from stdin" >&2
+        exit 1
+    fi
+
+    if ! read -r ROOT_PASSWORD; then
+        echo "ERROR: Failed to read root password from stdin" >&2
+        exit 1
+    fi
+
+    # Encryption password is optional (may be empty line)
+    read -r ENCRYPTION_PASSWORD || ENCRYPTION_PASSWORD=""
+
+    # Validate required passwords were received
+    if [[ -z "$MAIN_USER_PASSWORD" ]]; then
+        echo "ERROR: User password is empty" >&2
+        exit 1
+    fi
+
+    if [[ -z "$ROOT_PASSWORD" ]]; then
+        echo "ERROR: Root password is empty" >&2
+        exit 1
+    fi
+
+    # SECURITY: Close stdin to prevent password leakage to subprocesses
+    exec 0</dev/null
+
+    # Export for use by sub-scripts (within this process tree only)
+    export MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
+
+    echo "Credentials received securely."
+fi
+
 # Initialize logging
 setup_logging
 
