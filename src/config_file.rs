@@ -524,4 +524,288 @@ mod tests {
         assert!(config.partitioning_strategy.requires_raid());
         assert!(config.partitioning_strategy.uses_encryption());
     }
+
+    // =========================================================================
+    // Sprint 1.1: Comprehensive Serialization Tests
+    // =========================================================================
+
+    #[test]
+    fn test_save_to_file_creates_valid_json() {
+        let config = create_test_config();
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Use save_to_file method directly
+        let result = config.save_to_file(&path);
+        assert!(result.is_ok(), "save_to_file should succeed");
+
+        // Verify file contains valid JSON
+        let content = std::fs::read_to_string(&path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.is_object(), "Output should be a JSON object");
+    }
+
+    #[test]
+    fn test_roundtrip_save_load() {
+        let original = create_test_config();
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        // Save then load
+        original.save_to_file(&path).unwrap();
+        let loaded = InstallationConfig::load_from_file(&path).unwrap();
+
+        // Verify all fields match
+        assert_eq!(loaded.boot_mode, original.boot_mode);
+        assert_eq!(loaded.secure_boot, original.secure_boot);
+        assert_eq!(loaded.install_disk, original.install_disk);
+        assert_eq!(loaded.partitioning_strategy, original.partitioning_strategy);
+        assert_eq!(loaded.root_filesystem, original.root_filesystem);
+        assert_eq!(loaded.home_filesystem, original.home_filesystem);
+        assert_eq!(loaded.encryption, original.encryption);
+        assert_eq!(loaded.hostname, original.hostname);
+        assert_eq!(loaded.username, original.username);
+        assert_eq!(loaded.user_password, original.user_password);
+        assert_eq!(loaded.root_password, original.root_password);
+        assert_eq!(loaded.kernel, original.kernel);
+        assert_eq!(loaded.bootloader, original.bootloader);
+        assert_eq!(loaded.desktop_environment, original.desktop_environment);
+        assert_eq!(loaded.display_manager, original.display_manager);
+        assert_eq!(loaded.plymouth_theme, original.plymouth_theme);
+    }
+
+    #[test]
+    fn test_load_json_missing_required_field() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        // JSON missing boot_mode field
+        temp_file
+            .write_all(b"{\"install_disk\": \"/dev/sda\"}")
+            .unwrap();
+        temp_file.flush().unwrap();
+
+        let result = InstallationConfig::load_from_file(temp_file.path());
+        assert!(result.is_err(), "Should fail on missing required fields");
+    }
+
+    #[test]
+    fn test_load_json_wrong_type_fails() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        // JSON with wrong type for a field (number instead of string)
+        temp_file
+            .write_all(br#"{"boot_mode": 12345, "install_disk": "/dev/sda"}"#)
+            .unwrap();
+        temp_file.flush().unwrap();
+
+        let result = InstallationConfig::load_from_file(temp_file.path());
+        assert!(result.is_err(), "Should fail on wrong field type");
+    }
+
+    #[test]
+    fn test_load_json_malformed_structure() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        // JSON array instead of object
+        temp_file.write_all(b"[1, 2, 3]").unwrap();
+        temp_file.flush().unwrap();
+
+        let result = InstallationConfig::load_from_file(temp_file.path());
+        assert!(result.is_err(), "Should fail on wrong JSON structure");
+    }
+
+    // =========================================================================
+    // Sprint 1.1: Validation Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_validation_empty_hostname() {
+        let mut config = create_test_config();
+        config.hostname = String::new();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Hostname"));
+    }
+
+    #[test]
+    fn test_validation_hostname_too_short() {
+        let mut config = create_test_config();
+        config.hostname = "ab".to_string(); // Only 2 chars
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("3-32"));
+    }
+
+    #[test]
+    fn test_validation_hostname_too_long() {
+        let mut config = create_test_config();
+        config.hostname = "a".repeat(33); // 33 chars
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("3-32"));
+    }
+
+    #[test]
+    fn test_validation_hostname_special_chars() {
+        let mut config = create_test_config();
+        config.hostname = "host-name".to_string(); // Contains hyphen
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("letters, numbers"));
+    }
+
+    #[test]
+    fn test_validation_empty_username() {
+        let mut config = create_test_config();
+        config.username = String::new();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Username"));
+    }
+
+    #[test]
+    fn test_validation_username_starts_with_number() {
+        let mut config = create_test_config();
+        config.username = "1user".to_string();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("start with a letter"));
+    }
+
+    #[test]
+    fn test_validation_empty_user_password() {
+        let mut config = create_test_config();
+        config.user_password = String::new();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("User password"));
+    }
+
+    #[test]
+    fn test_validation_user_password_with_whitespace() {
+        let mut config = create_test_config();
+        config.user_password = "pass word".to_string();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("whitespace"));
+    }
+
+    #[test]
+    fn test_validation_empty_root_password() {
+        let mut config = create_test_config();
+        config.root_password = String::new();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Root password"));
+    }
+
+    #[test]
+    fn test_validation_root_password_with_whitespace() {
+        let mut config = create_test_config();
+        config.root_password = "root\tpass".to_string(); // Tab character
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("whitespace"));
+    }
+
+    #[test]
+    fn test_validation_git_url_invalid_scheme() {
+        let mut config = create_test_config();
+        config.git_repository = Toggle::Yes;
+        config.git_repository_url = "ftp://example.com/repo.git".to_string();
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("http://"));
+    }
+
+    #[test]
+    fn test_validation_git_url_valid_schemes() {
+        let mut config = create_test_config();
+        config.git_repository = Toggle::Yes;
+
+        // Test all valid schemes
+        for scheme in &["https://", "http://", "git://", "ssh://"] {
+            config.git_repository_url = format!("{}example.com/repo.git", scheme);
+            assert!(
+                config.validate().is_ok(),
+                "Should accept {} URLs",
+                scheme
+            );
+        }
+    }
+
+    // =========================================================================
+    // Sprint 1.1: Enum Serialization Verification
+    // =========================================================================
+
+    #[test]
+    fn test_enum_serialization_matches_bash_constants() {
+        let config = create_test_config();
+        let env_vars = config.to_env_vars();
+
+        // Verify enum string values match expected bash format
+        let find_var = |name: &str| -> String {
+            env_vars
+                .iter()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default()
+        };
+
+        // These must match what bash scripts expect
+        assert_eq!(find_var("BOOT_MODE"), "Auto");
+        assert_eq!(find_var("ROOT_FILESYSTEM"), "ext4");
+        assert_eq!(find_var("BOOTLOADER"), "grub");
+        assert_eq!(find_var("DESKTOP_ENVIRONMENT"), "gnome");
+    }
+
+    #[test]
+    fn test_all_filesystem_types_serialize() {
+        use std::str::FromStr;
+
+        let filesystems = vec![
+            Filesystem::Ext4,
+            Filesystem::Btrfs,
+            Filesystem::Xfs,
+        ];
+
+        for fs in filesystems {
+            let serialized = fs.to_string();
+            let deserialized = Filesystem::from_str(&serialized);
+            assert!(
+                deserialized.is_ok(),
+                "Filesystem {:?} should roundtrip",
+                fs
+            );
+            assert_eq!(deserialized.unwrap(), fs);
+        }
+    }
+
+    #[test]
+    fn test_all_bootloaders_serialize() {
+        use std::str::FromStr;
+
+        let bootloaders = vec![
+            Bootloader::Grub,
+            Bootloader::SystemdBoot,
+        ];
+
+        for bl in bootloaders {
+            let serialized = bl.to_string();
+            let deserialized = Bootloader::from_str(&serialized);
+            assert!(
+                deserialized.is_ok(),
+                "Bootloader {:?} should roundtrip",
+                bl
+            );
+            assert_eq!(deserialized.unwrap(), bl);
+        }
+    }
+
+    #[test]
+    fn test_config_new_equals_default() {
+        let new_config = InstallationConfig::new();
+        let default_config = InstallationConfig::default();
+
+        assert_eq!(new_config.boot_mode, default_config.boot_mode);
+        assert_eq!(new_config.install_disk, default_config.install_disk);
+        assert_eq!(new_config.hostname, default_config.hostname);
+    }
 }
