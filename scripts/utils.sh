@@ -9,7 +9,8 @@ set -euo pipefail
 # --- Source-Once Guard ---
 # Prevents errors from re-sourcing (readonly variable redefinition)
 if [[ -n "${_UTILS_SH_SOURCED:-}" ]]; then
-    return 0 2>/dev/null || exit 0
+    # shellcheck disable=SC2317
+    return 0 2>/dev/null || true
 fi
 readonly _UTILS_SH_SOURCED=1
 
