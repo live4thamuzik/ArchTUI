@@ -75,6 +75,7 @@ impl App {
     }
 
     /// Get reference to keybinding context
+    #[allow(dead_code)] // API method available for future use
     pub fn keybinding_context(&self) -> &KeybindingContext {
         &self.keybinding_context
     }
@@ -121,7 +122,7 @@ impl App {
                             String::new(),
                         ];
 
-                        if !config.desktop_environment.is_empty() {
+                        if config.desktop_environment != crate::types::DesktopEnvironment::None {
                             content.push(format!("Desktop: {}", config.desktop_environment));
                         }
 
