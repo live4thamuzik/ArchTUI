@@ -34,7 +34,12 @@ execute_simple_partitioning() {
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
     else
-        # BIOS: Boot partition - mounted to /boot
+        # BIOS with GPT: Need BIOS boot partition for GRUB
+        create_bios_boot_partition "$INSTALL_DISK" "$part_num"
+        current_start_mib=$((current_start_mib + BIOS_BOOT_PART_SIZE_MIB))
+        part_num=$((part_num + 1))
+
+        # Boot partition - mounted to /boot
         create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))

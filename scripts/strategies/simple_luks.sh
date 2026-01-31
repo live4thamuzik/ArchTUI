@@ -34,7 +34,12 @@ execute_simple_luks_partitioning() {
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
     else
-        # BIOS: Boot partition - mounted to /boot
+        # BIOS with GPT: Need BIOS boot partition for GRUB
+        create_bios_boot_partition "$INSTALL_DISK" "$part_num"
+        current_start_mib=$((current_start_mib + BIOS_BOOT_PART_SIZE_MIB))
+        part_num=$((part_num + 1))
+
+        # Boot partition - mounted to /boot
         create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
@@ -50,13 +55,22 @@ execute_simple_luks_partitioning() {
     
     # LUKS partition (for root and optionally home)
     log_info "Creating LUKS partition..."
-    if [ "$BOOT_MODE" = "UEFI" ]; then
-        sgdisk -n "$part_num:0:0" -t "$part_num:$LUKS_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LUKS partition."
-    else
-        printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create LUKS partition."
+
+    # Use sgdisk for both UEFI and BIOS (GPT works with both)
+    sgdisk -n "${part_num}:0:0" \
+           -t "${part_num}:${LUKS_PARTITION_TYPE}" \
+           -c "${part_num}:LUKS" \
+           "$INSTALL_DISK" || error_exit "Failed to create LUKS partition"
+
+    sync_partitions "$INSTALL_DISK"
+
+    local luks_dev
+    luks_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+
+    # Verify partition exists before proceeding
+    if [[ ! -b "$luks_dev" ]]; then
+        error_exit "LUKS partition $luks_dev not found after creation"
     fi
-    partprobe "$INSTALL_DISK"
-    local luks_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
     
     # Set up LUKS encryption using helper function (non-interactive)
     local encrypted_dev
@@ -84,14 +98,22 @@ execute_simple_luks_partitioning() {
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
         part_num=$((part_num + 1))
         log_info "Creating separate LUKS home partition..."
-        
-        if [ "$BOOT_MODE" = "UEFI" ]; then
-            sgdisk -n "$part_num:0:0" -t "$part_num:$LUKS_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition."
-        else
-            printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition."
+
+        # Use sgdisk for both UEFI and BIOS (GPT works with both)
+        sgdisk -n "${part_num}:0:0" \
+               -t "${part_num}:${LUKS_PARTITION_TYPE}" \
+               -c "${part_num}:LUKS_HOME" \
+               "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition"
+
+        sync_partitions "$INSTALL_DISK"
+
+        local luks_home_dev
+        luks_home_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+
+        # Verify partition exists before proceeding
+        if [[ ! -b "$luks_home_dev" ]]; then
+            error_exit "LUKS home partition $luks_home_dev not found after creation"
         fi
-        partprobe "$INSTALL_DISK"
-        local luks_home_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
         
         # Set up LUKS encryption for home using helper function (non-interactive)
         local encrypted_home_dev

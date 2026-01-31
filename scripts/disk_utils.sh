@@ -112,24 +112,56 @@ wipe_disk() {
     log_success "Disk $disk wiped successfully"
 }
 
-# Create partition table (GPT for UEFI, MBR for BIOS)
+# Synchronize partition table with kernel
+# This prevents race conditions where the kernel hasn't seen new partitions yet
+sync_partitions() {
+    local disk="$1"
+    local max_retries="${2:-3}"
+    local retry=0
+
+    log_info "Synchronizing partition table with kernel..."
+
+    # First, sync filesystems
+    sync
+
+    # Inform kernel of partition changes
+    while [[ $retry -lt $max_retries ]]; do
+        if partprobe "$disk" 2>/dev/null; then
+            break
+        fi
+        retry=$((retry + 1))
+        sleep 1
+    done
+
+    # Wait for udev to process all events
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
+
+    # Additional safety delay for slow devices
+    sleep 1
+
+    log_info "Partition table synchronized"
+}
+
+# Create partition table (GPT for both UEFI and BIOS)
+# Note: Modern BIOS systems work fine with GPT + BIOS boot partition
 create_partition_table() {
     local disk="$1"
 
     if [[ "${DRY_RUN:-false}" == "true" ]]; then
-        log_info "[DRY-RUN] Would create ${BOOT_MODE:-UEFI} partition table on $disk"
+        log_info "[DRY-RUN] Would create GPT partition table on $disk"
         return 0
     fi
 
-    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
-        log_info "Creating GPT partition table on $disk"
-        sgdisk -Z "$disk" || error_exit "Failed to create GPT label on $disk"
-    else
-        log_info "Creating MBR partition table on $disk"
-        printf "o\nw\n" | fdisk "$disk" || error_exit "Failed to create MBR label on $disk"
-    fi
-    partprobe "$disk"
-    udevadm settle --timeout=5 2>/dev/null || sleep 1
+    log_info "Creating GPT partition table on $disk"
+
+    # Completely wipe all partition data and create fresh GPT
+    # --zap-all removes both GPT and MBR data structures
+    sgdisk --zap-all "$disk" 2>/dev/null || true
+
+    # Create new GPT
+    sgdisk -o "$disk" || error_exit "Failed to create GPT label on $disk"
+
+    sync_partitions "$disk"
 }
 
 # Create ESP partition (UEFI only)
@@ -139,13 +171,21 @@ create_esp_partition() {
     local size_mib="${3:-$DEFAULT_ESP_SIZE_MIB}"
 
     log_info "Creating ESP partition (${size_mib}MiB) for /efi..."
-    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${EFI_PARTITION_TYPE}" -c "${part_num}:EFI" "$disk" || \
-        error_exit "Failed to create ESP partition"
-    partprobe "$disk"
-    sleep 1
+
+    sgdisk -n "${part_num}:0:+${size_mib}M" \
+           -t "${part_num}:${EFI_PARTITION_TYPE}" \
+           -c "${part_num}:EFI" \
+           "$disk" || error_exit "Failed to create ESP partition"
+
+    sync_partitions "$disk"
 
     local part_dev
     part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists before formatting
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "ESP partition $part_dev not found after creation"
+    fi
 
     format_filesystem "$part_dev" "$EFI_FILESYSTEM"
     capture_device_info "efi" "$part_dev"
@@ -164,13 +204,21 @@ create_xbootldr_partition() {
     local size_mib="${3:-1024}"
 
     log_info "Creating XBOOTLDR partition (${size_mib}MiB) for /boot..."
-    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${XBOOTLDR_PARTITION_TYPE}" -c "${part_num}:BOOT" "$disk" || \
-        error_exit "Failed to create XBOOTLDR partition"
-    partprobe "$disk"
-    sleep 1
+
+    sgdisk -n "${part_num}:0:+${size_mib}M" \
+           -t "${part_num}:${XBOOTLDR_PARTITION_TYPE}" \
+           -c "${part_num}:BOOT" \
+           "$disk" || error_exit "Failed to create XBOOTLDR partition"
+
+    sync_partitions "$disk"
 
     local part_dev
     part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists before formatting
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "XBOOTLDR partition $part_dev not found after creation"
+    fi
 
     format_filesystem "$part_dev" "$BOOT_FILESYSTEM"
     capture_device_info "boot" "$part_dev"
@@ -182,7 +230,7 @@ create_xbootldr_partition() {
     echo "$part_dev"
 }
 
-# Create boot partition (BIOS only)
+# Create boot partition (works for both UEFI and BIOS with GPT)
 create_boot_partition() {
     local disk="$1"
     local part_num="$2"
@@ -190,20 +238,21 @@ create_boot_partition() {
 
     log_info "Creating boot partition (${size_mib}MiB) for /boot..."
 
-    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
-        # For UEFI, use GPT
-        sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:BOOT" "$disk" || \
-            error_exit "Failed to create boot partition"
-    else
-        # For BIOS, use fdisk
-        printf "n\np\n%s\n\n+%sM\nw\n" "$part_num" "$size_mib" | fdisk "$disk" || \
-            error_exit "Failed to create boot partition"
-    fi
-    partprobe "$disk"
-    sleep 1
+    # Use sgdisk for both UEFI and BIOS (GPT works with both)
+    sgdisk -n "${part_num}:0:+${size_mib}M" \
+           -t "${part_num}:${LINUX_PARTITION_TYPE}" \
+           -c "${part_num}:BOOT" \
+           "$disk" || error_exit "Failed to create boot partition"
+
+    sync_partitions "$disk"
 
     local part_dev
     part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists before formatting
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "Boot partition $part_dev not found after creation"
+    fi
 
     format_filesystem "$part_dev" "$BOOT_FILESYSTEM"
     capture_device_info "boot" "$part_dev"
@@ -221,14 +270,23 @@ create_bios_boot_partition() {
     local part_num="$2"
 
     log_info "Creating BIOS boot partition..."
-    sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" -c "${part_num}:BIOS" "$disk" || \
-        error_exit "Failed to create BIOS boot partition"
-    partprobe "$disk"
-    sleep 1
 
-    # BIOS boot partition is not formatted or mounted
+    sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" \
+           -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" \
+           -c "${part_num}:BIOS" \
+           "$disk" || error_exit "Failed to create BIOS boot partition"
 
-    echo "$(get_partition_path "$disk" "$part_num")"
+    sync_partitions "$disk"
+
+    local part_dev
+    part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists (BIOS boot partition is not formatted or mounted)
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "BIOS boot partition $part_dev not found after creation"
+    fi
+
+    echo "$part_dev"
 }
 
 # Create swap partition
@@ -244,18 +302,21 @@ create_swap_partition() {
 
     log_info "Creating swap partition (${size_mib}MiB)..."
 
-    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
-        sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${SWAP_PARTITION_TYPE}" -c "${part_num}:SWAP" "$disk" || \
-            error_exit "Failed to create swap partition"
-    else
-        printf "n\np\n%s\n\n+%sM\nt\n%s\n82\nw\n" "$part_num" "$size_mib" "$part_num" | fdisk "$disk" || \
-            error_exit "Failed to create swap partition"
-    fi
-    partprobe "$disk"
-    sleep 1
+    # Use sgdisk for both UEFI and BIOS (GPT works with both)
+    sgdisk -n "${part_num}:0:+${size_mib}M" \
+           -t "${part_num}:${SWAP_PARTITION_TYPE}" \
+           -c "${part_num}:SWAP" \
+           "$disk" || error_exit "Failed to create swap partition"
+
+    sync_partitions "$disk"
 
     local part_dev
     part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists before formatting
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "Swap partition $part_dev not found after creation"
+    fi
 
     format_filesystem "$part_dev" "swap"
     capture_device_info "swap" "$part_dev"
@@ -274,18 +335,22 @@ create_root_partition() {
 
     log_info "Creating root partition with $filesystem filesystem..."
 
-    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
-        sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$disk" || \
-            error_exit "Failed to create root partition"
-    else
-        printf "n\np\n%s\n\n\nw\n" "$part_num" | fdisk "$disk" || \
-            error_exit "Failed to create root partition"
-    fi
-    partprobe "$disk"
-    sleep 1
+    # Use sgdisk for both UEFI and BIOS (GPT works with both)
+    # Size 0:0 means from current position to end of disk
+    sgdisk -n "${part_num}:0:0" \
+           -t "${part_num}:${LINUX_PARTITION_TYPE}" \
+           -c "${part_num}:ROOT" \
+           "$disk" || error_exit "Failed to create root partition"
+
+    sync_partitions "$disk"
 
     local part_dev
     part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists before formatting
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "Root partition $part_dev not found after creation"
+    fi
 
     format_filesystem "$part_dev" "$filesystem"
     capture_device_info "root" "$part_dev"
@@ -309,18 +374,21 @@ create_home_partition() {
 
     log_info "Creating home partition with $filesystem filesystem..."
 
-    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
-        sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$disk" || \
-            error_exit "Failed to create home partition"
-    else
-        printf "n\np\n%s\n\n\nw\n" "$part_num" | fdisk "$disk" || \
-            error_exit "Failed to create home partition"
-    fi
-    partprobe "$disk"
-    sleep 1
+    # Use sgdisk for both UEFI and BIOS (GPT works with both)
+    sgdisk -n "${part_num}:0:0" \
+           -t "${part_num}:${LINUX_PARTITION_TYPE}" \
+           -c "${part_num}:HOME" \
+           "$disk" || error_exit "Failed to create home partition"
+
+    sync_partitions "$disk"
 
     local part_dev
     part_dev=$(get_partition_path "$disk" "$part_num")
+
+    # Verify partition exists before formatting
+    if [[ ! -b "$part_dev" ]]; then
+        error_exit "Home partition $part_dev not found after creation"
+    fi
 
     format_filesystem "$part_dev" "$filesystem"
     capture_device_info "home" "$part_dev"
