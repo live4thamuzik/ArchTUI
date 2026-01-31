@@ -188,6 +188,16 @@ create_mock_commands() {
                 # Return empty mountpoint (not mounted)
                 echo ""
                 ;;
+            *"-n"*"-o UUID"*|*"-o UUID"*"-n"*)
+                # Return mock UUID for device
+                local dev="${!#}"  # Last argument
+                case "$dev" in
+                    */sda1) echo "mock-uuid-sda1" ;;
+                    */sda2) echo "mock-uuid-sda2" ;;
+                    */nvme*) echo "mock-uuid-nvme" ;;
+                    *) echo "mock-uuid-generic" ;;
+                esac
+                ;;
             *)
                 echo "NAME   SIZE TYPE MOUNTPOINT"
                 echo "sda    100G disk"
@@ -352,7 +362,7 @@ EOF
 # Source the scripts being tested (with mocks active)
 source_utils() {
     # Override EUID for root check tests
-    export EUID=0
+    # export EUID=0
 
     # Temporarily disable strict mode for sourcing
     set +euo pipefail

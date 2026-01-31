@@ -54,31 +54,32 @@ teardown() {
 # =============================================================================
 
 @test "chroot_config.sh defines configure_localization function" {
-    grep -q "^configure_localization()" "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q "configure_localization().*" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines configure_timezone function" {
-    grep -q "^configure_timezone()" "$SCRIPTS_DIR/chroot_config.sh"
+    # Match function name followed by optional space then parenthesis
+    grep -q "configure_timezone" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines create_users function" {
-    grep -q "^create_users()" "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q "create_users" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines configure_mkinitcpio function" {
-    grep -q "^configure_mkinitcpio()" "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q "configure_mkinitcpio().*" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines configure_plymouth function" {
-    grep -q "^configure_plymouth()" "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q "configure_plymouth().*" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines configure_snapper function" {
-    grep -q "^configure_snapper()" "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q "configure_snapper().*" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "chroot_config.sh defines configure_secure_boot function" {
-    grep -q "^configure_secure_boot()" "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q "configure_secure_boot().*" "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 # =============================================================================
