@@ -11,6 +11,7 @@ mod error;
 mod input;
 mod installer;
 mod package_utils;
+mod process_guard;
 mod scrolling;
 mod theme;
 mod types;
@@ -50,6 +51,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging first
     init_logger();
     info!("ArchInstall TUI starting up");
+
+    // Initialize signal handlers for graceful child process cleanup
+    // This ensures bash scripts are terminated if we receive SIGINT/SIGTERM
+    if let Err(e) = process_guard::init_signal_handlers() {
+        log::warn!("Failed to initialize signal handlers: {}", e);
+        // Continue anyway - cleanup will still work via Drop
+    }
+    debug!("Signal handlers initialized");
 
     let cli = Cli::parse_args();
     debug!("CLI arguments parsed");
