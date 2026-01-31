@@ -25,8 +25,25 @@ use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use log::{debug, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
+
+/// Messages sent from tool execution threads to the main UI thread
+#[derive(Debug)]
+pub enum ToolMessage {
+    /// A line of stdout output
+    Stdout(String),
+    /// A line of stderr output
+    Stderr(String),
+    /// Tool execution completed successfully
+    Complete { success: bool, exit_code: Option<i32> },
+    /// Tool execution failed to start
+    Error(String),
+}
 
 /// Main application struct
 pub struct App {
@@ -39,6 +56,10 @@ pub struct App {
     pty_terminal: Option<PtyTerminal>,
     /// Keybinding context for navigation hints
     keybinding_context: KeybindingContext,
+    /// Channel sender for tool execution output (cloned to threads)
+    tool_tx: Sender<ToolMessage>,
+    /// Channel receiver for tool execution output (polled in main loop)
+    tool_rx: Receiver<ToolMessage>,
 }
 
 impl App {
@@ -63,6 +84,7 @@ impl App {
     /// Create a new application instance
     pub fn new(save_config_path: Option<std::path::PathBuf>) -> Self {
         info!("Creating new App instance");
+        let (tool_tx, tool_rx) = mpsc::channel();
         Self {
             state: Arc::new(Mutex::new(AppState::default())),
             installer: None,
@@ -71,6 +93,8 @@ impl App {
             save_config_path,
             pty_terminal: None,
             keybinding_context: KeybindingContext::new(),
+            tool_tx,
+            tool_rx,
         }
     }
 
@@ -273,6 +297,72 @@ impl App {
         Ok(())
     }
 
+    /// Poll for tool execution messages from background threads
+    fn poll_tool_messages(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Process all pending messages without blocking
+        while let Ok(msg) = self.tool_rx.try_recv() {
+            let mut state = self.lock_state_mut()?;
+
+            match msg {
+                ToolMessage::Stdout(line) => {
+                    if let Some(ref mut floating) = state.floating_output {
+                        floating.append_line(line);
+                        // Auto-scroll to bottom if enabled
+                        if floating.auto_scroll {
+                            floating.scroll_offset = floating.content.len().saturating_sub(1);
+                        }
+                    }
+                }
+                ToolMessage::Stderr(line) => {
+                    if let Some(ref mut floating) = state.floating_output {
+                        floating.append_line(format!("⚠ {}", line));
+                        if floating.auto_scroll {
+                            floating.scroll_offset = floating.content.len().saturating_sub(1);
+                        }
+                    }
+                }
+                ToolMessage::Complete { success, exit_code } => {
+                    // Update status message first (before borrowing floating_output)
+                    let status_msg = if success {
+                        "Tool completed successfully".to_string()
+                    } else {
+                        format!("Tool failed with exit code: {}", exit_code.unwrap_or(-1))
+                    };
+                    state.status_message = status_msg.clone();
+                    state.current_tool = None;
+
+                    // Now update floating output
+                    if let Some(ref mut floating) = state.floating_output {
+                        floating.append_line(String::new());
+                        if success {
+                            floating.append_line("✅ Tool completed successfully".to_string());
+                        } else {
+                            floating.append_line(format!(
+                                "❌ Tool failed with exit code: {}",
+                                exit_code.unwrap_or(-1)
+                            ));
+                        }
+                        floating.append_line(String::new());
+                        floating.append_line("Press Esc or Enter to close".to_string());
+                        floating.mark_complete();
+                    }
+                }
+                ToolMessage::Error(err) => {
+                    state.status_message = format!("Tool error: {}", err);
+                    state.current_tool = None;
+
+                    if let Some(ref mut floating) = state.floating_output {
+                        floating.append_line(format!("❌ Error: {}", err));
+                        floating.append_line(String::new());
+                        floating.append_line("Press Esc or Enter to close".to_string());
+                        floating.mark_complete();
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Run the main application loop
     pub fn run(
         &mut self,
@@ -283,6 +373,9 @@ impl App {
         loop {
             // Poll PTY if in embedded terminal mode
             self.poll_pty()?;
+
+            // Poll for tool execution output messages
+            self.poll_tool_messages()?;
 
             // Handle input events
             if crossterm::event::poll(Duration::from_millis(50))? {
@@ -2761,15 +2854,13 @@ impl App {
         self.execute_tool_with_device("check_disk_health.sh", &selected_disk, &["--detailed"])
     }
 
-    /// Generic function to execute tools that need a device parameter
+    /// Generic function to execute tools that need a device parameter (async/non-blocking)
     fn execute_tool_with_device(
         &mut self,
         script_name: &str,
         device: &str,
         extra_args: &[&str],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use std::process::{Command, Stdio};
-
         let mut args = Vec::new();
         args.push("--device".to_string());
         args.push(device.to_string());
@@ -2779,80 +2870,17 @@ impl App {
         }
 
         let script_path = format!("scripts/tools/{}", script_name);
-
-        println!("🔧 Executing: {} {}", script_path, args.join(" "));
-
-        let output = Command::new("bash")
-            .arg(&script_path)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()?;
-
-        // Print stdout
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if !stdout.is_empty() {
-            print!("{}", stdout);
-        }
-
-        // Print stderr
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if !stderr.is_empty() {
-            eprint!("{}", stderr);
-        }
-
-        if output.status.success() {
-            println!(
-                "✅ {} completed successfully",
-                script_name.replace(".sh", "").replace("_", " ")
-            );
-            if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = format!(
-                    "{} completed for {}",
-                    script_name.replace(".sh", "").replace("_", " "),
-                    device
-                );
-                state.current_tool = None;
-            }
-        } else {
-            let error_msg = format!(
-                "❌ {} failed for {}",
-                script_name.replace(".sh", "").replace("_", " "),
-                device
-            );
-            eprintln!("{}", error_msg);
-            if let Ok(mut state) = self.lock_state_mut() {
-                state.status_message = error_msg.clone();
-                state.current_tool = None;
-            }
-            return Err(error_msg.into());
-        }
-
-        Ok(())
-    }
-
-    /// Generic function to execute simple tools with no parameters
-    fn execute_simple_tool(
-        &mut self,
-        script_name: &str,
-        extra_args: &[&str],
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        use std::process::{Command, Stdio};
-
-        let mut args = Vec::new();
-        for arg in extra_args {
-            args.push(arg.to_string());
-        }
-
-        let script_path = format!("scripts/tools/{}", script_name);
-        let tool_display = script_name.replace(".sh", "").replace("_", " ");
+        let tool_display = script_name.replace(".sh", "").replace('_', " ");
 
         // Set up floating output window
         {
             let mut state = self.lock_state_mut()?;
-            state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
-                title: format!("Running: {}", tool_display),
-                content: vec![format!("Executing: {} {}", script_path, args.join(" "))],
+            state.floating_output = Some(FloatingOutputState {
+                title: format!("Running: {} on {}", tool_display, device),
+                content: vec![
+                    format!("Executing: {} {}", script_path, args.join(" ")),
+                    String::new(),
+                ],
                 scroll_offset: 0,
                 auto_scroll: true,
                 complete: false,
@@ -2860,64 +2888,134 @@ impl App {
                 status: "Running...".to_string(),
             });
             state.mode = AppMode::FloatingOutput;
+            state.current_tool = Some(tool_display);
         }
 
-        let output = Command::new("bash")
-            .arg(&script_path)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()?;
+        // Spawn the tool in a background thread
+        self.spawn_tool_script(&script_path, args)?;
 
-        // Collect output lines
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        Ok(())
+    }
 
-        let mut output_lines: Vec<String> = Vec::new();
-        output_lines.push(format!("Executing: {} {}", script_path, args.join(" ")));
-        output_lines.push(String::new());
+    /// Generic function to execute simple tools with no parameters (async/non-blocking)
+    fn execute_simple_tool(
+        &mut self,
+        script_name: &str,
+        extra_args: &[&str],
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let args: Vec<String> = extra_args.iter().map(|s| s.to_string()).collect();
+        let script_path = format!("scripts/tools/{}", script_name);
+        let tool_display = script_name.replace(".sh", "").replace('_', " ");
 
-        if !stdout.is_empty() {
-            for line in stdout.lines() {
-                output_lines.push(line.to_string());
-            }
+        // Set up floating output window
+        {
+            let mut state = self.lock_state_mut()?;
+            state.floating_output = Some(FloatingOutputState {
+                title: format!("Running: {}", tool_display),
+                content: vec![
+                    format!("Executing: {} {}", script_path, args.join(" ")),
+                    String::new(),
+                ],
+                scroll_offset: 0,
+                auto_scroll: true,
+                complete: false,
+                progress: None,
+                status: "Running...".to_string(),
+            });
+            state.mode = AppMode::FloatingOutput;
+            state.current_tool = Some(tool_display.clone());
         }
 
-        if !stderr.is_empty() {
-            output_lines.push(String::new());
-            output_lines.push("--- Errors ---".to_string());
-            for line in stderr.lines() {
-                output_lines.push(line.to_string());
-            }
-        }
+        // Spawn the tool in a background thread
+        self.spawn_tool_script(&script_path, args)?;
 
-        output_lines.push(String::new());
+        Ok(())
+    }
 
-        if output.status.success() {
-            output_lines.push(format!("{} completed successfully", tool_display));
-            if let Ok(mut state) = self.lock_state_mut() {
-                if let Some(ref mut floating) = state.floating_output {
-                    floating.content = output_lines;
-                    floating.content.push(String::new());
-                    floating.content.push("Press Esc or Enter to close".to_string());
-                    floating.complete = true;
+    /// Spawn a tool script in a background thread with real-time output streaming
+    fn spawn_tool_script(
+        &self,
+        script_path: &str,
+        args: Vec<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let tx = self.tool_tx.clone();
+        let script_path = script_path.to_string();
+
+        thread::spawn(move || {
+            // Spawn the child process
+            let child_result = Command::new("bash")
+                .arg(&script_path)
+                .args(&args)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .stdin(Stdio::null())
+                .spawn();
+
+            let mut child = match child_result {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = tx.send(ToolMessage::Error(format!(
+                        "Failed to start script: {}",
+                        e
+                    )));
+                    return;
                 }
-                state.status_message = format!("{} completed", tool_display);
-                state.current_tool = None;
+            };
+
+            // Stream stdout in a separate thread
+            let stdout_tx = tx.clone();
+            let stdout_handle = if let Some(stdout) = child.stdout.take() {
+                Some(thread::spawn(move || {
+                    let reader = BufReader::new(stdout);
+                    for line in reader.lines().map_while(Result::ok) {
+                        if stdout_tx.send(ToolMessage::Stdout(line)).is_err() {
+                            break; // Receiver dropped
+                        }
+                    }
+                }))
+            } else {
+                None
+            };
+
+            // Stream stderr in a separate thread
+            let stderr_tx = tx.clone();
+            let stderr_handle = if let Some(stderr) = child.stderr.take() {
+                Some(thread::spawn(move || {
+                    let reader = BufReader::new(stderr);
+                    for line in reader.lines().map_while(Result::ok) {
+                        if stderr_tx.send(ToolMessage::Stderr(line)).is_err() {
+                            break; // Receiver dropped
+                        }
+                    }
+                }))
+            } else {
+                None
+            };
+
+            // Wait for stdout/stderr threads to finish
+            if let Some(h) = stdout_handle {
+                let _ = h.join();
             }
-        } else {
-            output_lines.push(format!("{} failed", tool_display));
-            if let Ok(mut state) = self.lock_state_mut() {
-                if let Some(ref mut floating) = state.floating_output {
-                    floating.content = output_lines;
-                    floating.content.push(String::new());
-                    floating.content.push("Press Esc or Enter to close".to_string());
-                    floating.complete = true;
+            if let Some(h) = stderr_handle {
+                let _ = h.join();
+            }
+
+            // Wait for child process to complete
+            match child.wait() {
+                Ok(status) => {
+                    let _ = tx.send(ToolMessage::Complete {
+                        success: status.success(),
+                        exit_code: status.code(),
+                    });
                 }
-                state.status_message = format!("{} failed", tool_display);
-                state.current_tool = None;
+                Err(e) => {
+                    let _ = tx.send(ToolMessage::Error(format!(
+                        "Failed to wait for script: {}",
+                        e
+                    )));
+                }
             }
-        }
+        });
 
         Ok(())
     }
@@ -2928,8 +3026,6 @@ impl App {
         tool_name: &str,
         params: Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use std::process::{Command, Stdio};
-
         let mut args = Vec::new();
 
         // Map tool names to their script names and build arguments
@@ -3163,14 +3259,18 @@ impl App {
         }
 
         let script_path = format!("scripts/tools/{}", script_name);
+        let tool_display = tool_name.replace('_', " ");
 
-        // Non-interactive tools use floating output window
+        // Non-interactive tools use floating output window with async execution
         {
             let mut state = self.lock_state_mut()?;
             state.tool_dialog = None;
-            state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
-                title: format!("Running: {}", tool_name.replace("_", " ")),
-                content: vec![format!("Executing: {} {}", script_path, args.join(" "))],
+            state.floating_output = Some(FloatingOutputState {
+                title: format!("Running: {}", tool_display),
+                content: vec![
+                    format!("Executing: {} {}", script_path, args.join(" ")),
+                    String::new(),
+                ],
                 scroll_offset: 0,
                 auto_scroll: true,
                 complete: false,
@@ -3178,58 +3278,11 @@ impl App {
                 status: "Running...".to_string(),
             });
             state.mode = AppMode::FloatingOutput;
+            state.current_tool = Some(tool_display);
         }
 
-        let output = Command::new("bash")
-            .arg(&script_path)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()?;
-
-        // Collect output lines
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        let mut output_lines: Vec<String> = Vec::new();
-        output_lines.push(format!("Executing: {} {}", script_path, args.join(" ")));
-        output_lines.push(String::new());
-
-        if !stdout.is_empty() {
-            for line in stdout.lines() {
-                output_lines.push(line.to_string());
-            }
-        }
-
-        if !stderr.is_empty() {
-            output_lines.push(String::new());
-            output_lines.push("--- Errors ---".to_string());
-            for line in stderr.lines() {
-                output_lines.push(line.to_string());
-            }
-        }
-
-        output_lines.push(String::new());
-        if output.status.success() {
-            output_lines.push("Tool executed successfully".to_string());
-        } else {
-            output_lines.push(format!("Tool execution failed: {}", tool_name));
-        }
-        output_lines.push(String::new());
-        output_lines.push("Press Esc or Enter to close".to_string());
-
-        // Update floating output with results
-        if let Ok(mut state) = self.lock_state_mut() {
-            if let Some(ref mut floating) = state.floating_output {
-                floating.content = output_lines;
-                floating.complete = true;
-            }
-            if output.status.success() {
-                state.status_message = format!("{} completed successfully", tool_name);
-            } else {
-                state.status_message = format!("{} failed", tool_name);
-            }
-        }
+        // Spawn the tool in a background thread
+        self.spawn_tool_script(&script_path, args)?;
 
         Ok(())
     }
