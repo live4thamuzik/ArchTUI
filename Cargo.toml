@@ -19,6 +19,22 @@ vt100 = "0.15"
 log = "0.4"
 env_logger = "0.11"
 strum = { version = "0.26", features = ["derive"] }
+# Process lifecycle management (Sprint 6)
+nix = { version = "0.29", features = ["signal", "process"] }
+ctrlc = "3.4"
 
 [dev-dependencies]
 tempfile = "3"
+
+# Release profile optimizations for minimal binary size on the ISO
+[profile.release]
+# Link-time optimization across all crates
+lto = true
+# Single codegen unit for maximum optimization
+codegen-units = 1
+# Strip debug symbols from binary
+strip = true
+# Optimize for size with good performance
+opt-level = "z"
+# Abort on panic (smaller binary, no unwinding)
+panic = "abort"

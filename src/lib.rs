@@ -11,6 +11,7 @@ pub mod error;
 pub mod input;
 pub mod installer;
 pub mod package_utils;
+pub mod process_guard;
 pub mod scrolling;
 pub mod theme;
 pub mod types;

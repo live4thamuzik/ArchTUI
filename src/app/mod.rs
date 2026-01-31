@@ -21,6 +21,7 @@ use crate::config::Configuration;
 use crate::error;
 use crate::input::InputHandler;
 use crate::installer::Installer;
+use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use log::{debug, info};
@@ -60,6 +61,9 @@ pub struct App {
     tool_tx: Sender<ToolMessage>,
     /// Channel receiver for tool execution output (polled in main loop)
     tool_rx: Receiver<ToolMessage>,
+    /// Process guard for child process lifecycle management
+    /// Ensures all spawned bash scripts are terminated when App is dropped
+    _process_guard: ProcessGuard,
 }
 
 impl App {
@@ -85,6 +89,12 @@ impl App {
     pub fn new(save_config_path: Option<std::path::PathBuf>) -> Self {
         info!("Creating new App instance");
         let (tool_tx, tool_rx) = mpsc::channel();
+
+        // ProcessGuard ensures all child processes are killed when App is dropped
+        // This prevents orphaned bash scripts continuing after TUI crash
+        let process_guard = ProcessGuard::new();
+        debug!("ProcessGuard initialized for child process tracking");
+
         Self {
             state: Arc::new(Mutex::new(AppState::default())),
             installer: None,
@@ -95,6 +105,7 @@ impl App {
             keybinding_context: KeybindingContext::new(),
             tool_tx,
             tool_rx,
+            _process_guard: process_guard,
         }
     }
 
@@ -2939,6 +2950,11 @@ impl App {
     }
 
     /// Spawn a tool script in a background thread with real-time output streaming
+    ///
+    /// # Process Lifecycle Management
+    /// - Child runs in its own process group (allows clean termination of entire tree)
+    /// - Child PID is registered with global ChildRegistry
+    /// - On App drop or signal, all registered children receive SIGTERM
     fn spawn_tool_script(
         &self,
         script_path: &str,
@@ -2948,13 +2964,15 @@ impl App {
         let script_path = script_path.to_string();
 
         thread::spawn(move || {
-            // Spawn the child process
+            // Spawn the child process in its own process group
+            // This allows us to kill the entire process tree if needed
             let child_result = Command::new("bash")
                 .arg(&script_path)
                 .args(&args)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .stdin(Stdio::null())
+                .in_new_process_group()
                 .spawn();
 
             let mut child = match child_result {
@@ -2967,6 +2985,12 @@ impl App {
                     return;
                 }
             };
+
+            // Register child PID for lifecycle management
+            let child_pid = child.id();
+            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                registry.register(child_pid);
+            }
 
             // Stream stdout in a separate thread
             let stdout_tx = tx.clone();
@@ -3007,7 +3031,14 @@ impl App {
             }
 
             // Wait for child process to complete
-            match child.wait() {
+            let result = child.wait();
+
+            // Unregister child PID (process has exited)
+            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                registry.unregister(child_pid);
+            }
+
+            match result {
                 Ok(status) => {
                     let _ = tx.send(ToolMessage::Complete {
                         success: status.success(),
@@ -3028,6 +3059,11 @@ impl App {
 
     /// Spawn a tool script with optional stdin data (for secure password passing)
     /// This prevents passwords from being visible in `ps aux` or `/proc/<pid>/cmdline`
+    ///
+    /// # Process Lifecycle Management
+    /// - Child runs in its own process group (allows clean termination of entire tree)
+    /// - Child PID is registered with global ChildRegistry
+    /// - On App drop or signal, all registered children receive SIGTERM
     fn spawn_tool_script_with_stdin(
         &self,
         script_path: &str,
@@ -3045,13 +3081,14 @@ impl App {
                 Stdio::null()
             };
 
-            // Spawn the child process
+            // Spawn the child process in its own process group
             let child_result = Command::new("bash")
                 .arg(&script_path)
                 .args(&args)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .stdin(stdin_mode)
+                .in_new_process_group()
                 .spawn();
 
             let mut child = match child_result {
@@ -3064,6 +3101,12 @@ impl App {
                     return;
                 }
             };
+
+            // Register child PID for lifecycle management
+            let child_pid = child.id();
+            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                registry.register(child_pid);
+            }
 
             // Write stdin data if provided (securely pass password)
             if let Some(data) = stdin_data {
@@ -3113,7 +3156,14 @@ impl App {
             }
 
             // Wait for child process to complete
-            match child.wait() {
+            let result = child.wait();
+
+            // Unregister child PID (process has exited)
+            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                registry.unregister(child_pid);
+            }
+
+            match result {
                 Ok(status) => {
                     let _ = tx.send(ToolMessage::Complete {
                         success: status.success(),
