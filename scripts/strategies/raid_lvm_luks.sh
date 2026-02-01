@@ -21,6 +21,7 @@ execute_raid_lvm_luks_partitioning() {
     if [[ "$BOOT_MODE" == "UEFI" ]]; then
         log_info "UEFI boot mode detected - using GPT partition tables"
         PARTITION_TABLE="gpt"
+        # shellcheck disable=SC2153  # EFI_PARTITION_TYPE is defined in disk_utils.sh
         ESP_PARTITION_TYPE="$EFI_PARTITION_TYPE"
         XBOOTLDR_PARTITION_TYPE="$XBOOTLDR_PARTITION_TYPE"
     else
