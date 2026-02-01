@@ -14,6 +14,8 @@ Rust Rules
 ❌ unwrap() without comment
 ❌ static mut
 ❌ global mutable state without justification doc
+❌ Command::new("pacman") forbidden (Must use alpm bindings)
+❌ Parsing stdout for package progress forbidden (Must use log_cb)
 
 Architecture Rules
 ❌ Script execution without manifest
