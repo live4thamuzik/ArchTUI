@@ -9,9 +9,11 @@ mod config;
 mod config_file;
 mod error;
 mod input;
+mod install_state;
 mod installer;
 mod package_utils;
 mod process_guard;
+mod script_manifest;
 mod script_traits;
 mod scripts;
 mod scrolling;
@@ -28,7 +30,19 @@ use std::path::PathBuf;
 use crate::cli::Cli;
 use crate::config_file::InstallationConfig;
 use crate::script_traits::ScriptArgs;
-use crate::scripts::disk::{WipeDiskArgs, WipeMethod};
+use crate::scripts::disk::{
+    CheckDiskHealthArgs, FormatPartitionArgs, ManualPartitionArgs, MountPartitionsArgs,
+    WipeDiskArgs, WipeMethod,
+};
+use crate::scripts::network::{
+    ConfigureNetworkArgs, FirewallArgs, NetworkDiagnosticsArgs, TestNetworkArgs,
+};
+use crate::scripts::system::{
+    BootloaderArgs, ChrootArgs, FstabArgs, ServicesArgs, SystemInfoArgs,
+};
+use crate::scripts::user::{
+    AddUserArgs, GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs,
+};
 
 /// Initialize the logger with appropriate settings
 fn init_logger() {
@@ -268,11 +282,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 filesystem,
                 label,
             } => {
-                let mut args = vec!["--device", device, "--filesystem", filesystem];
-                if let Some(label) = label {
-                    args.extend(&["--label", label]);
-                }
-                execute_tool_script("format_partition.sh", &args)?;
+                let format_args = FormatPartitionArgs {
+                    device: PathBuf::from(device),
+                    filesystem: filesystem.clone(),
+                    label: label.clone(),
+                    force: false,
+                };
+                run_script_safe(&format_args)?;
             }
             crate::cli::DiskToolCommands::Wipe {
                 device,
@@ -298,11 +314,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     confirm: *confirm,
                 };
 
-                execute_typed_script(&wipe_args)?;
+                run_script_safe(&wipe_args)?;
             }
             crate::cli::DiskToolCommands::Health { device } => {
-                let args = vec!["--device", device];
-                execute_tool_script("check_disk_health.sh", &args)?;
+                let health_args = CheckDiskHealthArgs {
+                    device: PathBuf::from(device),
+                };
+                run_script_safe(&health_args)?;
             }
             crate::cli::DiskToolCommands::Mount {
                 action,
@@ -310,18 +328,19 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 mountpoint,
                 filesystem,
             } => {
-                let mut args = vec!["--action", action, "--device", device];
-                if let Some(mountpoint) = mountpoint {
-                    args.extend(&["--mountpoint", mountpoint]);
-                }
-                if let Some(filesystem) = filesystem {
-                    args.extend(&["--filesystem", filesystem]);
-                }
-                execute_tool_script("mount_partitions.sh", &args)?;
+                let mount_args = MountPartitionsArgs {
+                    action: action.clone(),
+                    device: PathBuf::from(device),
+                    mountpoint: mountpoint.as_ref().map(|p| PathBuf::from(p)),
+                    filesystem: filesystem.clone(),
+                };
+                run_script_safe(&mount_args)?;
             }
             crate::cli::DiskToolCommands::Manual { device } => {
-                let args = vec!["--device", device];
-                execute_tool_script("manual_partition.sh", &args)?;
+                let manual_args = ManualPartitionArgs {
+                    device: PathBuf::from(device),
+                };
+                run_script_safe(&manual_args)?;
             }
         },
         crate::cli::ToolCommands::System { system_tool } => match system_tool {
@@ -331,36 +350,39 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 efi_path,
                 mode,
             } => {
-                let mut args = vec!["--type", r#type, "--disk", disk, "--mode", mode];
-                if let Some(efi_path) = efi_path {
-                    args.extend(&["--efi-path", efi_path]);
-                }
-                execute_tool_script("install_bootloader.sh", &args)?;
+                let bootloader_args = BootloaderArgs {
+                    bootloader_type: r#type.clone(),
+                    disk: PathBuf::from(disk),
+                    mode: mode.clone(),
+                    efi_path: efi_path.as_ref().map(|p| PathBuf::from(p)),
+                };
+                run_script_safe(&bootloader_args)?;
             }
             crate::cli::SystemToolCommands::Fstab { root } => {
-                let args = vec!["--root", root];
-                execute_tool_script("generate_fstab.sh", &args)?;
+                let fstab_args = FstabArgs {
+                    root: PathBuf::from(root),
+                };
+                run_script_safe(&fstab_args)?;
             }
             crate::cli::SystemToolCommands::Chroot { root, no_mount } => {
-                let mut args = vec!["--root", root];
-                if *no_mount {
-                    args.push("--no-mount");
-                }
-                execute_tool_script("chroot_system.sh", &args)?;
+                let chroot_args = ChrootArgs {
+                    root: PathBuf::from(root),
+                    no_mount: *no_mount,
+                };
+                run_script_safe(&chroot_args)?;
             }
             crate::cli::SystemToolCommands::Info { detailed } => {
-                let mut args = vec![];
-                if *detailed {
-                    args.push("--detailed");
-                }
-                execute_tool_script("system_info.sh", &args)?;
+                let info_args = SystemInfoArgs {
+                    detailed: *detailed,
+                };
+                run_script_safe(&info_args)?;
             }
             crate::cli::SystemToolCommands::Services { action, service } => {
-                let mut args = vec!["--action", action];
-                if let Some(svc) = service {
-                    args.extend(&["--service", svc]);
-                }
-                execute_tool_script("manage_services.sh", &args)?;
+                let services_args = ServicesArgs {
+                    action: action.clone(),
+                    service: service.clone(),
+                };
+                run_script_safe(&services_args)?;
             }
         },
         crate::cli::ToolCommands::User { user_tool } => match user_tool {
@@ -370,32 +392,31 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 groups,
                 shell,
             } => {
-                let mut args = vec!["--username", username, "--shell", shell];
-                if let Some(full_name) = full_name {
-                    args.extend(&["--full-name", full_name]);
-                }
-                if let Some(groups) = groups {
-                    args.extend(&["--groups", groups]);
-                }
-                execute_tool_script("add_user.sh", &args)?;
+                let add_user_args = AddUserArgs {
+                    username: username.clone(),
+                    shell: shell.clone(),
+                    full_name: full_name.clone(),
+                    groups: groups.clone(),
+                };
+                run_script_safe(&add_user_args)?;
             }
             crate::cli::UserToolCommands::ResetPassword { username } => {
-                let args = vec!["--username", username];
-                execute_tool_script("reset_password.sh", &args)?;
+                let reset_args = ResetPasswordArgs {
+                    username: username.clone(),
+                };
+                run_script_safe(&reset_args)?;
             }
             crate::cli::UserToolCommands::Groups {
                 action,
                 user,
                 group,
             } => {
-                let mut args = vec!["--action", action];
-                if let Some(u) = user {
-                    args.extend(&["--user", u]);
-                }
-                if let Some(g) = group {
-                    args.extend(&["--group", g]);
-                }
-                execute_tool_script("manage_groups.sh", &args)?;
+                let groups_args = GroupsArgs {
+                    action: action.clone(),
+                    user: user.clone(),
+                    group: group.clone(),
+                };
+                run_script_safe(&groups_args)?;
             }
             crate::cli::UserToolCommands::Ssh {
                 action,
@@ -403,31 +424,19 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 root_login,
                 password_auth,
             } => {
-                let mut args: Vec<String> = vec!["--action".to_string(), action.to_string()];
-                if let Some(p) = port {
-                    args.push("--port".to_string());
-                    args.push(p.to_string());
-                }
-                if let Some(rl) = root_login {
-                    if *rl {
-                        args.push("--enable-root-login".to_string());
-                    } else {
-                        args.push("--disable-root-login".to_string());
-                    }
-                }
-                if let Some(pa) = password_auth {
-                    if *pa {
-                        args.push("--enable-password-auth".to_string());
-                    } else {
-                        args.push("--disable-password-auth".to_string());
-                    }
-                }
-                let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-                execute_tool_script("configure_ssh.sh", &args_refs)?;
+                let ssh_args = SshArgs {
+                    action: action.clone(),
+                    port: *port,
+                    enable_root_login: *root_login,
+                    enable_password_auth: *password_auth,
+                };
+                run_script_safe(&ssh_args)?;
             }
             crate::cli::UserToolCommands::Security { action } => {
-                let args = vec!["--action", action];
-                execute_tool_script("security_audit.sh", &args)?;
+                let security_args = SecurityAuditArgs {
+                    action: action.clone(),
+                };
+                run_script_safe(&security_args)?;
             }
         },
         crate::cli::ToolCommands::Network { network_tool } => match network_tool {
@@ -436,29 +445,24 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 ip,
                 gateway,
             } => {
-                let mut args = vec!["--interface", interface];
-                if let Some(ip) = ip {
-                    args.extend(&["--ip", ip]);
-                }
-                if let Some(gateway) = gateway {
-                    args.extend(&["--gateway", gateway]);
-                }
-                execute_tool_script("configure_network.sh", &args)?;
+                let network_args = ConfigureNetworkArgs {
+                    interface: interface.clone(),
+                    ip: ip.clone(),
+                    gateway: gateway.clone(),
+                };
+                run_script_safe(&network_args)?;
             }
             crate::cli::NetworkToolCommands::Test {
                 action,
                 host,
                 timeout,
             } => {
-                let mut args: Vec<String> = vec!["--action".to_string(), action.to_string()];
-                if let Some(h) = host {
-                    args.push("--host".to_string());
-                    args.push(h.to_string());
-                }
-                args.push("--timeout".to_string());
-                args.push(timeout.to_string());
-                let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-                execute_tool_script("test_network.sh", &args_refs)?;
+                let test_args = TestNetworkArgs {
+                    action: action.clone(),
+                    host: host.clone(),
+                    timeout: u32::from(*timeout),
+                };
+                run_script_safe(&test_args)?;
             }
             crate::cli::NetworkToolCommands::Firewall {
                 action,
@@ -468,92 +472,52 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 allow,
                 deny,
             } => {
-                let mut args: Vec<String> = vec![
-                    "--action".to_string(),
-                    action.to_string(),
-                    "--type".to_string(),
-                    r#type.to_string(),
-                ];
-                if let Some(p) = port {
-                    args.push("--port".to_string());
-                    args.push(p.to_string());
-                }
-                args.push("--protocol".to_string());
-                args.push(protocol.to_string());
-                if *allow {
-                    args.push("--allow".to_string());
-                }
-                if *deny {
-                    args.push("--deny".to_string());
-                }
-                let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-                execute_tool_script("configure_firewall.sh", &args_refs)?;
+                let firewall_args = FirewallArgs {
+                    action: action.clone(),
+                    firewall_type: r#type.clone(),
+                    port: *port,
+                    protocol: protocol.clone(),
+                    allow: *allow,
+                    deny: *deny,
+                };
+                run_script_safe(&firewall_args)?;
             }
             crate::cli::NetworkToolCommands::Diagnostics { action } => {
-                let args = vec!["--action", action];
-                execute_tool_script("network_diagnostics.sh", &args)?;
+                let diagnostics_args = NetworkDiagnosticsArgs {
+                    action: action.clone(),
+                };
+                run_script_safe(&diagnostics_args)?;
             }
         },
     }
     Ok(())
 }
-
-/// Execute a tool script with arguments
-fn execute_tool_script(script_name: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-    use std::process::{Command, Stdio};
-
-    let script_path = format!("scripts/tools/{}", script_name);
-    info!("Executing tool script: {} with args: {:?}", script_path, args);
-    println!("🔧 Executing: {} {}", script_path, args.join(" "));
-
-    let output = Command::new("bash")
-        .arg(&script_path)
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
-
-    // Print stdout
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if !stdout.is_empty() {
-        print!("{}", stdout);
-    }
-
-    // Print stderr
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !stderr.is_empty() {
-        eprint!("{}", stderr);
-    }
-
-    if output.status.success() {
-        info!("Tool {} executed successfully", script_name);
-        println!("✅ Tool executed successfully");
-    } else {
-        error!("Tool {} execution failed with exit code: {:?}", script_name, output.status.code());
-        eprintln!("❌ Tool execution failed");
-        std::process::exit(1);
-    }
-
-    Ok(())
-}
-
-/// Execute a tool script with typed arguments.
+/// Execute a tool script with typed arguments (SAFE PATH).
 ///
-/// Uses the `ScriptArgs` trait to ensure compile-time correctness of
-/// CLI flags and environment variables.
+/// This is the ONLY way to execute tool scripts. Raw strings are not accepted.
+/// The compiler enforces that all script invocations use typed argument structs.
+///
+/// # Safety Guarantees
+///
+/// 1. **Compile-time flag validation**: `to_cli_args()` generates correct flags
+/// 2. **Process group isolation**: Child runs in its own process group
+/// 3. **Death pact**: Child receives SIGTERM if parent dies (PR_SET_PDEATHSIG)
+/// 4. **Registry tracking**: PID registered for cleanup on shutdown
+/// 5. **Environment contracts**: `get_env_vars()` provides required env vars
 ///
 /// # Invariants
 ///
-/// - CLI args are generated by `to_cli_args()`, ensuring correct flag names
-/// - Environment variables are set from `get_env_vars()`
-/// - Script name comes from `script_name()`, not a raw string
+/// - CLI args come from `to_cli_args()`, NOT raw strings
+/// - Script name comes from `script_name()`, NOT a parameter
+/// - Process group ensures entire child tree is killable
 ///
 /// # Failure Modes
 ///
 /// - Script not found: Returns error
 /// - Script execution fails: Logs error and exits with code 1
 /// - Missing confirmation env var: Script itself will refuse to run
-fn execute_typed_script<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::error::Error>> {
+fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::process_guard::{ChildRegistry, CommandProcessGroup};
     use std::process::{Command, Stdio};
 
     let script_name = args.script_name();
@@ -561,24 +525,57 @@ fn execute_typed_script<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::erro
     let cli_args = args.to_cli_args();
     let env_vars = args.get_env_vars();
 
+    // Log exact command and environment for transparency
     info!(
-        "Executing typed script: {} with args: {:?}, env: {:?}",
+        "run_script_safe: {} args={:?} env={:?}",
         script_path, cli_args, env_vars
     );
     println!("🔧 Executing: {} {}", script_path, cli_args.join(" "));
+    if !env_vars.is_empty() {
+        println!(
+            "   ENV: {}",
+            env_vars
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
 
+    // Build command with process group isolation
     let mut cmd = Command::new("bash");
     cmd.arg(&script_path)
         .args(&cli_args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .in_new_process_group(); // CRITICAL: Enables death pact
 
-    // Set environment variables from the typed args
+    // Inject environment variables from typed args
     for (key, value) in &env_vars {
         cmd.env(key, value);
     }
 
-    let output = cmd.output()?;
+    // Spawn and register with global registry
+    let child = cmd.spawn()?;
+    let pid = child.id();
+
+    // Register PID for cleanup on parent exit
+    {
+        let registry = ChildRegistry::global();
+        // Lock is held briefly, panic is acceptable if poisoned
+        let mut guard = registry.lock().expect("ChildRegistry mutex poisoned");
+        guard.register(pid);
+    }
+
+    // Wait for completion
+    let output = child.wait_with_output()?;
+
+    // Unregister PID after completion
+    {
+        let registry = ChildRegistry::global();
+        let mut guard = registry.lock().expect("ChildRegistry mutex poisoned");
+        guard.unregister(pid);
+    }
 
     // Print stdout
     let stdout = String::from_utf8_lossy(&output.stdout);
