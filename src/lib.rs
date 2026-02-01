@@ -14,6 +14,8 @@ pub mod installer;
 pub mod package_utils;
 pub mod process_guard;
 pub mod script_manifest;
+pub mod script_traits;
+pub mod scripts;
 pub mod scrolling;
 pub mod theme;
 pub mod types;
@@ -29,6 +31,8 @@ pub use script_manifest::{
     EnvRequirement, ManifestError, ManifestRegistry, OptionalEnv, ScriptManifest,
     ValidatedExecution,
 };
+pub use script_traits::ScriptArgs;
+pub use scripts::disk::{WipeDiskArgs, WipeMethod, WipeMethodError};
 pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
