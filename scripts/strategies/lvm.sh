@@ -2,9 +2,9 @@
 # lvm.sh - LVM partitioning strategy with ESP + XBOOTLDR (UEFI) or boot partition (BIOS)
 set -euo pipefail
 
-# Source common utilities
+# Source common utilities via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/../disk_utils.sh"
+source_or_die "$SCRIPT_DIR/../disk_utils.sh"
 
 # Execute LVM partitioning strategy
 execute_lvm_partitioning() {

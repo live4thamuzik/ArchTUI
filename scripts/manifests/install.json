@@ -1,0 +1,94 @@
+{
+  "script": "scripts/install.sh",
+  "description": "Main Arch Linux installation script. Handles complete installation from partitioning to final configuration.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_INSTALL",
+  "version": "1.0",
+  "needs_stdin": true,
+  "valid_exit_codes": [0],
+  "required_env": [
+    {
+      "name": "INSTALL_DISK",
+      "description": "Target disk device for installation (e.g., /dev/sda)",
+      "pattern": "^/dev/"
+    },
+    {
+      "name": "PARTITIONING_STRATEGY",
+      "description": "Disk partitioning strategy (auto_simple, auto_lvm, auto_luks_lvm, etc.)"
+    },
+    {
+      "name": "SYSTEM_HOSTNAME",
+      "description": "Hostname for the installed system"
+    },
+    {
+      "name": "MAIN_USERNAME",
+      "description": "Primary user account name"
+    },
+    {
+      "name": "BOOT_MODE",
+      "description": "Boot mode: UEFI or BIOS"
+    }
+  ],
+  "optional_env": [
+    {
+      "name": "KERNEL",
+      "description": "Linux kernel variant",
+      "default": "linux"
+    },
+    {
+      "name": "LOCALE",
+      "description": "System locale",
+      "default": "en_US.UTF-8"
+    },
+    {
+      "name": "KEYMAP",
+      "description": "Keyboard layout",
+      "default": "us"
+    },
+    {
+      "name": "TIMEZONE_REGION",
+      "description": "Timezone region",
+      "default": "America"
+    },
+    {
+      "name": "TIMEZONE",
+      "description": "Timezone city",
+      "default": "New_York"
+    },
+    {
+      "name": "BOOTLOADER",
+      "description": "Bootloader (grub or systemd-boot)",
+      "default": "grub"
+    },
+    {
+      "name": "DESKTOP_ENVIRONMENT",
+      "description": "Desktop environment",
+      "default": "none"
+    },
+    {
+      "name": "DISPLAY_MANAGER",
+      "description": "Display manager",
+      "default": "none"
+    },
+    {
+      "name": "ROOT_FILESYSTEM",
+      "description": "Root partition filesystem",
+      "default": "ext4"
+    },
+    {
+      "name": "SWAP",
+      "description": "Enable swap partition",
+      "default": "Yes"
+    },
+    {
+      "name": "ENCRYPTION",
+      "description": "Enable LUKS encryption",
+      "default": "No"
+    },
+    {
+      "name": "AUR_HELPER",
+      "description": "AUR helper to install",
+      "default": "paru"
+    }
+  ]
+}

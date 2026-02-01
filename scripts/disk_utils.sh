@@ -13,7 +13,16 @@ readonly _DISK_UTILS_SH_SOURCED=1
 # Source utilities (required dependency)
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -z "${_UTILS_SH_SOURCED:-}" ]]; then
-    source "${_SCRIPT_DIR}/utils.sh"
+    # Use source_or_die pattern inline since utils.sh defines it
+    if [[ ! -f "${_SCRIPT_DIR}/utils.sh" ]]; then
+        echo "FATAL: Required script not found: ${_SCRIPT_DIR}/utils.sh" >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    if ! source "${_SCRIPT_DIR}/utils.sh"; then
+        echo "FATAL: Failed to source: ${_SCRIPT_DIR}/utils.sh" >&2
+        exit 1
+    fi
 fi
 
 # --- Partition Configuration Constants ---
@@ -80,21 +89,125 @@ get_swap_size_mib() {
     fi
 }
 
+# --- Disk Type Detection ---
+# Functions for detecting SSD vs HDD for appropriate wipe/optimization strategies
+# Reference: https://wiki.archlinux.org/title/Solid_state_drive
+
+# Get the base device name (strip partition numbers, handle nvme)
+# /dev/sda1 -> sda, /dev/nvme0n1p1 -> nvme0n1
+get_base_device_name() {
+    local device="$1"
+    local base_name
+
+    # Remove /dev/ prefix
+    base_name="${device#/dev/}"
+
+    # Handle NVMe devices: nvme0n1p1 -> nvme0n1
+    if [[ "$base_name" =~ ^(nvme[0-9]+n[0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return
+    fi
+
+    # Handle standard devices: sda1 -> sda, vda2 -> vda
+    # Strip trailing numbers (partition numbers)
+    echo "${base_name%%[0-9]*}"
+}
+
+# Check if a disk is rotational (HDD) or non-rotational (SSD/NVMe)
+# Returns: 0 if SSD, 1 if HDD, 2 if unknown
+is_ssd() {
+    local device="$1"
+    local base_name
+    local rotational_file
+
+    base_name=$(get_base_device_name "$device")
+    rotational_file="/sys/block/${base_name}/queue/rotational"
+
+    if [[ -f "$rotational_file" ]]; then
+        local rotational
+        rotational=$(cat "$rotational_file")
+        if [[ "$rotational" == "0" ]]; then
+            return 0  # SSD (non-rotational)
+        else
+            return 1  # HDD (rotational)
+        fi
+    fi
+
+    # Fallback: NVMe devices are always SSDs
+    if [[ "$base_name" =~ ^nvme ]]; then
+        return 0
+    fi
+
+    # Unknown - treat as HDD for safety (zeros won't hurt)
+    return 2
+}
+
+# Get human-readable disk type
+get_disk_type() {
+    local device="$1"
+
+    if is_ssd "$device"; then
+        echo "SSD"
+    else
+        local ret=$?
+        if [[ $ret -eq 1 ]]; then
+            echo "HDD"
+        else
+            echo "Unknown"
+        fi
+    fi
+}
+
+# Check if device supports TRIM/discard (for blkdiscard)
+supports_discard() {
+    local device="$1"
+    local base_name
+    local discard_file
+
+    # Check if blkdiscard is available
+    if ! command -v blkdiscard >/dev/null 2>&1; then
+        return 1
+    fi
+
+    base_name=$(get_base_device_name "$device")
+    discard_file="/sys/block/${base_name}/queue/discard_max_bytes"
+
+    if [[ -f "$discard_file" ]]; then
+        local discard_max
+        discard_max=$(cat "$discard_file")
+        if [[ "$discard_max" -gt 0 ]]; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 # --- Partitioning Functions ---
 
 wipe_disk() {
     local disk="$1"
-    log_warn "Wiping all data on $disk..."
-    
+    local confirmation="${2:-}"
+
+    # ENVIRONMENT CONTRACT: Require explicit confirmation
+    # Either passed as argument or via CONFIRM_WIPE_DISK env var
+    if [[ "$confirmation" != "CONFIRMED" && "${CONFIRM_WIPE_DISK:-}" != "yes" ]]; then
+        log_error "wipe_disk() requires explicit confirmation"
+        log_error "Pass 'CONFIRMED' as second arg or set CONFIRM_WIPE_DISK=yes"
+        return 1
+    fi
+
+    log_warn "DESTRUCTIVE: Wiping all data on $disk..."
+
     # Wipe filesystem signatures
     wipefs --all --force "$disk"
-    
+
     # Zero out the beginning of the disk to kill MBR/GPT tables
     dd if=/dev/zero of="$disk" bs=1M count=10 status=none
-    
+
     # Reload partition table
     partprobe "$disk" || true
-    
+
     return 0
 }
 

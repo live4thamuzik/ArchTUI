@@ -1,0 +1,17 @@
+{
+  "script": "scripts/tools/manual_partition.sh",
+  "description": "Launch cfdisk for manual disk partitioning.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_MANUAL_PARTITION",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [
+    {
+      "name": "INSTALL_DISK",
+      "description": "Target disk device to partition (e.g., /dev/sda)",
+      "pattern": "^/dev/"
+    }
+  ],
+  "optional_env": []
+}

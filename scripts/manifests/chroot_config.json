@@ -1,0 +1,65 @@
+{
+  "script": "scripts/chroot_config.sh",
+  "description": "Configure the installed system inside chroot environment.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [
+    {
+      "name": "MAIN_USERNAME",
+      "description": "Primary user account name"
+    },
+    {
+      "name": "SYSTEM_HOSTNAME",
+      "description": "System hostname"
+    }
+  ],
+  "optional_env": [
+    {
+      "name": "LOCALE",
+      "description": "System locale",
+      "default": "en_US.UTF-8"
+    },
+    {
+      "name": "KEYMAP",
+      "description": "Keyboard layout",
+      "default": "us"
+    },
+    {
+      "name": "TIMEZONE_REGION",
+      "description": "Timezone region",
+      "default": "America"
+    },
+    {
+      "name": "TIMEZONE",
+      "description": "Timezone city",
+      "default": "New_York"
+    },
+    {
+      "name": "BOOTLOADER",
+      "description": "Bootloader to install",
+      "default": "grub"
+    },
+    {
+      "name": "DESKTOP_ENVIRONMENT",
+      "description": "Desktop environment",
+      "default": "none"
+    },
+    {
+      "name": "DISPLAY_MANAGER",
+      "description": "Display manager",
+      "default": "none"
+    },
+    {
+      "name": "AUR_HELPER",
+      "description": "AUR helper",
+      "default": "paru"
+    },
+    {
+      "name": "GPU_DRIVERS",
+      "description": "GPU drivers to install",
+      "default": "Auto"
+    }
+  ]
+}

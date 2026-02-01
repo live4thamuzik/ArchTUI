@@ -4,9 +4,9 @@
 
 set -euo pipefail
 
-# Source common utilities
+# Source common utilities via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/../utils.sh"
+source_or_die "$SCRIPT_DIR/../utils.sh"
 
 # Default values
 ACTION="basic"
