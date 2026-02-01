@@ -2,6 +2,10 @@
 //!
 //! This module provides typed argument structs for disk-related scripts:
 //! - `WipeDiskArgs` for `wipe_disk.sh`
+//! - `FormatPartitionArgs` for `format_partition.sh`
+//! - `CheckDiskHealthArgs` for `check_disk_health.sh`
+//! - `MountPartitionsArgs` for `mount_partitions.sh`
+//! - `ManualPartitionArgs` for `manual_partition.sh`
 //!
 //! # Why This Exists
 //!
@@ -12,6 +16,179 @@
 use std::path::PathBuf;
 
 use crate::script_traits::ScriptArgs;
+
+// ============================================================================
+// Format Partition
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/format_partition.sh`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field   | CLI Flag       | Required |
+/// |--------------|----------------|----------|
+/// | `device`     | `--device`     | Yes      |
+/// | `filesystem` | `--filesystem` | Yes      |
+/// | `label`      | `--label`      | No       |
+/// | `force`      | `--force`      | No       |
+#[derive(Debug, Clone)]
+pub struct FormatPartitionArgs {
+    /// Partition device path (e.g., `/dev/sda1`).
+    pub device: PathBuf,
+    /// Filesystem type (e.g., `ext4`, `btrfs`, `vfat`).
+    pub filesystem: String,
+    /// Optional filesystem label.
+    pub label: Option<String>,
+    /// Force formatting even if mounted.
+    pub force: bool,
+}
+
+impl ScriptArgs for FormatPartitionArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "--device".to_string(),
+            self.device.display().to_string(),
+            "--filesystem".to_string(),
+            self.filesystem.clone(),
+        ];
+        if let Some(ref label) = self.label {
+            args.push("--label".to_string());
+            args.push(label.clone());
+        }
+        if self.force {
+            args.push("--force".to_string());
+        }
+        args
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+
+    fn script_name(&self) -> &'static str {
+        "format_partition.sh"
+    }
+}
+
+// ============================================================================
+// Check Disk Health
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/check_disk_health.sh`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field | CLI Flag   | Required |
+/// |------------|------------|----------|
+/// | `device`   | `--device` | Yes      |
+#[derive(Debug, Clone)]
+pub struct CheckDiskHealthArgs {
+    /// Disk device path (e.g., `/dev/sda`).
+    pub device: PathBuf,
+}
+
+impl ScriptArgs for CheckDiskHealthArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        vec!["--device".to_string(), self.device.display().to_string()]
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+
+    fn script_name(&self) -> &'static str {
+        "check_disk_health.sh"
+    }
+}
+
+// ============================================================================
+// Mount Partitions
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/mount_partitions.sh`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field   | CLI Flag       | Required |
+/// |--------------|----------------|----------|
+/// | `action`     | `--action`     | Yes      |
+/// | `device`     | `--device`     | Yes      |
+/// | `mountpoint` | `--mountpoint` | No       |
+/// | `filesystem` | `--filesystem` | No       |
+#[derive(Debug, Clone)]
+pub struct MountPartitionsArgs {
+    /// Action to perform (e.g., `mount`, `unmount`).
+    pub action: String,
+    /// Device path (e.g., `/dev/sda1`).
+    pub device: PathBuf,
+    /// Optional mountpoint path.
+    pub mountpoint: Option<PathBuf>,
+    /// Optional filesystem type.
+    pub filesystem: Option<String>,
+}
+
+impl ScriptArgs for MountPartitionsArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "--action".to_string(),
+            self.action.clone(),
+            "--device".to_string(),
+            self.device.display().to_string(),
+        ];
+        if let Some(ref mp) = self.mountpoint {
+            args.push("--mountpoint".to_string());
+            args.push(mp.display().to_string());
+        }
+        if let Some(ref fs) = self.filesystem {
+            args.push("--filesystem".to_string());
+            args.push(fs.clone());
+        }
+        args
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+
+    fn script_name(&self) -> &'static str {
+        "mount_partitions.sh"
+    }
+}
+
+// ============================================================================
+// Manual Partition
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/manual_partition.sh`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field | CLI Flag   | Required |
+/// |------------|------------|----------|
+/// | `device`   | `--device` | Yes      |
+#[derive(Debug, Clone)]
+pub struct ManualPartitionArgs {
+    /// Disk device path (e.g., `/dev/sda`).
+    pub device: PathBuf,
+}
+
+impl ScriptArgs for ManualPartitionArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        vec!["--device".to_string(), self.device.display().to_string()]
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+
+    fn script_name(&self) -> &'static str {
+        "manual_partition.sh"
+    }
+}
+
+// ============================================================================
+// Wipe Disk (existing)
+// ============================================================================
 
 /// Wipe method supported by wipe_disk.sh.
 ///
