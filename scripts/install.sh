@@ -82,54 +82,25 @@ _source_or_die "$SCRIPT_DIR/utils.sh"
 _source_or_die "$SCRIPT_DIR/disk_strategies.sh"
 _source_or_die "$SCRIPT_DIR/config_loader.sh"
 
-# --- Secure Password Input from TUI ---
-# SECURITY: Passwords are passed via stdin (not environment variables)
-# to prevent exposure in /proc/<pid>/environ
+# --- Credential Validation ---
+# ENVIRONMENT CONTRACT: Passwords MUST be passed via environment variables
+# The TUI is responsible for setting these before spawning install.sh
 #
-# Protocol: TUI sends 3 lines via stdin:
-#   Line 1: MAIN_USER_PASSWORD
-#   Line 2: ROOT_PASSWORD
-#   Line 3: ENCRYPTION_PASSWORD (may be empty)
+# Required variables:
+#   MAIN_USER_PASSWORD - User account password
+#   ROOT_PASSWORD      - Root account password
+#   ENCRYPTION_PASSWORD - LUKS encryption password (if ENCRYPTION=Yes)
 #
-# Detection: If stdin is a pipe (not a terminal) and ARCHINSTALL_TUI is set,
-# we read passwords from stdin. Otherwise, assume headless/interactive mode.
+# This script is NON-INTERACTIVE and refuses to prompt for input.
 
-if [[ ! -t 0 ]] && [[ -n "${ARCHINSTALL_TUI:-}" || -p /dev/stdin ]]; then
-    # TUI mode: read passwords from piped stdin
-    echo "Reading secure credentials from TUI..."
-
-    if ! read -r MAIN_USER_PASSWORD; then
-        echo "ERROR: Failed to read user password from stdin" >&2
-        exit 1
-    fi
-
-    if ! read -r ROOT_PASSWORD; then
-        echo "ERROR: Failed to read root password from stdin" >&2
-        exit 1
-    fi
-
-    # Encryption password is optional (may be empty line)
-    read -r ENCRYPTION_PASSWORD || ENCRYPTION_PASSWORD=""
-
-    # Validate required passwords were received
-    if [[ -z "$MAIN_USER_PASSWORD" ]]; then
-        echo "ERROR: User password is empty" >&2
-        exit 1
-    fi
-
-    if [[ -z "$ROOT_PASSWORD" ]]; then
-        echo "ERROR: Root password is empty" >&2
-        exit 1
-    fi
-
-    # SECURITY: Close stdin to prevent password leakage to subprocesses
-    exec 0</dev/null
-
-    # Export for use by sub-scripts (within this process tree only)
-    export MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
-
-    echo "Credentials received securely."
+# Validate credentials are present (will be checked again in validate_configuration)
+if [[ -z "${MAIN_USER_PASSWORD:-}" ]] || [[ -z "${ROOT_PASSWORD:-}" ]]; then
+    echo "ERROR: MAIN_USER_PASSWORD and ROOT_PASSWORD must be set in environment" >&2
+    echo "This script is non-interactive and cannot prompt for passwords." >&2
+    exit 1
 fi
+
+echo "Credentials validated from environment."
 
 # Initialize logging
 setup_logging
