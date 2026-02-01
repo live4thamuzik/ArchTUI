@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 name = "archinstall_tui"
 
+[[bin]]
+name = "death_pact_test_helper"
+path = "src/bin/death_pact_test_helper.rs"
+
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.28"
