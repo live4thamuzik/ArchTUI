@@ -2,9 +2,9 @@
 # manual.sh - Manual partitioning strategy with guided setup
 set -euo pipefail
 
-# Source common utilities
+# Source common utilities via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/../disk_utils.sh"
+source_or_die "$SCRIPT_DIR/../disk_utils.sh"
 
 # Execute manual partitioning strategy
 execute_manual_partitioning() {
@@ -34,9 +34,10 @@ execute_manual_partitioning() {
     fi
     
     echo ""
-    echo "After creating and mounting partitions, press Enter to continue..."
-    read -r
-    
+    # NOTE: In TUI mode, partitions should already be mounted by the user
+    # This script verifies mounts exist rather than prompting interactively
+    log_info "Verifying partition mounts..."
+
     # Verify essential mounts
     verify_essential_mounts
     

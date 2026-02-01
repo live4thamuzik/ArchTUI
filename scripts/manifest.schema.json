@@ -1,0 +1,18 @@
+{
+  "script": "wipe_disk.sh",
+  "destructive": true,
+  "requires": [
+    "DiskSelected",
+    "DiskValidated"
+  ],
+  "provides": [
+    "DiskWiped"
+  ],
+  "env_required": [
+    "ARCHINSTALL_CONFIRMED",
+    "ARCHINSTALL_DISK"
+  ],
+  "refuses_if_missing_env": true,
+  "kill_on_parent_exit": true
+}
+

@@ -61,11 +61,26 @@ echo "Working Directory: $(pwd)"
 echo "User: $(whoami)"
 echo "=========================================="
 
-# Source utility functions and strategies
+# Source utility functions and strategies via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/utils.sh"
-source "$SCRIPT_DIR/disk_strategies.sh"
-source "$SCRIPT_DIR/config_loader.sh"
+
+# Inline source_or_die before utils.sh is loaded
+_source_or_die() {
+    local script_path="$1"
+    if [[ ! -f "$script_path" ]]; then
+        echo "FATAL: Required script not found: $script_path" >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    if ! source "$script_path"; then
+        echo "FATAL: Failed to source: $script_path" >&2
+        exit 1
+    fi
+}
+
+_source_or_die "$SCRIPT_DIR/utils.sh"
+_source_or_die "$SCRIPT_DIR/disk_strategies.sh"
+_source_or_die "$SCRIPT_DIR/config_loader.sh"
 
 # --- Secure Password Input from TUI ---
 # SECURITY: Passwords are passed via stdin (not environment variables)
@@ -706,7 +721,12 @@ CONFIGEOF
     log_info "Running chroot_config.sh inside /mnt..."
 
     arch-chroot /mnt /bin/bash -c "
-        source /root/install_config.sh
+        # Source config with error handling (source_or_die not available in chroot)
+        if [[ ! -f /root/install_config.sh ]]; then
+            echo 'FATAL: /root/install_config.sh not found' >&2
+            exit 1
+        fi
+        source /root/install_config.sh || { echo 'FATAL: Failed to source install_config.sh' >&2; exit 1; }
         cd /root
         ./chroot_config.sh
     " 2>&1 | while IFS= read -r line; do

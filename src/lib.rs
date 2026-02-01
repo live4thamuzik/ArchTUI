@@ -9,9 +9,11 @@ pub mod config;
 pub mod config_file;
 pub mod error;
 pub mod input;
+pub mod install_state;
 pub mod installer;
 pub mod package_utils;
 pub mod process_guard;
+pub mod script_manifest;
 pub mod scrolling;
 pub mod theme;
 pub mod types;
@@ -21,7 +23,12 @@ pub mod ui;
 pub use config::{ConfigOption, Configuration, Package};
 pub use config_file::InstallationConfig;
 pub use error::ArchInstallError;
+pub use install_state::{InstallStage, InstallTransitionError, InstallerContext};
 pub use process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
+pub use script_manifest::{
+    EnvRequirement, ManifestError, ManifestRegistry, OptionalEnv, ScriptManifest,
+    ValidatedExecution,
+};
 pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,

@@ -1,0 +1,27 @@
+{
+  "script": "scripts/tools/manage_groups.sh",
+  "description": "Manage user groups - add, remove, or delete groups.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_GROUP_DELETE",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [
+    {
+      "name": "ACTION",
+      "description": "Action to perform: add, remove, or delete"
+    }
+  ],
+  "optional_env": [
+    {
+      "name": "USERNAME",
+      "description": "Username for add/remove operations",
+      "default": ""
+    },
+    {
+      "name": "GROUP",
+      "description": "Group name",
+      "default": ""
+    }
+  ]
+}

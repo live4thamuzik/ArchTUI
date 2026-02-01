@@ -4,8 +4,17 @@
 
 set -euo pipefail
 
-# Source utility functions
-source "$(dirname "${BASH_SOURCE[0]}")/utils.sh"
+# Source utility functions via source_or_die pattern
+_CONFIG_LOADER_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+if [[ ! -f "$_CONFIG_LOADER_SCRIPT_DIR/utils.sh" ]]; then
+    echo "FATAL: Required script not found: $_CONFIG_LOADER_SCRIPT_DIR/utils.sh" >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+if ! source "$_CONFIG_LOADER_SCRIPT_DIR/utils.sh"; then
+    echo "FATAL: Failed to source: $_CONFIG_LOADER_SCRIPT_DIR/utils.sh" >&2
+    exit 1
+fi
 
 # NOTE: jq is only required for JSON config file mode, not for TUI mode
 # TUI mode passes all configuration as environment variables

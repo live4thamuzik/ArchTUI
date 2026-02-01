@@ -4,9 +4,9 @@
 
 set -euo pipefail
 
-# Source common utilities
+# Source common utilities via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/../utils.sh"
+source_or_die "$SCRIPT_DIR/../utils.sh"
 
 # Default values
 ACTION=""
@@ -90,9 +90,12 @@ case "$ACTION" in
         fi
         
         log_warning "Deleting group: $GROUP"
-        log_info "Press Enter to continue or Ctrl+C to abort..."
-        read -r
-        
+
+        # ENVIRONMENT CONTRACT: Require explicit confirmation for destructive operation
+        if [[ "${CONFIRM_GROUP_DELETE:-}" != "yes" ]]; then
+            error_exit "CONFIRM_GROUP_DELETE=yes is required for group deletion"
+        fi
+
         if groupdel "$GROUP"; then
             log_success "Group $GROUP deleted successfully"
         else

@@ -7,9 +7,13 @@ set -euo pipefail
 # Get script directory (we're running from /root inside chroot)
 SCRIPT_DIR="/root"
 
-# Source utility functions if available
+# Source utility functions if available (using source_or_die pattern)
 if [[ -f "$SCRIPT_DIR/utils.sh" ]]; then
-    source "$SCRIPT_DIR/utils.sh"
+    # shellcheck source=/dev/null
+    if ! source "$SCRIPT_DIR/utils.sh"; then
+        echo "FATAL: Failed to source: $SCRIPT_DIR/utils.sh" >&2
+        exit 1
+    fi
 fi
 
 # =============================================================================

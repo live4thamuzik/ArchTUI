@@ -4,9 +4,9 @@
 
 set -euo pipefail
 
-# Source common utilities
+# Source common utilities via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source "$SCRIPT_DIR/../utils.sh"
+source_or_die "$SCRIPT_DIR/../utils.sh"
 
 # Default values
 DEVICE=""
@@ -56,8 +56,11 @@ fi
 
 log_info "Launching cfdisk for manual partitioning of $DEVICE"
 log_warning "WARNING: This will modify the partition table of $DEVICE"
-log_info "Press Enter to continue or Ctrl+C to abort..."
-read -r
+
+# ENVIRONMENT CONTRACT: Require explicit confirmation for destructive operation
+if [[ "${CONFIRM_MANUAL_PARTITION:-}" != "yes" ]]; then
+    error_exit "CONFIRM_MANUAL_PARTITION=yes is required. This script refuses to run without explicit environment confirmation."
+fi
 
 # Check if cfdisk is available
 if ! command -v cfdisk >/dev/null 2>&1; then

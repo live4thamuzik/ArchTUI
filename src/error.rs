@@ -38,6 +38,14 @@ pub enum ArchInstallError {
     #[error("State error: {0}")]
     State(String),
 
+    /// Install state machine transition errors
+    #[error("Install transition error: {0}")]
+    InstallTransition(String),
+
+    /// Script manifest validation errors
+    #[error("Manifest error: {0}")]
+    Manifest(String),
+
     /// JSON serialization/deserialization errors
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
@@ -80,6 +88,16 @@ impl ArchInstallError {
     /// Create a state error
     pub fn state(msg: impl Into<String>) -> Self {
         Self::State(msg.into())
+    }
+
+    /// Create an install transition error
+    pub fn install_transition(msg: impl Into<String>) -> Self {
+        Self::InstallTransition(msg.into())
+    }
+
+    /// Create a manifest error
+    pub fn manifest(msg: impl Into<String>) -> Self {
+        Self::Manifest(msg.into())
     }
 
     /// Create a general error

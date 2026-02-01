@@ -55,6 +55,7 @@ impl ChildRegistry {
     }
 
     /// Get count of tracked children
+    #[allow(dead_code)]
     pub fn count(&self) -> usize {
         self.pids.len()
     }
@@ -180,6 +181,7 @@ impl ProcessGuard {
     }
 
     /// Register a child process with the guard
+    #[allow(dead_code)]
     pub fn register_child(&self, pid: u32) {
         if let Ok(mut registry) = self.registry.lock() {
             registry.register(pid);
@@ -187,6 +189,7 @@ impl ProcessGuard {
     }
 
     /// Unregister a child process (call when it exits normally)
+    #[allow(dead_code)]
     pub fn unregister_child(&self, pid: u32) {
         if let Ok(mut registry) = self.registry.lock() {
             registry.unregister(pid);
@@ -194,6 +197,7 @@ impl ProcessGuard {
     }
 
     /// Get the number of tracked children
+    #[allow(dead_code)]
     pub fn child_count(&self) -> usize {
         self.registry
             .lock()

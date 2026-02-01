@@ -152,19 +152,21 @@ teardown() {
 # =============================================================================
 
 @test "wipe_disk calls wipefs" {
-    export INSTALL_DISK="/dev/sda"
+    export CONFIRM_WIPE_DISK=yes
     run wipe_disk "/dev/sda"
     [ "$status" -eq 0 ]
     assert_mock_called_with_pattern "wipefs.*--all.*--force.*/dev/sda"
 }
 
 @test "wipe_disk calls dd to zero disk" {
+    export CONFIRM_WIPE_DISK=yes
     run wipe_disk "/dev/sda"
     [ "$status" -eq 0 ]
     assert_mock_called_with_pattern "dd.*if=/dev/zero"
 }
 
 @test "wipe_disk calls partprobe" {
+    export CONFIRM_WIPE_DISK=yes
     run wipe_disk "/dev/sda"
     [ "$status" -eq 0 ]
     assert_mock_called_with_pattern "partprobe.*/dev/sda"

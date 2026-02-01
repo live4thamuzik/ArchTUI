@@ -1,0 +1,23 @@
+{
+  "script": "scripts/tools/wipe_disk.sh",
+  "description": "Securely wipe a disk with appropriate method for device type. SSDs use blkdiscard (TRIM), HDDs use zero-fill.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_WIPE_DISK",
+  "version": "2.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [
+    {
+      "name": "INSTALL_DISK",
+      "description": "Target disk device to wipe (e.g., /dev/sda, /dev/nvme0n1)",
+      "pattern": "^/dev/"
+    }
+  ],
+  "optional_env": [
+    {
+      "name": "WIPE_METHOD",
+      "description": "Wipe method: 'quick' (signatures only), 'secure' (full device wipe), 'auto' (detect SSD/HDD and use appropriate method)",
+      "default": "quick"
+    }
+  ]
+}
