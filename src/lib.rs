@@ -11,6 +11,7 @@ pub mod error;
 pub mod input;
 pub mod install_state;
 pub mod installer;
+pub mod package_manager;
 pub mod package_utils;
 pub mod process_guard;
 pub mod script_manifest;
@@ -31,6 +32,7 @@ pub use script_manifest::{
     EnvRequirement, ManifestError, ManifestRegistry, OptionalEnv, ScriptManifest,
     ValidatedExecution,
 };
+pub use package_manager::PackageManager;
 pub use script_traits::ScriptArgs;
 pub use scripts::disk::{WipeDiskArgs, WipeMethod, WipeMethodError};
 pub use types::{
