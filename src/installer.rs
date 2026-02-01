@@ -53,45 +53,24 @@ impl Installer {
                 .push("==========================================".to_string());
         }
 
-        // Prepare environment variables (excludes passwords for security)
+        // Prepare environment variables (includes passwords)
+        // Passwords are passed via environment because lint rules forbid `read` in bash
         let env_vars = self.config.to_env_vars();
-
-        // SECURITY: Extract passwords separately for stdin passing
-        // This prevents password exposure in /proc/<pid>/environ
-        let (user_password, root_password, encryption_password) = self.config.get_passwords();
-
-        // Serialize passwords for stdin protocol:
-        // Format: USER_PASS\nROOT_PASS\nENCRYPT_PASS\n
-        let password_data = format!(
-            "{}\n{}\n{}\n",
-            user_password,
-            root_password,
-            encryption_password.unwrap_or_default()
-        );
 
         // Determine script path - use wrapper for TUI-friendly output
         let script_path = std::env::var("ARCHINSTALL_SCRIPTS_DIR")
             .map(|dir| format!("{}/install_wrapper.sh", dir))
             .unwrap_or_else(|_| "./scripts/install_wrapper.sh".to_string());
 
-        // Launch the installation script with piped stdin for secure password passing
+        // Launch the installation script
+        // stdin is null - scripts are non-interactive per lint rules
         let mut child = Command::new("bash")
             .arg(&script_path)
             .envs(&env_vars)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .stdin(Stdio::piped()) // Changed: piped for password passing
+            .stdin(Stdio::null())
             .spawn()?;
-
-        // SECURITY: Write passwords to stdin and close immediately
-        // This prevents passwords from being visible in /proc or ps output
-        if let Some(mut stdin) = child.stdin.take() {
-            use std::io::Write;
-            if let Err(e) = stdin.write_all(password_data.as_bytes()) {
-                log::error!("Failed to write passwords to installer stdin: {}", e);
-            }
-            // stdin is dropped here, closing the pipe
-        }
 
         // Handle stdout in separate thread
         if let Some(stdout) = child.stdout.take() {
