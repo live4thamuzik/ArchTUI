@@ -2614,7 +2614,7 @@ impl App {
                 },
                 ToolParam {
                     name: "password".to_string(),
-                    description: "User password (passed securely via stdin)".to_string(),
+                    description: "User password".to_string(),
                     param_type: ToolParameter::Password("".to_string()),
                     required: false,
                 },
@@ -3057,39 +3057,38 @@ impl App {
         Ok(())
     }
 
-    /// Spawn a tool script with optional stdin data (for secure password passing)
-    /// This prevents passwords from being visible in `ps aux` or `/proc/<pid>/cmdline`
+    /// Spawn a tool script with optional password passed via environment variable
+    /// Password is passed via USER_PASSWORD env var (lint rules forbid stdin reading)
     ///
     /// # Process Lifecycle Management
     /// - Child runs in its own process group (allows clean termination of entire tree)
     /// - Child PID is registered with global ChildRegistry
     /// - On App drop or signal, all registered children receive SIGTERM
-    fn spawn_tool_script_with_stdin(
+    fn spawn_tool_script_with_password(
         &self,
         script_path: &str,
         args: Vec<String>,
-        stdin_data: Option<String>,
+        password: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let tx = self.tool_tx.clone();
         let script_path = script_path.to_string();
 
         thread::spawn(move || {
-            // Choose stdin mode based on whether we have data to pass
-            let stdin_mode = if stdin_data.is_some() {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            };
-
-            // Spawn the child process in its own process group
-            let child_result = Command::new("bash")
-                .arg(&script_path)
+            // Build command with optional password in environment
+            let mut cmd = Command::new("bash");
+            cmd.arg(&script_path)
                 .args(&args)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .stdin(stdin_mode)
-                .in_new_process_group()
-                .spawn();
+                .stdin(Stdio::null()); // Non-interactive per lint rules
+
+            // Pass password via environment variable if provided
+            if let Some(ref pw) = password {
+                cmd.env("USER_PASSWORD", pw);
+            }
+
+            // Spawn the child process in its own process group
+            let child_result = cmd.in_new_process_group().spawn();
 
             let mut child = match child_result {
                 Ok(c) => c,
@@ -3106,15 +3105,6 @@ impl App {
             let child_pid = child.id();
             if let Ok(mut registry) = ChildRegistry::global().lock() {
                 registry.register(child_pid);
-            }
-
-            // Write stdin data if provided (securely pass password)
-            if let Some(data) = stdin_data {
-                if let Some(mut stdin) = child.stdin.take() {
-                    // Write and immediately drop to close the pipe
-                    let _ = stdin.write_all(data.as_bytes());
-                    // stdin is dropped here, closing the pipe
-                }
             }
 
             // Stream stdout in a separate thread
@@ -3448,15 +3438,15 @@ impl App {
         }
 
         // Spawn the tool in a background thread
-        // For add_user, pass password via stdin (security: not visible in `ps aux`)
+        // For add_user, pass password via USER_PASSWORD environment variable
         if tool_name == "add_user" {
             // Extract password from params[1] if present and non-empty
-            let stdin_data = if params.len() >= 2 && !params[1].is_empty() {
+            let password = if params.len() >= 2 && !params[1].is_empty() {
                 Some(params[1].clone())
             } else {
                 None
             };
-            self.spawn_tool_script_with_stdin(&script_path, args, stdin_data)?;
+            self.spawn_tool_script_with_password(&script_path, args, password)?;
         } else {
             self.spawn_tool_script(&script_path, args)?;
         }

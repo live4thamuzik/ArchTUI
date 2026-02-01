@@ -2,9 +2,10 @@
 # add_user.sh - Add user to system using ISO tools
 # Usage: ./add_user.sh --username <user> [options]
 #
-# SECURITY: Password is read from STDIN, not command-line args.
-# This prevents password exposure in `ps aux` or /proc/<pid>/cmdline.
-# Example: echo "mypassword" | ./add_user.sh --username john
+# ENVIRONMENT CONTRACT:
+#   USER_PASSWORD - Password for the user (optional, use --no-login if not set)
+#
+# This script is NON-INTERACTIVE and does not prompt for input.
 
 set -euo pipefail
 
@@ -24,14 +25,9 @@ SKEL_DIR=""
 CREATE_HOME=true
 SYSTEM_USER=false
 NO_LOGIN=false
-PASSWORD=""
 
-# Read password from stdin if available (non-blocking check)
-# This is the secure way to pass passwords - they never appear in process list
-if [[ ! -t 0 ]]; then
-    # stdin is not a terminal, read password from it
-    read -r PASSWORD || true
-fi
+# Get password from environment variable
+PASSWORD="${USER_PASSWORD:-}"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -99,13 +95,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-login            Disable login (no password)"
             echo ""
             echo "Password:"
-            echo "  Password is read from STDIN for security (not visible in ps aux)"
-            echo "  Example: echo 'mypassword' | $0 --username john"
+            echo "  Set USER_PASSWORD environment variable before running"
+            echo "  Example: USER_PASSWORD='mypassword' $0 --username john"
             echo ""
             echo "Examples:"
-            echo "  $0 --username john --full-name 'John Doe' --groups wheel,users"
+            echo "  USER_PASSWORD='secret' $0 --username john --full-name 'John Doe' --groups wheel,users"
             echo "  $0 --username service --system --no-login --shell /bin/false"
-            echo "  echo 'secret' | $0 --username admin --groups wheel"
             echo ""
             echo "Note: Uses tools available on Arch ISO (useradd, passwd, usermod)"
             exit 0
@@ -253,23 +248,22 @@ if [[ -n "$GROUPS" ]]; then
     done
 fi
 
-# Set password (received securely via stdin)
+# Set password (received via USER_PASSWORD environment variable)
 PASSWORD_WAS_SET=""
 if [[ "$NO_LOGIN" == false ]]; then
     if [[ -n "$PASSWORD" ]]; then
-        log_info "🔐 Setting password for '$USERNAME'..."
+        log_info "Setting password for '$USERNAME'..."
         # Use chpasswd to set password securely
-        # Password was read from stdin, never exposed in process list
         if printf '%s:%s\n' "$USERNAME" "$PASSWORD" | chpasswd 2>/dev/null; then
-            log_success "✅ Password set for '$USERNAME'"
+            log_success "Password set for '$USERNAME'"
             PASSWORD_WAS_SET="yes"
         else
-            log_warning "⚠️  Failed to set password for '$USERNAME'"
+            log_warning "Failed to set password for '$USERNAME'"
         fi
         # Clear password from memory
         PASSWORD=""
     else
-        log_info "🔐 No password provided via stdin"
+        log_info "No password provided (USER_PASSWORD not set)"
         log_info "Run: passwd $USERNAME"
     fi
 fi
