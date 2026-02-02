@@ -11,9 +11,11 @@ mod error;
 mod input;
 mod install_state;
 mod installer;
+mod package_manager;
 mod package_utils;
 mod process_guard;
 mod script_manifest;
+mod script_runner;
 mod script_traits;
 mod scripts;
 mod scrolling;
@@ -29,6 +31,7 @@ use std::path::PathBuf;
 
 use crate::cli::Cli;
 use crate::config_file::InstallationConfig;
+use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
 use crate::scripts::disk::{
     CheckDiskHealthArgs, FormatPartitionArgs, ManualPartitionArgs, MountPartitionsArgs,
@@ -282,13 +285,19 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 filesystem,
                 label,
             } => {
+                // Parse filesystem string into typed enum
+                let fs: crate::types::Filesystem = filesystem.parse().unwrap_or_else(|_| {
+                    eprintln!("❌ Invalid filesystem: {}", filesystem);
+                    eprintln!("   Valid types: ext4, xfs, btrfs, f2fs, fat32");
+                    std::process::exit(1);
+                });
                 let format_args = FormatPartitionArgs {
                     device: PathBuf::from(device),
-                    filesystem: filesystem.clone(),
+                    filesystem: fs,
                     label: label.clone(),
                     force: false,
                 };
-                run_script_safe(&format_args)?;
+                execute_tool(&format_args)?;
             }
             crate::cli::DiskToolCommands::Wipe {
                 device,
@@ -314,13 +323,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     confirm: *confirm,
                 };
 
-                run_script_safe(&wipe_args)?;
+                execute_tool(&wipe_args)?;
             }
             crate::cli::DiskToolCommands::Health { device } => {
                 let health_args = CheckDiskHealthArgs {
                     device: PathBuf::from(device),
                 };
-                run_script_safe(&health_args)?;
+                execute_tool(&health_args)?;
             }
             crate::cli::DiskToolCommands::Mount {
                 action,
@@ -334,13 +343,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     mountpoint: mountpoint.as_ref().map(|p| PathBuf::from(p)),
                     filesystem: filesystem.clone(),
                 };
-                run_script_safe(&mount_args)?;
+                execute_tool(&mount_args)?;
             }
             crate::cli::DiskToolCommands::Manual { device } => {
                 let manual_args = ManualPartitionArgs {
                     device: PathBuf::from(device),
                 };
-                run_script_safe(&manual_args)?;
+                execute_tool(&manual_args)?;
             }
         },
         crate::cli::ToolCommands::System { system_tool } => match system_tool {
@@ -356,33 +365,33 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     mode: mode.clone(),
                     efi_path: efi_path.as_ref().map(|p| PathBuf::from(p)),
                 };
-                run_script_safe(&bootloader_args)?;
+                execute_tool(&bootloader_args)?;
             }
             crate::cli::SystemToolCommands::Fstab { root } => {
                 let fstab_args = FstabArgs {
                     root: PathBuf::from(root),
                 };
-                run_script_safe(&fstab_args)?;
+                execute_tool(&fstab_args)?;
             }
             crate::cli::SystemToolCommands::Chroot { root, no_mount } => {
                 let chroot_args = ChrootArgs {
                     root: PathBuf::from(root),
                     no_mount: *no_mount,
                 };
-                run_script_safe(&chroot_args)?;
+                execute_tool(&chroot_args)?;
             }
             crate::cli::SystemToolCommands::Info { detailed } => {
                 let info_args = SystemInfoArgs {
                     detailed: *detailed,
                 };
-                run_script_safe(&info_args)?;
+                execute_tool(&info_args)?;
             }
             crate::cli::SystemToolCommands::Services { action, service } => {
                 let services_args = ServicesArgs {
                     action: action.clone(),
                     service: service.clone(),
                 };
-                run_script_safe(&services_args)?;
+                execute_tool(&services_args)?;
             }
         },
         crate::cli::ToolCommands::User { user_tool } => match user_tool {
@@ -398,13 +407,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     full_name: full_name.clone(),
                     groups: groups.clone(),
                 };
-                run_script_safe(&add_user_args)?;
+                execute_tool(&add_user_args)?;
             }
             crate::cli::UserToolCommands::ResetPassword { username } => {
                 let reset_args = ResetPasswordArgs {
                     username: username.clone(),
                 };
-                run_script_safe(&reset_args)?;
+                execute_tool(&reset_args)?;
             }
             crate::cli::UserToolCommands::Groups {
                 action,
@@ -416,7 +425,7 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     user: user.clone(),
                     group: group.clone(),
                 };
-                run_script_safe(&groups_args)?;
+                execute_tool(&groups_args)?;
             }
             crate::cli::UserToolCommands::Ssh {
                 action,
@@ -430,13 +439,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     enable_root_login: *root_login,
                     enable_password_auth: *password_auth,
                 };
-                run_script_safe(&ssh_args)?;
+                execute_tool(&ssh_args)?;
             }
             crate::cli::UserToolCommands::Security { action } => {
                 let security_args = SecurityAuditArgs {
                     action: action.clone(),
                 };
-                run_script_safe(&security_args)?;
+                execute_tool(&security_args)?;
             }
         },
         crate::cli::ToolCommands::Network { network_tool } => match network_tool {
@@ -450,7 +459,7 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     ip: ip.clone(),
                     gateway: gateway.clone(),
                 };
-                run_script_safe(&network_args)?;
+                execute_tool(&network_args)?;
             }
             crate::cli::NetworkToolCommands::Test {
                 action,
@@ -462,7 +471,7 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     host: host.clone(),
                     timeout: u32::from(*timeout),
                 };
-                run_script_safe(&test_args)?;
+                execute_tool(&test_args)?;
             }
             crate::cli::NetworkToolCommands::Firewall {
                 action,
@@ -480,57 +489,33 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     allow: *allow,
                     deny: *deny,
                 };
-                run_script_safe(&firewall_args)?;
+                execute_tool(&firewall_args)?;
             }
             crate::cli::NetworkToolCommands::Diagnostics { action } => {
                 let diagnostics_args = NetworkDiagnosticsArgs {
                     action: action.clone(),
                 };
-                run_script_safe(&diagnostics_args)?;
+                execute_tool(&diagnostics_args)?;
             }
         },
     }
     Ok(())
 }
-/// Execute a tool script with typed arguments (SAFE PATH).
+/// Execute a tool script with typed arguments and print output (CLI helper).
 ///
-/// This is the ONLY way to execute tool scripts. Raw strings are not accepted.
-/// The compiler enforces that all script invocations use typed argument structs.
-///
-/// # Safety Guarantees
-///
-/// 1. **Compile-time flag validation**: `to_cli_args()` generates correct flags
-/// 2. **Process group isolation**: Child runs in its own process group
-/// 3. **Death pact**: Child receives SIGTERM if parent dies (PR_SET_PDEATHSIG)
-/// 4. **Registry tracking**: PID registered for cleanup on shutdown
-/// 5. **Environment contracts**: `get_env_vars()` provides required env vars
-///
-/// # Invariants
-///
-/// - CLI args come from `to_cli_args()`, NOT raw strings
-/// - Script name comes from `script_name()`, NOT a parameter
-/// - Process group ensures entire child tree is killable
-///
-/// # Failure Modes
-///
-/// - Script not found: Returns error
-/// - Script execution fails: Logs error and exits with code 1
-/// - Missing confirmation env var: Script itself will refuse to run
-fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::process_guard::{ChildRegistry, CommandProcessGroup};
-    use std::process::{Command, Stdio};
-
+/// This wraps the shared `run_script_safe` from `script_runner` module
+/// to provide CLI-friendly output and process exit on failure.
+fn execute_tool<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::error::Error>> {
     let script_name = args.script_name();
-    let script_path = format!("scripts/tools/{}", script_name);
     let cli_args = args.to_cli_args();
     let env_vars = args.get_env_vars();
 
-    // Log exact command and environment for transparency
-    info!(
-        "run_script_safe: {} args={:?} env={:?}",
-        script_path, cli_args, env_vars
+    // Print what we're executing
+    println!(
+        "🔧 Executing: scripts/tools/{} {}",
+        script_name,
+        cli_args.join(" ")
     );
-    println!("🔧 Executing: {} {}", script_path, cli_args.join(" "));
     if !env_vars.is_empty() {
         println!(
             "   ENV: {}",
@@ -542,65 +527,29 @@ fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::error::Er
         );
     }
 
-    // Build command with process group isolation
-    let mut cmd = Command::new("bash");
-    cmd.arg(&script_path)
-        .args(&cli_args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .in_new_process_group(); // CRITICAL: Enables death pact
-
-    // Inject environment variables from typed args
-    for (key, value) in &env_vars {
-        cmd.env(key, value);
-    }
-
-    // Spawn and register with global registry
-    let child = cmd.spawn()?;
-    let pid = child.id();
-
-    // Register PID for cleanup on parent exit
-    {
-        let registry = ChildRegistry::global();
-        // Lock is held briefly, panic is acceptable if poisoned
-        let mut guard = registry.lock().expect("ChildRegistry mutex poisoned");
-        guard.register(pid);
-    }
-
-    // Wait for completion
-    let output = child.wait_with_output()?;
-
-    // Unregister PID after completion
-    {
-        let registry = ChildRegistry::global();
-        let mut guard = registry.lock().expect("ChildRegistry mutex poisoned");
-        guard.unregister(pid);
-    }
+    // Execute via shared runner
+    let output = run_script_safe(args)?;
 
     // Print stdout
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    if !stdout.is_empty() {
-        print!("{}", stdout);
+    if !output.stdout.is_empty() {
+        print!("{}", output.stdout);
     }
 
     // Print stderr
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !stderr.is_empty() {
-        eprint!("{}", stderr);
+    if !output.stderr.is_empty() {
+        eprint!("{}", output.stderr);
     }
 
-    if output.status.success() {
+    if output.success {
         info!("Tool {} executed successfully", script_name);
         println!("✅ Tool executed successfully");
+        Ok(())
     } else {
         error!(
             "Tool {} execution failed with exit code: {:?}",
-            script_name,
-            output.status.code()
+            script_name, output.exit_code
         );
         eprintln!("❌ Tool execution failed");
         std::process::exit(1);
     }
-
-    Ok(())
 }
