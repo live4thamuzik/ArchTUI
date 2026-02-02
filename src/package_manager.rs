@@ -14,6 +14,11 @@
 //! - `PackageManager`: Main struct that owns the ALPM handle
 //! - `log_cb`: Routes ALPM log messages to `log::*` macros
 //! - `install_packages`: Runs a sync transaction on target packages
+//!
+//! # Feature Flag
+//!
+//! This module requires the `alpm` feature flag because libalpm is only
+//! available on Arch Linux systems. Enable with `--features alpm`.
 
 // Library API - will be used for Sprint 5 base system installation
 #![allow(dead_code)]

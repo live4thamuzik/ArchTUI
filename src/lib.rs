@@ -11,6 +11,7 @@ pub mod error;
 pub mod input;
 pub mod install_state;
 pub mod installer;
+#[cfg(feature = "alpm")]
 pub mod package_manager;
 pub mod package_utils;
 pub mod process_guard;
@@ -33,6 +34,7 @@ pub use script_manifest::{
     EnvRequirement, ManifestError, ManifestRegistry, OptionalEnv, ScriptManifest,
     ValidatedExecution,
 };
+#[cfg(feature = "alpm")]
 pub use package_manager::PackageManager;
 pub use script_runner::{run_script_safe, ScriptOutput};
 pub use script_traits::ScriptArgs;
@@ -40,10 +42,9 @@ pub use scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod, WipeMethodError,
 };
 pub use scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
-pub use installer::{
-    configure_system, install_base_system, install_base_system_with_extras, prepare_disks,
-    DiskLayout, SystemConfig,
-};
+pub use installer::{configure_system, prepare_disks, DiskLayout, SystemConfig};
+#[cfg(feature = "alpm")]
+pub use installer::{install_base_system, install_base_system_with_extras};
 pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
