@@ -1,0 +1,595 @@
+PART 1: THE INTEGRITY PHASE
+Sprint 1: The Type-Safe Contract
+Objective: Stop runtime crashes caused by mismatched flags (e.g., --device vs --disk). Force the compiler to validate script arguments.
+
+ACTIVE SPRINT: 1 – Type-Safe Script Arguments
+
+**CONTEXT:**
+We currently pass script arguments as raw string vectors (`vec!["--device", dev]`), which causes runtime bugs because they don't match the Bash script flags (e.g., `wipe_disk.sh` expects `--disk`).
+
+**TASK:**
+Create a strict contract between Rust and Bash.
+
+**REQUIREMENTS:**
+1. Create `src/script_traits.rs`:
+   - Define trait `ScriptArgs` with methods:
+     - `to_cli_args(&self) -> Vec<String>`
+     - `get_env_vars(&self) -> Vec<(String, String)>`
+     - `script_name(&self) -> &'static str`
+
+2. Create `src/scripts/disk.rs`:
+   - Create struct `WipeDiskArgs { pub device: PathBuf, pub method: String, pub confirm: bool }`.
+   - Implement `ScriptArgs` for it.
+   - **MAPPING RULE:** Map the `device` field to the literal string `"--disk"` (to match `wipe_disk.sh`).
+   - **ENV RULE:** If `confirm` is true, return `("CONFIRM_WIPE_DISK".to_string(), "yes".to_string())`.
+
+3. Modify `src/main.rs`:
+   - Import the new module.
+   - Replace the manual `vec![]` construction in the `Wipe` command with `WipeDiskArgs`.
+
+**CONSTRAINT:**
+- Do not change the Bash script. Rust must conform to Bash.
+- Adhere to `lint_rules.md` (no unwrap without comment).
+
+**SELF-AUDIT:**
+- Did I verify `to_cli_args` outputs `"--disk"` and NOT `"--device"`?
+
+Sprint 2: The Execution Gatekeeper
+Objective: Make it impossible to write unsafe code. The runner must refuse any argument that isn't a Typed Struct.
+
+ACTIVE SPRINT: 2 – Execution Gatekeeper
+
+**CONTEXT:**
+We have Typed Structs now, but the old `execute_tool_script` function still accepts raw unsafe strings. We need to kill the unsafe path.
+
+**TASK:**
+Refactor the execution logic to ONLY accept `ScriptArgs` types.
+
+**REQUIREMENTS:**
+1. Rename `execute_tool_script` to `run_script_safe` (or similar).
+2. Change the function signature to accept `args: &impl ScriptArgs` instead of string slices.
+3. Inside the function:
+   - Call `args.to_cli_args()` to get the flags.
+   - Call `args.get_env_vars()` and inject them into the `Command` using `.envs()`.
+   - Call `args.script_name()` to resolve the path.
+   - **CRITICAL:** Ensure `process_guard` integration (process groups) is preserved or added if missing.
+4. Update all call sites in `main.rs` to use this new function.
+
+**CONSTRAINT:**
+- Delete the old string-based runner.
+- Ensure `run_script_safe` logs the exact command + env vars to stdout for transparency.
+
+**SELF-AUDIT:**
+- Does the code refuse to compile if I try to pass a raw "string"?
+- Are environment variables injected automatically?
+
+Sprint 3: The Transparency Engine (ALPM)
+Objective: Stop shelling out to pacman. Use Rust bindings (alpm.rs) to get full control and visibility of package installation.
+
+ACTIVE SPRINT: 3 – Transparent ALPM Integration
+
+**CONTEXT:**
+We are replacing `pacman` shell calls with `alpm.rs` (libalpm bindings) to avoid parsing stdout. We need full visibility into the library's actions.
+
+**TASK:**
+Implement the package manager module with logging callbacks.
+
+**REQUIREMENTS:**
+1. Add `alpm` and `pacmanconf` to Cargo.toml.
+2. Create `src/package_manager.rs`.
+3. Implement a `PackageManager` struct that initializes ALPM with a custom root (e.g., `/mnt`).
+4. **TRANSPARENCY REQUIREMENT:** Implement `log_cb` (Log Callback).
+   - Route ALPM `Warning` and `Error` logs to `log::warn!` and `log::error!`.
+   - Route `Info` logs to `log::info!` so they appear in the TUI.
+5. Create an `install_packages(targets: Vec<&str>)` function that runs a transaction.
+
+**CONSTRAINT:**
+- Do not hide ALPM output. I need to see "Downloading..." and "Installing..." in the logs.
+- Use `anyhow::Result` for error handling.
+
+**SELF-AUDIT:**
+- Did I wire up `log_cb`?
+- Does the code initialize ALPM on the target root, not the live system?
+Execution Rule: Complete Sprint 1. Run cargo check. If it passes, move to Sprint 2. Do not jump ahead.
+
+
+PART 2: THE FEATURE PARITY PHASE
+
+Sprint 4: The Disk Master
+Objective: Wire up partitioning, formatting, and mounting using the Type-Safe system. Ensure Rust controls the disk layout state before Bash executes the commands.
+
+ACTIVE SPRINT: 4 – Disk Operations & Mounting
+
+**CONTEXT:**
+We have the `ScriptArgs` trait. Now we need to implement it for Formatting and Mounting operations. We must ensure Rust defines the layout before Bash touches the disk.
+
+**TASK:**
+Implement Type-Safe structs for Partitioning, Formatting, and Mounting.
+
+**REQUIREMENTS:**
+1. Create `src/scripts/filesystem.rs`:
+   - Define `FormatPartitionArgs`:
+     - Fields: `device` (PathBuf), `filesystem` (Enum: Ext4, Btrfs, Xfs, Fat32), `label` (Option<String>), `force` (bool).
+     - Implement `ScriptArgs`. Map the Enum to the string expected by `format_partition.sh`.
+   - Define `MountPartitionArgs`:
+     - Fields: `device` (PathBuf), `mountpoint` (PathBuf), `options` (Option<String>).
+     - Implement `ScriptArgs`.
+
+2. Update `src/installer.rs`:
+   - Create a high-level function `prepare_disks` that:
+     - Takes a `DiskLayout` config struct.
+     - Calls `run_script_safe` with `WipeDiskArgs` (from Sprint 1).
+     - Calls `run_script_safe` with `FormatPartitionArgs` for root/boot.
+     - Calls `run_script_safe` with `MountPartitionArgs` to mount to `/mnt`.
+
+**CONSTRAINT:**
+- Use strict Enums for filesystems (no string typing).
+- Ensure `run_script_safe` is the ONLY way these scripts are called.
+
+**SELF-AUDIT:**
+- Did I map the Rust Enum `Filesystem::Ext4` to the string `"ext4"`?
+- am I mounting filesystems in the correct order (Root first, then Boot)?
+
+Sprint 5: The Base Strap (The Big One)
+Objective: Replace the shell-based pacstrap script with your Rust ALPM engine. This installs the actual OS to /mnt with full transparency.
+
+ACTIVE SPRINT: 5 – Base System Installation
+
+**CONTEXT:**
+We have `src/package_manager.rs` (ALPM) from Part 1. Now we use it to install the base system, replacing external `pacstrap` calls.
+
+**TASK:**
+Implement the base installation logic using Rust ALPM bindings.
+
+**REQUIREMENTS:**
+1. Modify `src/installer.rs`:
+   - Add a function `install_base_system(target_root: &Path)`.
+2. Inside the function:
+   - Initialize `PackageManager::new(target_root)`.
+   - Define the baseline packages: `vec!["base", "linux", "linux-firmware", "base-devel"]`.
+   - Call `package_manager.install_packages()` with this list.
+   - **CRITICAL:** Ensure the TUI / Logger receives the progress callbacks defined in Part 1.
+
+3. Error Handling:
+   - If a package fails to download, the installer must abort immediately (Fail Fast).
+   - Do not attempt to retry silently.
+
+**CONSTRAINT:**
+- Do not use `std::process::Command` to call `pacman`. Use the Rust module.
+- Ensure the root path is strictly `/mnt` (or whatever the config defines).
+
+**SELF-AUDIT:**
+- Did I include `linux-firmware`? (Common mistake to forget).
+- Am I installing to the correct root?
+
+Sprint 6: The Configurator
+Objective: Configure the newly installed system (fstab, users, locale, bootloader). These are simple text file operations where Bash excels, wrapped in Rust safety.
+
+ACTIVE SPRINT: 6 – Post-Install Configuration
+
+**CONTEXT:**
+The base system is installed. Now we need to configure it (`fstab`, `users`, `locale`) using our Type-Safe Script pattern.
+
+**TASK:**
+Implement Typed Structs for system configuration scripts.
+
+**REQUIREMENTS:**
+1. Create `src/scripts/config.rs`:
+   - Define `GenFstabArgs` (maps to `generate_fstab.sh`).
+   - Define `UserAddArgs` (maps to `add_user.sh`).
+   - Define `LocaleArgs` (maps to `configure_locale.sh`).
+   - Implement `ScriptArgs` for all of them.
+
+2. Update `src/installer.rs`:
+   - Add `configure_system` function.
+   - Sequence:
+     1. Generate Fstab (Critical).
+     2. Set Hostname/Locale.
+     3. Create Root User / Sudouser.
+     4. Install Bootloader (call `InstallBootloaderArgs`).
+
+3. Safety Check:
+   - Ensure `GenFstabArgs` requires the root path (`/mnt`).
+   - Ensure `UserAddArgs` injects passwords via ENV vars, NOT CLI flags.
+
+**CONSTRAINT:**
+- Secrets (passwords) must use `get_env_vars` implementation, never `to_cli_args`.
+
+**SELF-AUDIT:**
+- Did I pass the password as an environment variable?
+- Did I generate fstab *after* mounting but *before* rebooting?
+
+Execution Rule: Do not start Sprint 5 until Sprint 4 is verified (disks mount correctly). Do not start Sprint 6 until Sprint 5 is verified (packages exist in /mnt).
+
+
+PART 3: THE POLISH & EXPERIENCE PHASE
+
+Sprint 7: The TUI Workflow
+Objective: Stitch the isolated tools into a guided workflow. Users shouldn't have to pick "Wipe Disk" then manually pick "Format". The flow should be linear and guarded.
+
+ACTIVE SPRINT: 7 – The Guided Installer Workflow
+
+**CONTEXT:**
+We have all the individual steps (wipe, format, install). Now we need a state machine to guide the user through them in order.
+
+**TASK:**
+Implement the TUI screens for the guided installer.
+
+**REQUIREMENTS:**
+1. Update `src/ui/mod.rs` to implement a `WizardState` enum:
+   - `Welcome`, `DiskSelect`, `Partitioner`, `PackageSelect`, `UserConfig`, `InstallProgress`, `Done`.
+
+2. Create `src/ui/screens.rs`:
+   - Implement the `DiskSelect` screen:
+     - List available disks using `lsblk` (use `run_script_safe` with `SystemInfoArgs`).
+     - **SAFETY:** Show disk size and model prominently.
+   - Implement the `UserConfig` screen:
+     - Input fields for Hostname, Username, Password (masked).
+
+3. Wiring:
+   - "Next" button on `DiskSelect` triggers `Wipe` + `Format` logic (Sprint 4).
+   - "Next" on `PackageSelect` triggers `install_base_system` (Sprint 5).
+
+**CONSTRAINT:**
+- The user cannot proceed to "Install" without a valid Disk and Username.
+- Passwords must be zeroed out in memory if possible (use `secrecy` crate if adding dependencies, otherwise `String` is acceptable for MVP).
+
+**SELF-AUDIT:**
+- Does the UI block progress if no disk is selected?
+- Is the "Install" screen distinct from the "Config" screen?
+
+Sprint 8: The Dry-Run Mode (The Confidence Builder)
+Objective: Let users see exactly what will happen before they commit. This is crucial for trust.
+
+ACTIVE SPRINT: 8 – Dry-Run Validation
+
+**CONTEXT:**
+Users are scared of wiping the wrong disk. We need a "Dry Run" mode that logs intended actions without executing them.
+
+**TASK:**
+Implement a `--dry-run` flag and logic.
+
+**REQUIREMENTS:**
+1. Update `ScriptArgs` trait in `src/script_traits.rs`:
+   - Add `is_destructive(&self) -> bool`.
+
+2. Modify `run_script_safe` in `src/installer.rs`:
+   - Check if the global `DRY_RUN` flag is set.
+   - If `DRY_RUN` is true AND `args.is_destructive()` is true:
+     - **DO NOT** execute the command.
+     - Log: `[DRY RUN] Would execute: bash scripts/tools/wipe_disk.sh --disk /dev/sda`.
+     - Return `Ok(())`.
+
+3. UI Integration:
+   - Add a "Test Config" button in the TUI that runs the entire installation flow in Dry Run mode.
+   - Show a summary of actions to the user.
+
+**CONSTRAINT:**
+- Non-destructive commands (like `lsblk` or checking internet) should still run so the dry-run is realistic.
+- Destructive commands (wipe, format, pacstrap) must be skipped.
+
+**SELF-AUDIT:**
+- Did I verify `lsblk` still runs (so we see disks)?
+- Did I verify `wipe_disk.sh` is skipped?
+
+Sprint 9: The Safety Documentation (The Maintainer Tier)
+Objective: Prove to the world (and future you) that this system is safe. This is what separates "scripts" from "software."
+
+ACTIVE SPRINT: 9 – Safety Documentation & Architecture
+
+**CONTEXT:**
+The code is safe, but nobody knows why. We need to document the "Death Pact," the "Typed Args," and the "ALPM Transparency."
+
+**TASK:**
+Create the upstream-grade documentation.
+
+**REQUIREMENTS:**
+1. Create `docs/SAFETY_MODEL.md`:
+   - Explain the "Death Pact" (Process Groups + PDEATHSIG).
+   - Explain the "Typed Argument" contract (Rust -> Bash).
+   - List the "Refusals" (what the installer refuses to do, e.g., run without confirmation).
+
+2. Create `docs/ARCHITECTURE.md`:
+   - Diagram the Rust Controller -> Bash Worker relationship.
+   - Explain why `alpm.rs` is used for packages but Bash for disks.
+
+3. Update `README.md`:
+   - Remove "sales pitch" language.
+   - Add a "Safety Guarantees" section linking to the new docs.
+   - Add a "How to verify" section for paranoid users.
+
+**CONSTRAINT:**
+- Be honest. If a feature is experimental, label it.
+- Use the "Refusal" language we discussed ("This installer refuses to...").
+
+Sprint 10: The CI/CD Pipeline (The Enforcer)
+Objective: Automate the rules so you can't break them by accident later.
+
+ACTIVE SPRINT: 10 – CI/CD Enforcement
+
+**CONTEXT:**
+We have `lint_rules.md`. Now we need GitHub Actions to enforce them on every push.
+
+**TASK:**
+Set up the CI pipeline.
+
+**REQUIREMENTS:**
+1. Create `.github/workflows/safety.yml`:
+   - Job 1: `cargo check` & `cargo test`.
+   - Job 2: `shellcheck` on all `scripts/**/*.sh`.
+   - Job 3: **The Safety Linter**.
+     - Grep for `vec!["--` in `src/main.rs` (Fail if found - enforces Typed Args).
+     - Grep for `unwrap()` in `src/` (Fail if found without comment).
+     - Grep for `sudo` in scripts (Fail if found - root should be external).
+
+2. Create `.github/workflows/build.yml`:
+   - Build the release binary.
+   - Upload artifacts.
+
+**CONSTRAINT:**
+- The build must fail if any script has a shellcheck warning.
+- The build must fail if raw string vectors are detected in main.rs.
+
+**SELF-AUDIT:**
+- Did I include the "Safety Linter" grep steps?
+- Does it run on Pull Requests?
+
+Execution Rule: Part 3 is where it becomes a real product. Do not skip Sprint 8 (Dry Run). That is the feature that makes users trust you.
+
+
+PART 4: THE ADVANCED SYSTEMS & RELEASE PHASE
+
+Sprint 11: The Fortress (LUKS Encryption)
+Objective: Support full disk encryption. This requires careful handling of secrets (passwords) so they don't leak in process lists.
+
+ACTIVE SPRINT: 11 – LUKS Encryption Support
+
+**CONTEXT:**
+We need to support Encrypted Partitions (LUKS2). We cannot pass passwords via CLI flags (security risk). We must use a temporary keyfile strategy or pipe.
+
+**TASK:**
+Implement the Type-Safe encryption wrapper.
+
+**REQUIREMENTS:**
+1. Create `src/scripts/encryption.rs`:
+   - Define `LuksFormatArgs`:
+     - Fields: `device` (PathBuf), `cipher` (String - default "aes-xts-plain64"), `key_file` (PathBuf).
+     - Implement `ScriptArgs`. Map `device` to `--device` and `key_file` to `--key-file`.
+   - Define `LuksOpenArgs`:
+     - Fields: `device` (PathBuf), `mapper_name` (String), `key_file` (PathBuf).
+
+2. Update `src/installer.rs`:
+   - Create `encrypt_partition` helper.
+   - **SECURITY LOGIC:**
+     1. Rust writes the user's password to a temporary file in `/tmp` (RAM) with `0600` permissions.
+     2. Rust calls `run_script_safe` with the path to that keyfile.
+     3. Rust securely deletes the keyfile immediately after the command returns.
+
+3. Update `format_partition.sh` (or create `encrypt_device.sh`):
+   - It must call `cryptsetup luksFormat` using the key file argument.
+   - It must not print the password to logs.
+
+**CONSTRAINT:**
+- Passwords NEVER appear in `to_cli_args` strings.
+- Keyfiles must be wiped even if the script fails (use Rust `Drop` trait on a `SecretFile` wrapper).
+
+**SELF-AUDIT:**
+- Did I ensure the keyfile is deleted?
+- Am I using `luks2` (modern standard)?
+
+Sprint 12: The Customizer (Profiles & Hyprland)
+Objective: Install Desktop Environments and Window Managers. You mentioned Hyprland in your summary; this is where you enable installing it + dotfiles.
+
+ACTIVE SPRINT: 12 – Desktop Profiles & Dotfiles
+
+**CONTEXT:**
+The base system is boring. We need to install Profiles (Gnome, KDE, Hyprland).
+
+**TASK:**
+Create the Profile management system.
+
+**REQUIREMENTS:**
+1. Create `src/profiles/mod.rs`:
+   - Define enum `Profile`: `Minimal`, `Kde`, `Gnome`, `Hyprland`.
+   - Implement method `get_packages()` for each (e.g., Hyprland returns `["hyprland", "waybar", "kitty"]`).
+
+2. Create `src/scripts/profiles.rs`:
+   - Define `InstallDotfilesArgs`:
+     - Fields: `repo_url` (String), `target_user` (String).
+     - Implement `ScriptArgs`.
+
+3. Update `installer.rs`:
+   - Add `install_profile(profile: Profile)`.
+   - It should use your `PackageManager` (ALPM) to install the specific package list.
+   - If `Hyprland` is chosen, it should optionally call `InstallDotfilesArgs` to clone your config.
+
+**CONSTRAINT:**
+- Do not hardcode package lists in Bash. Keep them in Rust Enums so they are easy to update.
+- Ensure `git` is installed before trying to clone dotfiles.
+
+**SELF-AUDIT:**
+- Did I include the Display Manager (sddm/gdm) for the profile?
+- Am I enabling the service (`systemctl enable sddm`)?
+
+Sprint 13: The Speed Demon (Reflector & Mirrors)
+Objective: A slow installer is a bad installer. You need to rank mirrors before downloading packages.
+
+ACTIVE SPRINT: 13 – Mirror Ranking
+
+**CONTEXT:**
+Downloading packages from a slow mirror kills the UX. We need to run `reflector` before bootstrapping.
+
+**TASK:**
+Implement Mirror ranking.
+
+**REQUIREMENTS:**
+1. Create `src/scripts/network.rs`:
+   - Define `UpdateMirrorsArgs`:
+     - Fields: `country` (Option<String>), `limit` (u32 - default 20), `sort` (String - default "rate").
+     - Implement `ScriptArgs`.
+
+2. Update `installer.rs`:
+   - Call `UpdateMirrorsArgs` at the very start of the installation (before `install_base_system`).
+
+3. Bash Script (`update_mirrors.sh`):
+   - Check if `reflector` is installed (it is on the ISO).
+   - Run `reflector --save /etc/pacman.d/mirrorlist ...`.
+
+**CONSTRAINT:**
+- Fail gracefully if the network is down (check connectivity first).
+- Allow the user to skip this step in the UI if they want.
+
+Sprint 14: The Golden Image (Building the ISO)
+Objective: Embed your TUI into an actual Arch ISO so you can boot it on real hardware.
+
+Execution Rule:
+Sprint 11 (Encryption) is the hardest engineering challenge left. If you get luksFormat working via a temporary keyfile driven by Rust, you have officially surpassed most hobbyist installers.
+
+
+PART 5: THE LOGIC WIRING PHASE
+Goal: Implement the "Brain" that decides which scripts to run and in what order based on user input.
+
+Sprint 14: The Hardware Detective (Environment Detection)
+Objective: Stop guessing. Rust must detect UEFI vs BIOS and Network State before we even ask the user a question.
+
+ACTIVE SPRINT: 14 – Hardware Environment Detection
+
+**CONTEXT:**
+The installer currently "guesses" boot mode and network state, leading to preflight failures. We need strict detection logic.
+
+**TASK:**
+Implement hardware detection in Rust.
+
+**REQUIREMENTS:**
+1. Create `src/hardware.rs`.
+2. Implement `detect_firmware_mode() -> FirmwareMode` (Enum: `Uefi`, `Bios`).
+   - Logic: Check if `/sys/firmware/efi` exists.
+3. Implement `detect_internet() -> bool`.
+   - Logic: Attempt a TCP connection to `archlinux.org:80` (use std::net).
+   - **DO NOT** use ping or shell out. Pure Rust.
+4. Integrate this into the `InstallerContext` initialization in `main.rs`.
+
+**CONSTRAINT:**
+- Fail Fast: If detection is ambiguous, log a warning but default to Safe Mode (BIOS) or abort if critical.
+- No `unwrap()`. Use `anyhow::Result`.
+
+Sprint 15: The Storage Stack Engine (The Monster)
+Objective: Handle the "Auto RAID LVM LUKS" complexity. Bash is too dumb for this. Rust must generate the dependency tree.
+
+ACTIVE SPRINT: 15 – Storage Stack Engine
+
+**CONTEXT:**
+We support complex storage layouts (RAID, LVM, LUKS, Btrfs). We need a logic engine to translate a high-level `StorageStrategy` into atomic script calls.
+
+**TASK:**
+Implement the Storage Stack Builder.
+
+**REQUIREMENTS:**
+1. Create `src/engine/storage.rs`.
+2. Define the `StoragePlan` enum/struct that holds a sequence of operations:
+   - `Partition`, `CreateRaid`, `CreateLvmPV`, `CreateLvmVG`, `CreateLvmLV`, `LuksFormat`, `FormatFs`.
+3. Implement `calculate_storage_plan(config: &InstallConfig) -> Vec<StorageOp>`.
+   - **LVM Logic:** If `Strategy::Lvm`, generate PV -> VG -> LV steps.
+   - **LUKS Logic:** If `Strategy::Luks`, wrap the target partition in `LuksFormat` + `LuksOpen`.
+   - **Btrfs Logic:** If `Filesystem::Btrfs`, generate `Mount` commands with subvolume flags (`subvol=@`, etc.).
+
+4. **Output:** The function should return a vector of `ScriptArgs` (Typed Structs) ready for the runner.
+
+**CONSTRAINT:**
+- Start with Simple, LVM, and LUKS. Leave RAID for a later update if it's too complex.
+- Unit test the plan generation (e.g., "Given LVM+Ext4, do I get a VG creation step?").
+
+Sprint 16: The Package & Service Resolver
+Objective: Translate high-level choices (KDE, Nvidia) into specific package lists and service calls.
+
+ACTIVE SPRINT: 16 – Package & Service Resolver
+
+**CONTEXT:**
+The user selects "KDE" and "Nvidia", but `pacman` needs specific package names. We need a resolver logic.
+
+**TASK:**
+Implement the Package Resolver.
+
+**REQUIREMENTS:**
+1. Create `src/logic/resolver.rs`.
+2. Implement `resolve_packages(config: &InstallConfig) -> Vec<String>`.
+   - **GPU Logic:** If `Nvidia`, add `nvidia`, `nvidia-utils`. If `Intel`, add `intel-ucode`.
+   - **Kernel Logic:** If `Hardened`, swap `linux` for `linux-hardened`.
+   - **Desktop Logic:** If `Hyprland`, add `hyprland`, `waybar`, `kitty`.
+3. Implement `resolve_services(config: &InstallConfig) -> Vec<String>`.
+   - If `DisplayManager::Sddm`, add `sddm`.
+   - If `NetworkManager`, add `NetworkManager`.
+
+**CONSTRAINT:**
+- Keep package lists in `src/profiles/mod.rs` constants, not hardcoded strings in the resolver function.
+
+PART 6: THE RESILIENCE PHASE
+Goal: Handle the messy stuff (Network, AUR, Dotfiles) without breaking the strict safety rules.
+
+Sprint 17: The Network Sentinel (Reflector)
+Objective: Ensure we have fast mirrors. If the network is slow, pacstrap will fail effectively.
+
+ACTIVE SPRINT: 17 – Mirror Configuration (Reflector)
+
+**CONTEXT:**
+Downloading packages from a slow mirror kills the UX. We need to rank mirrors.
+
+**TASK:**
+Implement Mirror Ranking using `reflector`.
+
+**REQUIREMENTS:**
+1. Create `src/scripts/network.rs` -> `ReflectorArgs`.
+2. Map to `update_mirrors.sh`.
+3. **Logic:**
+   - Run this step *before* `prepare_disks`.
+   - If `detect_internet()` (from Sprint 14) is false, **SKIP** this step automatically.
+   - Use a timeout (e.g., 30s) so it doesn't hang forever.
+
+**CONSTRAINT:**
+- Allow the user to skip this in the TUI (some users have custom mirrorlists).
+
+Sprint 18: The User-Space Executor (AUR & Dotfiles)
+Objective: Handle operations that CANNOT run as root (AUR builds, Git clones).
+
+ACTIVE SPRINT: 18 – User-Space Operations (AUR/Dotfiles)
+
+**CONTEXT:**
+We need to install AUR packages (`paru`/`yay`) and clone dotfiles. `makepkg` forbids running as root. We must drop privileges safely.
+
+**TASK:**
+Implement `run_as_user` capability.
+
+**REQUIREMENTS:**
+1. Create `src/scripts/user_ops.rs`:
+   - Define `UserRunArgs` { user: String, command: String }.
+   - Implementation: Uses `su -c <command> <user>` (or `sudo -u`).
+2. Implement `install_aur_helper`:
+   - Clone `paru` to `/home/user`.
+   - Run `makepkg -si` as the target user.
+3. Implement `clone_dotfiles`:
+   - `git clone <repo>` as the target user.
+
+**CONSTRAINT:**
+- **Failure Policy:** If AUR fails, LOG A WARNING but DO NOT abort the install. A broken `paru` install shouldn't brick the system.
+
+
+PART 7: THE RELEASE PHASE
+
+Sprint 19: The Golden Image (ISO Build)
+Objective: Now (and only now) do we build the ISO.
+
+ACTIVE SPRINT: 19 – ISO Creation Pipeline
+
+**CONTEXT:**
+The installer logic is complete. We need a bootable ISO.
+
+**TASK:**
+Create the `archiso` profile and build script.
+
+**REQUIREMENTS:**
+1. Create `iso_profile/`.
+2. Configure `.zlogin` to auto-launch `archinstall-tui`.
+3. Create `build_iso.sh` to compile Rust binary and embed it.
+
+**CONSTRAINT:**
+- Include `git`, `reflector`, `base-devel` in the ISO packages list.
