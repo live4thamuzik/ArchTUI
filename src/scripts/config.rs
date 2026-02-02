@@ -63,6 +63,11 @@ impl ScriptArgs for GenFstabArgs {
     fn script_name(&self) -> &'static str {
         "generate_fstab.sh"
     }
+
+    /// Fstab generation is DESTRUCTIVE - writes to /etc/fstab.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -189,6 +194,11 @@ impl ScriptArgs for UserAddArgs {
     fn script_name(&self) -> &'static str {
         "add_user.sh"
     }
+
+    /// User creation is DESTRUCTIVE - modifies /etc/passwd, /etc/shadow.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -248,6 +258,11 @@ impl ScriptArgs for LocaleArgs {
     fn script_name(&self) -> &'static str {
         // This would need a dedicated script or be part of chroot_config
         "configure_locale.sh"
+    }
+
+    /// Locale configuration is DESTRUCTIVE - writes to /etc/hostname, /etc/locale.*, etc.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }
 

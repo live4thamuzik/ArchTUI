@@ -7,6 +7,14 @@ use std::path::PathBuf;
 #[command(about = "A user-friendly Arch Linux installer with TUI interface")]
 #[command(version)]
 pub struct Cli {
+    /// Dry-run mode: show what would be executed without making changes.
+    ///
+    /// In this mode, destructive operations (wipe, format, install) are
+    /// skipped and logged. Non-destructive operations (lsblk, system_info)
+    /// still execute so the preview is realistic.
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

@@ -86,6 +86,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse_args();
     debug!("CLI arguments parsed");
 
+    // Enable dry-run mode if requested
+    if cli.dry_run {
+        script_traits::enable_dry_run();
+        info!("Dry-run mode enabled - destructive operations will be skipped");
+        println!("Running in DRY-RUN mode: destructive operations will be skipped");
+    }
+
     match cli.command {
         Some(crate::cli::Commands::Validate { config }) => {
             info!("Validating configuration file: {:?}", config);

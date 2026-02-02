@@ -44,6 +44,11 @@ impl ScriptArgs for ConfigureNetworkArgs {
     fn script_name(&self) -> &'static str {
         "configure_network.sh"
     }
+
+    /// Network configuration is DESTRUCTIVE - modifies network settings.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -79,6 +84,11 @@ impl ScriptArgs for TestNetworkArgs {
 
     fn script_name(&self) -> &'static str {
         "test_network.sh"
+    }
+
+    /// Network test is READ-ONLY - not destructive.
+    fn is_destructive(&self) -> bool {
+        false
     }
 }
 
@@ -133,6 +143,11 @@ impl ScriptArgs for FirewallArgs {
     fn script_name(&self) -> &'static str {
         "configure_firewall.sh"
     }
+
+    /// Firewall configuration is DESTRUCTIVE - modifies firewall rules.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -157,5 +172,10 @@ impl ScriptArgs for NetworkDiagnosticsArgs {
 
     fn script_name(&self) -> &'static str {
         "network_diagnostics.sh"
+    }
+
+    /// Network diagnostics is READ-ONLY - not destructive.
+    fn is_destructive(&self) -> bool {
+        false
     }
 }
