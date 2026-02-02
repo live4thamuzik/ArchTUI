@@ -10,9 +10,16 @@
 //! - `MountPartitionArgs` - Mount partitions in correct order (root first, then boot)
 //!
 //! All operations go through `run_script_safe` which enforces process group isolation.
+//!
+//! # Base System Installation (Sprint 5)
+//!
+//! The `install_base_system` function uses the ALPM bindings to install packages
+//! directly, replacing shell-based pacstrap calls. This provides full transparency
+//! via log callbacks.
 
 use crate::app::AppState;
 use crate::config::Configuration;
+use crate::package_manager::PackageManager;
 use crate::script_runner::run_script_safe;
 use crate::scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod,
@@ -20,7 +27,7 @@ use crate::scripts::disk::{
 use crate::types::Filesystem;
 use anyhow::{Context, Result};
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -365,5 +372,155 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     log::info!("Boot partition mounted");
 
     log::info!("Disk preparation complete");
+    Ok(())
+}
+
+// ============================================================================
+// Base System Installation (Sprint 5)
+// ============================================================================
+
+/// Base packages required for a minimal Arch Linux installation.
+///
+/// These packages provide:
+/// - `base`: Essential packages (filesystem, glibc, bash, etc.)
+/// - `linux`: The Linux kernel
+/// - `linux-firmware`: Firmware files for common hardware
+/// - `base-devel`: Build tools (gcc, make, etc.) needed for AUR
+const BASE_PACKAGES: &[&str] = &["base", "linux", "linux-firmware", "base-devel"];
+
+/// Install the base system to the target root using ALPM.
+///
+/// This replaces shell-based `pacstrap` calls with direct ALPM bindings,
+/// providing full transparency via log callbacks. All package operations
+/// are logged through the Rust `log` crate.
+///
+/// # Arguments
+///
+/// * `target_root` - The mount point of the root partition (typically `/mnt`)
+///
+/// # Transparency
+///
+/// The ALPM handle is configured with `log_cb` which routes all library
+/// messages to `log::info!`, `log::warn!`, and `log::error!`. This ensures
+/// the TUI sees "Downloading...", "Installing...", etc.
+///
+/// # Fail Fast
+///
+/// If any package fails to download or install, this function returns an
+/// error immediately. No silent retries are attempted.
+///
+/// # Example
+///
+/// ```ignore
+/// use archinstall_tui::installer::install_base_system;
+/// use std::path::Path;
+///
+/// // After mounting /mnt
+/// install_base_system(Path::new("/mnt"))?;
+/// ```
+#[allow(dead_code)] // Library API - will be called from main installer flow
+pub fn install_base_system(target_root: &Path) -> Result<()> {
+    log::info!("Installing base system to {:?}", target_root);
+
+    // Verify target root exists and is mounted
+    if !target_root.exists() {
+        anyhow::bail!(
+            "Target root does not exist: {:?}. Mount the root partition first.",
+            target_root
+        );
+    }
+
+    // Verify it's actually a mount point (has lost+found or is non-empty)
+    let is_mount = target_root.join("lost+found").exists()
+        || std::fs::read_dir(target_root)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false);
+
+    if !is_mount {
+        log::warn!(
+            "Target root {:?} appears to be empty - ensure it's properly mounted",
+            target_root
+        );
+    }
+
+    // Initialize ALPM with target root
+    let db_path = target_root.join("var/lib/pacman");
+
+    // Ensure pacman db directory exists
+    std::fs::create_dir_all(&db_path)
+        .with_context(|| format!("Failed to create pacman db path: {:?}", db_path))?;
+
+    log::info!("Initializing ALPM: root={:?}, db={:?}", target_root, db_path);
+
+    let mut pm = PackageManager::new(target_root, &db_path)
+        .context("Failed to initialize ALPM package manager")?;
+
+    // Read pacman.conf from the live system to get mirror list
+    // In a real installation, we'd copy mirrorlist to target first
+    let live_pacman_conf = Path::new("/etc/pacman.conf");
+    if live_pacman_conf.exists() {
+        log::info!("Loading mirror configuration from live system");
+        pm = PackageManager::from_pacman_conf(target_root, live_pacman_conf)
+            .context("Failed to load pacman.conf")?;
+    } else {
+        log::warn!("No pacman.conf found - using default mirrors");
+    }
+
+    // CRITICAL: Log exactly what we're installing (Self-Audit: linux-firmware included)
+    log::info!(
+        "Installing base packages: {:?}",
+        BASE_PACKAGES
+    );
+
+    // Install base packages
+    // Fail Fast: Any failure here aborts immediately
+    pm.install_packages(BASE_PACKAGES)
+        .context("Failed to install base packages")?;
+
+    log::info!("Base system installation complete");
+    Ok(())
+}
+
+/// Install the base system with additional packages.
+///
+/// This extends `install_base_system` to include custom packages like
+/// a specific kernel, text editor, or network tools.
+///
+/// # Arguments
+///
+/// * `target_root` - The mount point of the root partition
+/// * `extra_packages` - Additional packages to install beyond base
+#[allow(dead_code)] // Library API - will be called from main installer flow
+pub fn install_base_system_with_extras(
+    target_root: &Path,
+    extra_packages: &[&str],
+) -> Result<()> {
+    log::info!("Installing base system with {} extra packages", extra_packages.len());
+
+    // Combine base packages with extras
+    let mut all_packages: Vec<&str> = BASE_PACKAGES.to_vec();
+    all_packages.extend_from_slice(extra_packages);
+
+    log::info!("Full package list: {:?}", all_packages);
+
+    // Initialize ALPM
+    let db_path = target_root.join("var/lib/pacman");
+    std::fs::create_dir_all(&db_path)
+        .with_context(|| format!("Failed to create pacman db path: {:?}", db_path))?;
+
+    let mut pm = PackageManager::new(target_root, &db_path)
+        .context("Failed to initialize ALPM package manager")?;
+
+    let live_pacman_conf = Path::new("/etc/pacman.conf");
+    if live_pacman_conf.exists() {
+        pm = PackageManager::from_pacman_conf(target_root, live_pacman_conf)
+            .context("Failed to load pacman.conf")?;
+    }
+
+    // Install all packages
+    pm.install_packages(&all_packages)
+        .context("Failed to install packages")?;
+
+    log::info!("Package installation complete");
     Ok(())
 }
