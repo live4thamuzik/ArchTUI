@@ -26,7 +26,7 @@ use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use log::{debug, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};

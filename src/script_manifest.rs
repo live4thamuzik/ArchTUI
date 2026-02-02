@@ -30,6 +30,9 @@
 //! }
 //! ```
 
+// Library API - these types are exported for external use but not yet consumed by the binary
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
