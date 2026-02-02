@@ -309,6 +309,7 @@ impl Configuration {
     /// to child processes and close the pipe immediately after writing.
     ///
     /// Returns (user_password, root_password, encryption_password)
+    #[allow(dead_code)] // Library API for future use
     pub fn get_passwords(&self) -> (String, String, Option<String>) {
         let mut user_password = String::new();
         let mut root_password = String::new();

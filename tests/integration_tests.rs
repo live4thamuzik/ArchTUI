@@ -94,6 +94,7 @@ fn test_config_structure() {
 fn test_async_tool_execution_with_output_capture() {
     // Message types matching the app's ToolMessage enum
     #[derive(Debug)]
+    #[allow(dead_code)] // exit_code reserved for future assertions
     enum TestMessage {
         Stdout(String),
         Stderr(String),
