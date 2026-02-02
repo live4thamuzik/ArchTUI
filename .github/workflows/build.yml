@@ -35,7 +35,9 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Run tests
-      run: cargo test
+      # Note: alpm feature disabled on Ubuntu (requires libalpm from Arch Linux)
+      run: cargo test --no-default-features
 
     - name: Build release
-      run: cargo build --release
+      # Note: alpm feature disabled on Ubuntu (requires libalpm from Arch Linux)
+      run: cargo build --release --no-default-features

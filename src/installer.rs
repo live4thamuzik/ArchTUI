@@ -19,6 +19,7 @@
 
 use crate::app::AppState;
 use crate::config::Configuration;
+#[cfg(feature = "alpm")]
 use crate::package_manager::PackageManager;
 use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
@@ -29,7 +30,9 @@ use crate::scripts::disk::{
 use crate::types::Filesystem;
 use anyhow::{Context, Result};
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+#[cfg(feature = "alpm")]
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -379,8 +382,10 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
 
 // ============================================================================
 // Base System Installation (Sprint 5)
+// Requires `alpm` feature - only available on Arch Linux
 // ============================================================================
 
+#[cfg(feature = "alpm")]
 /// Base packages required for a minimal Arch Linux installation.
 ///
 /// These packages provide:
@@ -390,6 +395,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
 /// - `base-devel`: Build tools (gcc, make, etc.) needed for AUR
 const BASE_PACKAGES: &[&str] = &["base", "linux", "linux-firmware", "base-devel"];
 
+#[cfg(feature = "alpm")]
 /// Install the base system to the target root using ALPM.
 ///
 /// This replaces shell-based `pacstrap` calls with direct ALPM bindings,
@@ -483,6 +489,7 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "alpm")]
 /// Install the base system with additional packages.
 ///
 /// This extends `install_base_system` to include custom packages like
