@@ -11,6 +11,7 @@ mod error;
 mod input;
 mod install_state;
 mod installer;
+#[cfg(feature = "alpm")]
 mod package_manager;
 mod package_utils;
 mod process_guard;
