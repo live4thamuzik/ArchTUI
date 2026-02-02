@@ -39,6 +39,11 @@ pub use script_traits::ScriptArgs;
 pub use scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod, WipeMethodError,
 };
+pub use scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
+pub use installer::{
+    configure_system, install_base_system, install_base_system_with_extras, prepare_disks,
+    DiskLayout, SystemConfig,
+};
 pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,

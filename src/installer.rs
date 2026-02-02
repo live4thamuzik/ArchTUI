@@ -21,6 +21,8 @@ use crate::app::AppState;
 use crate::config::Configuration;
 use crate::package_manager::PackageManager;
 use crate::script_runner::run_script_safe;
+use crate::script_traits::ScriptArgs;
+use crate::scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
 use crate::scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod,
 };
@@ -522,5 +524,207 @@ pub fn install_base_system_with_extras(
         .context("Failed to install packages")?;
 
     log::info!("Package installation complete");
+    Ok(())
+}
+
+// ============================================================================
+// System Configuration (Sprint 6)
+// ============================================================================
+
+/// System configuration parameters for post-install setup.
+///
+/// Contains all the settings needed to configure the installed system:
+/// - Locale and timezone
+/// - User accounts
+/// - Bootloader
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Library API - will be used when installer is integrated
+pub struct SystemConfig {
+    /// Target root mountpoint (typically `/mnt`).
+    pub target_root: PathBuf,
+    /// System hostname.
+    pub hostname: String,
+    /// Locale setting (e.g., "en_US.UTF-8").
+    pub locale: String,
+    /// Timezone (e.g., "America/New_York").
+    pub timezone: String,
+    /// Console keymap (e.g., "us").
+    pub keymap: Option<String>,
+    /// Username for the main user account.
+    pub username: String,
+    /// Password for the main user (passed via env var, NOT CLI).
+    pub user_password: String,
+    /// Whether the main user should have sudo access.
+    pub user_sudo: bool,
+    /// Optional root password (if None, root login disabled).
+    pub root_password: Option<String>,
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self {
+            target_root: PathBuf::from("/mnt"),
+            hostname: "archlinux".to_string(),
+            locale: "en_US.UTF-8".to_string(),
+            timezone: "UTC".to_string(),
+            keymap: Some("us".to_string()),
+            username: "user".to_string(),
+            user_password: String::new(),
+            user_sudo: true,
+            root_password: None,
+        }
+    }
+}
+
+/// Configure the installed system.
+///
+/// This function runs the post-install configuration sequence:
+/// 1. **Generate Fstab** - CRITICAL: Must be done after mount, before chroot
+/// 2. **Set Hostname/Locale** - Configure system identity
+/// 3. **Create Users** - Set up root and main user accounts
+/// 4. Install Bootloader (TODO: Sprint 7)
+///
+/// # Security: Password Handling
+///
+/// **CRITICAL**: Passwords are passed via environment variables, NOT CLI flags.
+/// CLI arguments are visible in `/proc/<pid>/cmdline` to all users on the system.
+/// The `UserAddArgs` struct enforces this by excluding password from `to_cli_args()`
+/// and including it in `get_env_vars()`.
+///
+/// # Arguments
+///
+/// * `config` - System configuration parameters
+///
+/// # Returns
+///
+/// - `Ok(())` - All configuration completed successfully
+/// - `Err` - Any operation failed (fail fast)
+///
+/// # Example
+///
+/// ```ignore
+/// use archinstall_tui::installer::{SystemConfig, configure_system};
+/// use std::path::PathBuf;
+///
+/// let config = SystemConfig {
+///     target_root: PathBuf::from("/mnt"),
+///     hostname: "myarch".to_string(),
+///     locale: "en_US.UTF-8".to_string(),
+///     timezone: "America/Chicago".to_string(),
+///     keymap: Some("us".to_string()),
+///     username: "archuser".to_string(),
+///     user_password: "secret123".to_string(),
+///     user_sudo: true,
+///     root_password: Some("rootpw".to_string()),
+/// };
+///
+/// configure_system(&config)?;
+/// ```
+#[allow(dead_code)] // Library API - will be called from main installer flow
+pub fn configure_system(config: &SystemConfig) -> Result<()> {
+    log::info!("Starting system configuration for {:?}", config.target_root);
+
+    // ========================================================================
+    // Step 1: Generate Fstab
+    // CRITICAL: Must be done AFTER partitions are mounted, BEFORE chroot/reboot
+    // Uses genfstab to read currently mounted filesystems
+    // ========================================================================
+    log::info!("Generating /etc/fstab");
+    let fstab_args = GenFstabArgs {
+        root: config.target_root.clone(),
+    };
+    let output = run_script_safe(&fstab_args)
+        .context("Failed to execute fstab generation")?;
+    output.ensure_success("Fstab generation")?;
+    log::info!("Fstab generated successfully");
+
+    // ========================================================================
+    // Step 2: Configure Hostname and Locale
+    // Sets /etc/hostname, /etc/locale.gen, /etc/locale.conf, /etc/localtime
+    // ========================================================================
+    log::info!(
+        "Configuring locale: hostname={}, locale={}, timezone={}",
+        config.hostname,
+        config.locale,
+        config.timezone
+    );
+    let locale_args = LocaleArgs {
+        root: config.target_root.clone(),
+        hostname: config.hostname.clone(),
+        locale: config.locale.clone(),
+        timezone: config.timezone.clone(),
+        keymap: config.keymap.clone(),
+    };
+    let output = run_script_safe(&locale_args)
+        .context("Failed to execute locale configuration")?;
+    output.ensure_success("Locale configuration")?;
+    log::info!("Locale configuration complete");
+
+    // ========================================================================
+    // Step 3: Create User Accounts
+    // SECURITY: Passwords via env vars (USER_PASSWORD), NOT CLI flags
+    // ========================================================================
+
+    // Create main user with sudo access if requested
+    log::info!("Creating user: {} (sudo={})", config.username, config.user_sudo);
+    let user_args = UserAddArgs {
+        username: config.username.clone(),
+        password: Some(config.user_password.clone()),
+        groups: Some("wheel,audio,video,storage,optical".to_string()),
+        shell: Some("/bin/bash".to_string()),
+        full_name: None,
+        home_dir: None,
+        create_home: true,
+        sudo: config.user_sudo,
+    };
+
+    // SELF-AUDIT: Verify password is NOT in CLI args
+    let cli_args = user_args.to_cli_args();
+    debug_assert!(
+        !cli_args.iter().any(|a| a.contains(&config.user_password)),
+        "BUG: Password found in CLI args! This is a security vulnerability."
+    );
+
+    let output = run_script_safe(&user_args)
+        .context("Failed to create user")?;
+    output.ensure_success("User creation")?;
+    log::info!("User {} created successfully", config.username);
+
+    // Set root password if provided
+    if let Some(ref root_pw) = config.root_password {
+        log::info!("Setting root password");
+        let root_args = UserAddArgs {
+            username: "root".to_string(),
+            password: Some(root_pw.clone()),
+            groups: None,
+            shell: None,
+            full_name: None,
+            home_dir: None,
+            create_home: false, // Root home already exists
+            sudo: false,
+        };
+
+        // SELF-AUDIT: Verify password is NOT in CLI args
+        let root_cli = root_args.to_cli_args();
+        debug_assert!(
+            !root_cli.iter().any(|a| a.contains(root_pw)),
+            "BUG: Root password found in CLI args!"
+        );
+
+        let output = run_script_safe(&root_args)
+            .context("Failed to set root password")?;
+        output.ensure_success("Root password setup")?;
+        log::info!("Root password configured");
+    } else {
+        log::info!("No root password specified - root login will be disabled");
+    }
+
+    // ========================================================================
+    // Step 4: Install Bootloader (TODO: Sprint 7)
+    // This will configure GRUB/systemd-boot based on boot mode (UEFI/BIOS)
+    // ========================================================================
+    log::info!("Bootloader installation: TODO in Sprint 7");
+
+    log::info!("System configuration complete");
     Ok(())
 }
