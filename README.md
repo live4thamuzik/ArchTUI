@@ -290,14 +290,59 @@ make clean          # Clean build artifacts
 - **Development**: Rust toolchain, bash, standard Unix tools
 - **Installation**: pacman, curl (jq only needed for direct bash script usage, not required for TUI)
 
-## 🔐 Security Features
+## 🔐 Security & Safety Guarantees
+
+ArchInstall TUI is designed with **defense in depth**. Multiple independent safety mechanisms ensure safe operation.
+
+### Core Safety Pillars
+
+| Pillar | Guarantee | Mechanism |
+|--------|-----------|-----------|
+| **Death Pact** | No orphaned processes | `PR_SET_PDEATHSIG` + process groups |
+| **Typed Arguments** | No malformed script calls | `ScriptArgs` trait system |
+| **Refusals** | No accidental destruction | Dry-run mode + environment gating |
+
+### Dry-Run Mode
+
+Preview what would happen without making changes:
+
+```bash
+# See exactly what would be executed
+./archinstall-tui --dry-run install --config my_config.json
+
+# Test tools safely
+./archinstall-tui --dry-run tools disk wipe --device /dev/sda --method zero
+# Output: [DRY RUN] Skipped: wipe_disk.sh
+```
+
+### Process Safety
+
+- **Death Pact**: All child processes terminate if TUI crashes (even SIGKILL)
+- **Process Groups**: Entire process trees are signaled together
+- **Signal Forwarding**: Bash scripts forward signals to grandchildren
+
+### Destructive Operation Protection
+
+- **Environment Gating**: Scripts refuse without `CONFIRM_*` variables
+- **State Machine**: Operations run in validated sequence only
+- **Logged Warnings**: All destructive operations are logged before execution
+
+### Traditional Security
 
 - **Input Sanitization**: Prevents command injection vulnerabilities
 - **Path Validation**: Ensures safe file operations and prevents directory traversal
 - **UUID-based Mounting**: Reliable partition identification
 - **Secure Password Handling**: Proper validation and storage
-- **Error Isolation**: Prevents cascade failures
+- **Error Isolation**: Prevents cascade failures (`set -euo pipefail`)
 - **Permission Checks**: Validates required privileges before operations
+
+### Documentation
+
+For detailed safety information:
+- [Safety Model](docs/SAFETY_MODEL.md) - Unified safety overview
+- [Process Safety](docs/process-safety.md) - Death pact implementation
+- [Destructive Operations](docs/destructive-ops-policy.md) - Data destruction policy
+- [Architecture](docs/architecture.md) - System design
 
 ## 📄 License
 

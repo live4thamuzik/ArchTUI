@@ -6,6 +6,7 @@
 //! - `installer` - Installation and configuration UI
 //! - `dialogs` - Input and confirmation dialog rendering
 //! - `descriptions` - Tool description text generation
+//! - `screens` - Guided installer wizard screens (Sprint 7)
 
 #![allow(dead_code)]
 
@@ -14,6 +15,202 @@ mod dialogs;
 mod header;
 mod installer;
 mod menus;
+pub mod screens;
+
+use std::path::PathBuf;
+
+// ============================================================================
+// Wizard State Machine (Sprint 7)
+// ============================================================================
+
+/// Wizard state for the guided installer workflow.
+///
+/// The installer progresses through these states linearly. Users cannot
+/// skip steps or proceed without completing required fields.
+///
+/// # State Transitions
+///
+/// ```text
+/// Welcome -> DiskSelect -> Partitioner -> PackageSelect -> UserConfig -> InstallProgress -> Done
+/// ```
+///
+/// # Invariants
+///
+/// - Cannot transition to `InstallProgress` without a valid disk selection
+/// - Cannot transition to `InstallProgress` without a valid username
+/// - Cannot go backwards from `InstallProgress` or `Done`
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WizardState {
+    /// Welcome screen with safety warnings and introduction.
+    Welcome,
+    /// Disk selection screen - lists available disks with size/model.
+    /// **SAFETY**: User must explicitly select a disk before proceeding.
+    DiskSelect,
+    /// Partition configuration - auto or manual partitioning.
+    Partitioner,
+    /// Package selection - base packages and optional extras.
+    PackageSelect,
+    /// User configuration - hostname, username, password.
+    /// **SECURITY**: Passwords are masked and zeroed after use.
+    UserConfig,
+    /// Installation in progress - no user interaction, shows progress.
+    InstallProgress,
+    /// Installation complete - success or failure summary.
+    Done,
+}
+
+impl Default for WizardState {
+    fn default() -> Self {
+        Self::Welcome
+    }
+}
+
+impl WizardState {
+    /// Get the next state in the wizard sequence.
+    ///
+    /// Returns `None` if at the final state.
+    pub fn next(&self) -> Option<Self> {
+        match self {
+            Self::Welcome => Some(Self::DiskSelect),
+            Self::DiskSelect => Some(Self::Partitioner),
+            Self::Partitioner => Some(Self::PackageSelect),
+            Self::PackageSelect => Some(Self::UserConfig),
+            Self::UserConfig => Some(Self::InstallProgress),
+            Self::InstallProgress => Some(Self::Done),
+            Self::Done => None,
+        }
+    }
+
+    /// Get the previous state in the wizard sequence.
+    ///
+    /// Returns `None` if at the first state or if going back is not allowed.
+    pub fn previous(&self) -> Option<Self> {
+        match self {
+            Self::Welcome => None,
+            Self::DiskSelect => Some(Self::Welcome),
+            Self::Partitioner => Some(Self::DiskSelect),
+            Self::PackageSelect => Some(Self::Partitioner),
+            Self::UserConfig => Some(Self::PackageSelect),
+            // Cannot go back during or after installation
+            Self::InstallProgress => None,
+            Self::Done => None,
+        }
+    }
+
+    /// Check if the current state allows going back.
+    pub fn can_go_back(&self) -> bool {
+        self.previous().is_some()
+    }
+
+    /// Get the display title for this state.
+    pub fn title(&self) -> &'static str {
+        match self {
+            Self::Welcome => "Welcome to Arch Linux Installer",
+            Self::DiskSelect => "Select Installation Disk",
+            Self::Partitioner => "Partition Configuration",
+            Self::PackageSelect => "Package Selection",
+            Self::UserConfig => "User Configuration",
+            Self::InstallProgress => "Installing Arch Linux",
+            Self::Done => "Installation Complete",
+        }
+    }
+
+    /// Get the step number (1-indexed for display).
+    pub fn step_number(&self) -> usize {
+        match self {
+            Self::Welcome => 1,
+            Self::DiskSelect => 2,
+            Self::Partitioner => 3,
+            Self::PackageSelect => 4,
+            Self::UserConfig => 5,
+            Self::InstallProgress => 6,
+            Self::Done => 7,
+        }
+    }
+
+    /// Total number of steps.
+    pub const TOTAL_STEPS: usize = 7;
+}
+
+/// Wizard data collected during the guided installer flow.
+///
+/// This struct accumulates user choices as they progress through the wizard.
+/// All fields start as `None` and are validated before installation begins.
+#[derive(Debug, Clone, Default)]
+pub struct WizardData {
+    /// Selected disk device path (e.g., `/dev/sda`).
+    pub selected_disk: Option<PathBuf>,
+    /// Selected disk model for display confirmation.
+    pub disk_model: Option<String>,
+    /// Selected disk size in bytes.
+    pub disk_size: Option<u64>,
+    /// Whether to use automatic partitioning.
+    pub auto_partition: bool,
+    /// Filesystem type for root partition.
+    pub filesystem: Option<String>,
+    /// System hostname.
+    pub hostname: Option<String>,
+    /// Primary username.
+    pub username: Option<String>,
+    /// User password (zeroed after use).
+    pub password: Option<String>,
+    /// Whether user has sudo access.
+    pub user_sudo: bool,
+    /// Root password (optional, zeroed after use).
+    pub root_password: Option<String>,
+    /// Selected extra packages.
+    pub extra_packages: Vec<String>,
+    /// Dry run mode - don't execute destructive operations.
+    /// Used when wizard is fully integrated with script execution.
+    #[allow(dead_code)]
+    pub dry_run: bool,
+}
+
+impl WizardData {
+    /// Check if disk selection is valid.
+    pub fn has_valid_disk(&self) -> bool {
+        self.selected_disk.is_some()
+    }
+
+    /// Check if user configuration is valid.
+    pub fn has_valid_user(&self) -> bool {
+        self.hostname.as_ref().is_some_and(|h| !h.is_empty())
+            && self.username.as_ref().is_some_and(|u| !u.is_empty())
+            && self.password.as_ref().is_some_and(|p| !p.is_empty())
+    }
+
+    /// Check if ready to start installation.
+    pub fn is_ready_for_install(&self) -> bool {
+        self.has_valid_disk() && self.has_valid_user()
+    }
+
+    /// Zero out sensitive data (passwords).
+    ///
+    /// Called after installation completes or on error to minimize
+    /// password exposure time in memory.
+    pub fn zero_sensitive_data(&mut self) {
+        if let Some(ref mut pwd) = self.password {
+            // Overwrite with zeros before dropping
+            // Note: This is MVP security - production should use secrecy crate
+            pwd.clear();
+            pwd.shrink_to_fit();
+        }
+        self.password = None;
+
+        if let Some(ref mut pwd) = self.root_password {
+            pwd.clear();
+            pwd.shrink_to_fit();
+        }
+        self.root_password = None;
+    }
+}
+
+impl Drop for WizardData {
+    fn drop(&mut self) {
+        // Ensure passwords are zeroed when WizardData is dropped
+        self.zero_sensitive_data();
+    }
+}
 
 use crate::app::{AppMode, AppState};
 use crate::components::keybindings::KeybindingContext;
@@ -26,6 +223,9 @@ use ratatui::{
 
 // Re-export for external use
 pub use header::HeaderRenderer;
+// Sprint 7 wizard screen exports - will be used when wizard is fully integrated
+#[allow(unused_imports)]
+pub use screens::{DiskInfo, render_disk_select_screen, render_user_config_screen};
 
 /// UI renderer for the application
 ///

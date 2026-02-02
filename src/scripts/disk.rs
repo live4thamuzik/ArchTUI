@@ -89,6 +89,11 @@ impl ScriptArgs for FormatPartitionArgs {
     fn script_name(&self) -> &'static str {
         "format_partition.sh"
     }
+
+    /// Format is DESTRUCTIVE - erases partition contents.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -119,6 +124,11 @@ impl ScriptArgs for CheckDiskHealthArgs {
 
     fn script_name(&self) -> &'static str {
         "check_disk_health.sh"
+    }
+
+    /// Disk health check is READ-ONLY - not destructive.
+    fn is_destructive(&self) -> bool {
+        false
     }
 }
 
@@ -173,6 +183,11 @@ impl ScriptArgs for MountPartitionsArgs {
 
     fn script_name(&self) -> &'static str {
         "mount_partitions.sh"
+    }
+
+    /// Mount operations are not destructive (don't erase data).
+    fn is_destructive(&self) -> bool {
+        false
     }
 }
 
@@ -248,6 +263,11 @@ impl ScriptArgs for MountPartitionArgs {
     fn script_name(&self) -> &'static str {
         "mount_partitions.sh"
     }
+
+    /// Mount operations are not destructive (don't erase data).
+    fn is_destructive(&self) -> bool {
+        false
+    }
 }
 
 // ============================================================================
@@ -278,6 +298,11 @@ impl ScriptArgs for ManualPartitionArgs {
 
     fn script_name(&self) -> &'static str {
         "manual_partition.sh"
+    }
+
+    /// Manual partitioning is DESTRUCTIVE - modifies partition table.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }
 
@@ -464,6 +489,11 @@ impl ScriptArgs for WipeDiskArgs {
     /// Returns "wipe_disk.sh".
     fn script_name(&self) -> &'static str {
         "wipe_disk.sh"
+    }
+
+    /// Wipe is DESTRUCTIVE - erases entire disk.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }
 

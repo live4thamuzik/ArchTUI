@@ -24,6 +24,9 @@ pub mod theme;
 pub mod types;
 pub mod ui;
 
+// Re-export UI wizard types (Sprint 7)
+pub use ui::{WizardData, WizardState};
+
 // Re-export main types for convenience
 pub use config::{ConfigOption, Configuration, Package};
 pub use config_file::InstallationConfig;
@@ -37,7 +40,7 @@ pub use script_manifest::{
 #[cfg(feature = "alpm")]
 pub use package_manager::PackageManager;
 pub use script_runner::{run_script_safe, ScriptOutput};
-pub use script_traits::ScriptArgs;
+pub use script_traits::{disable_dry_run, enable_dry_run, is_dry_run, ScriptArgs};
 pub use scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod, WipeMethodError,
 };
