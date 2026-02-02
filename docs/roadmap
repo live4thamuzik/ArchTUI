@@ -439,9 +439,6 @@ Implement Mirror ranking.
 - Fail gracefully if the network is down (check connectivity first).
 - Allow the user to skip this step in the UI if they want.
 
-Sprint 14: The Golden Image (Building the ISO)
-Objective: Embed your TUI into an actual Arch ISO so you can boot it on real hardware.
-
 Execution Rule:
 Sprint 11 (Encryption) is the hardest engineering challenge left. If you get luksFormat working via a temporary keyfile driven by Rust, you have officially surpassed most hobbyist installers.
 
