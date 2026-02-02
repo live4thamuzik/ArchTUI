@@ -52,6 +52,11 @@ impl ScriptArgs for BootloaderArgs {
     fn script_name(&self) -> &'static str {
         "install_bootloader.sh"
     }
+
+    /// Bootloader installation is DESTRUCTIVE - modifies boot sector.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -76,6 +81,11 @@ impl ScriptArgs for FstabArgs {
 
     fn script_name(&self) -> &'static str {
         "generate_fstab.sh"
+    }
+
+    /// Fstab generation is DESTRUCTIVE - writes to /etc/fstab.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }
 
@@ -108,6 +118,11 @@ impl ScriptArgs for ChrootArgs {
     fn script_name(&self) -> &'static str {
         "chroot_system.sh"
     }
+
+    /// Chroot may modify the target system - consider destructive.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -136,6 +151,11 @@ impl ScriptArgs for SystemInfoArgs {
 
     fn script_name(&self) -> &'static str {
         "system_info.sh"
+    }
+
+    /// System info is READ-ONLY - not destructive.
+    fn is_destructive(&self) -> bool {
+        false
     }
 }
 
@@ -168,5 +188,10 @@ impl ScriptArgs for ServicesArgs {
 
     fn script_name(&self) -> &'static str {
         "manage_services.sh"
+    }
+
+    /// Service management is DESTRUCTIVE - modifies system state.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }

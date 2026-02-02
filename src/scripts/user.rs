@@ -52,6 +52,11 @@ impl ScriptArgs for AddUserArgs {
     fn script_name(&self) -> &'static str {
         "add_user.sh"
     }
+
+    /// User creation is DESTRUCTIVE - modifies /etc/passwd, etc.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -76,6 +81,11 @@ impl ScriptArgs for ResetPasswordArgs {
 
     fn script_name(&self) -> &'static str {
         "reset_password.sh"
+    }
+
+    /// Password reset is DESTRUCTIVE - modifies /etc/shadow.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }
 
@@ -114,6 +124,11 @@ impl ScriptArgs for GroupsArgs {
 
     fn script_name(&self) -> &'static str {
         "manage_groups.sh"
+    }
+
+    /// Group management is DESTRUCTIVE - modifies /etc/group.
+    fn is_destructive(&self) -> bool {
+        true
     }
 }
 
@@ -165,6 +180,11 @@ impl ScriptArgs for SshArgs {
     fn script_name(&self) -> &'static str {
         "configure_ssh.sh"
     }
+
+    /// SSH configuration is DESTRUCTIVE - modifies sshd_config.
+    fn is_destructive(&self) -> bool {
+        true
+    }
 }
 
 // ============================================================================
@@ -189,5 +209,10 @@ impl ScriptArgs for SecurityAuditArgs {
 
     fn script_name(&self) -> &'static str {
         "security_audit.sh"
+    }
+
+    /// Security audit is READ-ONLY - not destructive.
+    fn is_destructive(&self) -> bool {
+        false
     }
 }

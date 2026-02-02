@@ -6,14 +6,25 @@
 //! - Process group isolation (death pact compliance)
 //! - Proper PID registration for cleanup
 //! - Type-safe argument passing via `ScriptArgs` trait
+//! - Dry-run mode support (Sprint 8)
 //!
 //! # Architecture Rule
 //!
 //! `run_script_safe` is the execution gatekeeper. Any attempt to use
 //! `Command::new("bash")` directly for tool scripts violates the architecture.
+//!
+//! # Dry-Run Mode (Sprint 8)
+//!
+//! When `is_dry_run()` returns `true` AND the script is destructive:
+//! - The script is NOT executed
+//! - A log message shows what WOULD have been executed
+//! - Returns success with empty output
+//!
+//! Non-destructive scripts (like `lsblk`) still execute so the dry-run
+//! produces realistic output for validation.
 
 use crate::process_guard::{ChildRegistry, CommandProcessGroup};
-use crate::script_traits::ScriptArgs;
+use crate::script_traits::{is_dry_run, ScriptArgs};
 use anyhow::{Context, Result};
 use log::info;
 use std::process::{Command, Stdio};
@@ -28,6 +39,16 @@ use std::process::{Command, Stdio};
 /// - Spawns the script in a new process group via `.in_new_process_group()`
 /// - Registers the child PID with `ChildRegistry::global()`
 /// - Ensures cleanup if the parent process exits
+///
+/// # Dry-Run Mode
+///
+/// If `is_dry_run()` is `true` AND `args.is_destructive()` is `true`:
+/// - The script is NOT executed
+/// - A log message shows the intended command: `[DRY RUN] Would execute: bash scripts/tools/wipe_disk.sh --disk /dev/sda`
+/// - Returns `Ok(ScriptOutput)` with `dry_run: true`
+///
+/// Non-destructive scripts (e.g., `lsblk`, `system_info`) still execute
+/// so disk lists and system checks work during dry-run.
 ///
 /// # Arguments
 ///
@@ -63,6 +84,41 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
         "run_script_safe: {} args={:?} env={:?}",
         script_path, cli_args, env_vars
     );
+
+    // ========================================================================
+    // DRY-RUN CHECK (Sprint 8)
+    // Skip destructive operations when dry-run is enabled
+    // ========================================================================
+    if is_dry_run() && args.is_destructive() {
+        // Format the command that WOULD have been executed
+        let env_display: Vec<String> = env_vars
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect();
+        let env_prefix = if env_display.is_empty() {
+            String::new()
+        } else {
+            format!("{} ", env_display.join(" "))
+        };
+
+        let would_execute = format!(
+            "{}bash {} {}",
+            env_prefix,
+            script_path,
+            cli_args.join(" ")
+        );
+
+        info!("[DRY RUN] Would execute: {}", would_execute);
+
+        // Return success without executing
+        return Ok(ScriptOutput {
+            stdout: format!("[DRY RUN] Skipped: {}\n", script_name),
+            stderr: String::new(),
+            exit_code: Some(0),
+            success: true,
+            dry_run: true,
+        });
+    }
 
     // Build command with process group isolation
     let mut cmd = Command::new("bash");
@@ -114,6 +170,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
             stderr,
             exit_code,
             success: true,
+            dry_run: false,
         })
     } else {
         let code = exit_code.unwrap_or(-1);
@@ -123,6 +180,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
             stderr,
             exit_code,
             success: false,
+            dry_run: false,
         })
     }
 }
@@ -138,6 +196,10 @@ pub struct ScriptOutput {
     pub exit_code: Option<i32>,
     /// Whether the script exited successfully (exit code 0).
     pub success: bool,
+    /// Whether this was a dry-run (script not actually executed).
+    /// Callers can check this to know if the output is real or simulated.
+    #[allow(dead_code)]
+    pub dry_run: bool,
 }
 
 impl ScriptOutput {

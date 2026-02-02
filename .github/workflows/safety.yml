@@ -1,0 +1,195 @@
+name: Safety Linter
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  safety-lint:
+    runs-on: ubuntu-latest
+    name: Safety Invariant Checks
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check for Death Pact violations (Rust)
+      run: |
+        echo "=== Checking for Command::new without in_new_process_group ==="
+
+        # Find Command::new calls that don't use in_new_process_group
+        # Exclude test files and the process_guard.rs itself
+        violations=$(grep -rn "Command::new" src/ \
+          --include="*.rs" \
+          | grep -v "process_guard.rs" \
+          | grep -v "#\[cfg(test)\]" \
+          | grep -v "mod tests" \
+          | grep -v "// test" \
+          || true)
+
+        if [ -n "$violations" ]; then
+          echo "Found Command::new calls. Verifying they use in_new_process_group..."
+
+          # Check each file with Command::new for in_new_process_group
+          files=$(echo "$violations" | cut -d: -f1 | sort -u)
+          failed=0
+
+          for file in $files; do
+            # Check if the file also contains in_new_process_group
+            if ! grep -q "in_new_process_group" "$file"; then
+              echo "ERROR: $file uses Command::new without in_new_process_group"
+              failed=1
+            fi
+          done
+
+          if [ $failed -eq 1 ]; then
+            echo ""
+            echo "SAFETY VIOLATION: All Command::new calls must use .in_new_process_group()"
+            echo "This ensures child processes are terminated if the parent dies."
+            exit 1
+          fi
+        fi
+
+        echo "OK: All Command::new calls properly guarded"
+
+    - name: Check for interactive read in bash (forbidden)
+      run: |
+        echo "=== Checking for forbidden 'read' commands in scripts ==="
+
+        # Find 'read' commands that aren't reading from files or heredocs
+        # Allowed: read -r var < file, read line < <(command)
+        # Forbidden: read -p, read without redirection
+        violations=$(grep -rn "^\s*read\s" scripts/ \
+          --include="*.sh" \
+          | grep -v "read.*<" \
+          | grep -v "# shellcheck" \
+          | grep -v "^#" \
+          || true)
+
+        if [ -n "$violations" ]; then
+          echo "ERROR: Found potentially interactive 'read' commands:"
+          echo "$violations"
+          echo ""
+          echo "SAFETY VIOLATION: Scripts must not prompt for user input."
+          echo "All input must come from environment variables or stdin redirection."
+          exit 1
+        fi
+
+        echo "OK: No forbidden interactive read commands found"
+
+    - name: Check for bare 'source' in bash (must use source_or_die)
+      run: |
+        echo "=== Checking for bare 'source' commands ==="
+
+        # source_or_die is the safe pattern that fails if source fails
+        # Bare 'source' can silently fail
+        violations=$(grep -rn "^\s*source\s" scripts/ \
+          --include="*.sh" \
+          | grep -v "source_or_die" \
+          | grep -v "# source" \
+          | grep -v "^#" \
+          || true)
+
+        if [ -n "$violations" ]; then
+          echo "WARNING: Found bare 'source' commands (prefer source_or_die):"
+          echo "$violations"
+          echo ""
+          echo "Note: source_or_die ensures sourcing failures are caught."
+        fi
+
+        echo "OK: Source check complete"
+
+    - name: Check for set -euo pipefail in scripts
+      run: |
+        echo "=== Checking for 'set -euo pipefail' in scripts ==="
+
+        failed=0
+        for script in scripts/**/*.sh scripts/*.sh; do
+          if [ -f "$script" ]; then
+            # Check first 10 lines for set -euo pipefail or equivalent
+            if ! head -20 "$script" | grep -qE "(set -euo pipefail|set -e.*-u.*-o pipefail)"; then
+              echo "WARNING: $script may be missing 'set -euo pipefail'"
+              # Don't fail, just warn - some scripts may have valid reasons
+            fi
+          fi
+        done
+
+        echo "OK: Script safety check complete"
+
+    - name: Check for signal handlers in tool scripts
+      run: |
+        echo "=== Checking for signal handlers in tool scripts ==="
+
+        for script in scripts/tools/*.sh; do
+          if [ -f "$script" ]; then
+            # Tool scripts should have trap for TERM/INT
+            if ! grep -q "trap.*TERM\|trap.*INT\|trap.*cleanup\|trap.*exit" "$script"; then
+              echo "WARNING: $script may be missing signal handler (trap)"
+            fi
+          fi
+        done
+
+        echo "OK: Signal handler check complete"
+
+    - name: Check is_destructive trait implementations
+      run: |
+        echo "=== Checking ScriptArgs is_destructive implementations ==="
+
+        # Find all ScriptArgs implementations
+        impls=$(grep -rn "impl ScriptArgs for" src/scripts/ --include="*.rs" || true)
+
+        if [ -n "$impls" ]; then
+          echo "Found ScriptArgs implementations:"
+          echo "$impls"
+
+          # Verify each impl has is_destructive
+          files=$(echo "$impls" | cut -d: -f1 | sort -u)
+          for file in $files; do
+            count_impls=$(grep -c "impl ScriptArgs for" "$file" || echo "0")
+            count_destructive=$(grep -c "fn is_destructive" "$file" || echo "0")
+
+            if [ "$count_impls" != "$count_destructive" ]; then
+              echo "WARNING: $file has $count_impls ScriptArgs impls but $count_destructive is_destructive methods"
+              echo "All ScriptArgs implementations should explicitly define is_destructive()"
+            fi
+          done
+        fi
+
+        echo "OK: is_destructive check complete"
+
+    - name: Verify dry-run flag exists
+      run: |
+        echo "=== Verifying dry-run support ==="
+
+        # Check cli.rs for dry_run flag
+        if ! grep -q "dry_run.*bool" src/cli.rs; then
+          echo "ERROR: cli.rs missing dry_run flag"
+          exit 1
+        fi
+
+        # Check script_traits.rs for dry-run functions
+        if ! grep -q "fn is_dry_run" src/script_traits.rs; then
+          echo "ERROR: script_traits.rs missing is_dry_run function"
+          exit 1
+        fi
+
+        echo "OK: Dry-run support verified"
+
+    - name: Summary
+      run: |
+        echo ""
+        echo "=========================================="
+        echo "       SAFETY LINTER COMPLETE            "
+        echo "=========================================="
+        echo ""
+        echo "Checks performed:"
+        echo "  - Death Pact: Command::new uses in_new_process_group"
+        echo "  - No Interactive Input: Scripts don't use bare 'read'"
+        echo "  - Safe Sourcing: Prefer source_or_die"
+        echo "  - Error Handling: set -euo pipefail"
+        echo "  - Signal Handlers: Tool scripts have trap"
+        echo "  - Typed Arguments: ScriptArgs has is_destructive"
+        echo "  - Dry-Run: CLI flag and runtime check exist"
+        echo ""
+        echo "For details, see: docs/SAFETY_MODEL.md"
