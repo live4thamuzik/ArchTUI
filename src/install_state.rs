@@ -36,6 +36,9 @@
 //! (Any stage can transition to Failed)
 //! ```
 
+// Library API - these types are exported for external use but not yet consumed by the binary
+#![allow(dead_code)]
+
 use std::fmt;
 use thiserror::Error;
 
