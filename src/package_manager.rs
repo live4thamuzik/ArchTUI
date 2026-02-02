@@ -15,6 +15,9 @@
 //! - `log_cb`: Routes ALPM log messages to `log::*` macros
 //! - `install_packages`: Runs a sync transaction on target packages
 
+// Library API - will be used for Sprint 5 base system installation
+#![allow(dead_code)]
+
 use alpm::{Alpm, LogLevel, SigLevel, TransFlag};
 use anyhow::{Context, Result};
 use std::path::Path;
