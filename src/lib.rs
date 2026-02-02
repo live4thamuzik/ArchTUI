@@ -15,6 +15,7 @@ pub mod package_manager;
 pub mod package_utils;
 pub mod process_guard;
 pub mod script_manifest;
+pub mod script_runner;
 pub mod script_traits;
 pub mod scripts;
 pub mod scrolling;
@@ -33,8 +34,11 @@ pub use script_manifest::{
     ValidatedExecution,
 };
 pub use package_manager::PackageManager;
+pub use script_runner::{run_script_safe, ScriptOutput};
 pub use script_traits::ScriptArgs;
-pub use scripts::disk::{WipeDiskArgs, WipeMethod, WipeMethodError};
+pub use scripts::disk::{
+    FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod, WipeMethodError,
+};
 pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,

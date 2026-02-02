@@ -1,10 +1,26 @@
 //! Installer module
 //!
 //! Handles the execution of the bash installation script and communication with the TUI.
+//!
+//! # Type-Safe Disk Operations
+//!
+//! The `prepare_disks` function orchestrates disk operations using typed argument structs:
+//! - `WipeDiskArgs` - Securely wipe the target disk
+//! - `FormatPartitionArgs` - Format partitions with type-safe filesystem enum
+//! - `MountPartitionArgs` - Mount partitions in correct order (root first, then boot)
+//!
+//! All operations go through `run_script_safe` which enforces process group isolation.
 
 use crate::app::AppState;
 use crate::config::Configuration;
+use crate::script_runner::run_script_safe;
+use crate::scripts::disk::{
+    FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod,
+};
+use crate::types::Filesystem;
+use anyhow::{Context, Result};
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -178,4 +194,176 @@ impl Installer {
 
         Ok(())
     }
+}
+
+// ============================================================================
+// Type-Safe Disk Operations (Sprint 4)
+// ============================================================================
+
+/// Disk layout configuration for installation.
+///
+/// Defines the partition structure Rust controls before Bash executes.
+/// This ensures the installer knows the exact layout before any destructive operations.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Library API - will be used when installer is integrated
+pub struct DiskLayout {
+    /// Target disk device (e.g., `/dev/sda` or `/dev/nvme0n1`).
+    pub disk: PathBuf,
+    /// EFI/Boot partition device (e.g., `/dev/sda1`).
+    pub boot_partition: PathBuf,
+    /// Root partition device (e.g., `/dev/sda2`).
+    pub root_partition: PathBuf,
+    /// Filesystem for root partition.
+    pub root_filesystem: Filesystem,
+    /// Optional swap partition device.
+    pub swap_partition: Option<PathBuf>,
+    /// Target root mountpoint (typically `/mnt`).
+    pub target_root: PathBuf,
+}
+
+impl Default for DiskLayout {
+    fn default() -> Self {
+        Self {
+            disk: PathBuf::from("/dev/sda"),
+            boot_partition: PathBuf::from("/dev/sda1"),
+            root_partition: PathBuf::from("/dev/sda2"),
+            root_filesystem: Filesystem::Ext4,
+            swap_partition: None,
+            target_root: PathBuf::from("/mnt"),
+        }
+    }
+}
+
+#[allow(dead_code)] // Library API - will be called from main installer flow
+/// Prepare disks for installation using type-safe operations.
+///
+/// This function orchestrates the disk preparation sequence:
+/// 1. Wipe the target disk (destructive - requires confirmation)
+/// 2. Format the EFI/boot partition as FAT32
+/// 3. Format the root partition with the specified filesystem
+/// 4. Mount root partition first (to /mnt)
+/// 5. Mount boot partition second (to /mnt/boot)
+///
+/// # Mount Order
+///
+/// **CRITICAL**: Root must be mounted BEFORE boot. If boot is mounted first,
+/// the mount point `/mnt/boot` won't exist and the operation will fail.
+///
+/// # Arguments
+///
+/// * `layout` - The disk layout configuration
+/// * `wipe` - Whether to wipe the disk (requires confirmation)
+/// * `confirm_wipe` - Explicit confirmation for disk wipe operation
+///
+/// # Returns
+///
+/// - `Ok(())` - All operations completed successfully
+/// - `Err` - Any operation failed (fail fast)
+///
+/// # Example
+///
+/// ```ignore
+/// use archinstall_tui::installer::{DiskLayout, prepare_disks};
+/// use archinstall_tui::types::Filesystem;
+/// use std::path::PathBuf;
+///
+/// let layout = DiskLayout {
+///     disk: PathBuf::from("/dev/sda"),
+///     boot_partition: PathBuf::from("/dev/sda1"),
+///     root_partition: PathBuf::from("/dev/sda2"),
+///     root_filesystem: Filesystem::Ext4,
+///     swap_partition: None,
+///     target_root: PathBuf::from("/mnt"),
+/// };
+///
+/// prepare_disks(&layout, true, true)?;
+/// ```
+pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Result<()> {
+    log::info!("Starting disk preparation for {:?}", layout.disk);
+
+    // Step 1: Optionally wipe the disk
+    if wipe {
+        log::info!("Wiping disk: {:?}", layout.disk);
+        let wipe_args = WipeDiskArgs {
+            device: layout.disk.clone(),
+            method: WipeMethod::Quick,
+            confirm: confirm_wipe,
+        };
+        let output = run_script_safe(&wipe_args)
+            .context("Failed to execute disk wipe")?;
+        output.ensure_success("Disk wipe")?;
+        log::info!("Disk wipe completed");
+    }
+
+    // Step 2: Format EFI/boot partition as FAT32
+    log::info!("Formatting boot partition: {:?} as FAT32", layout.boot_partition);
+    let format_boot = FormatPartitionArgs {
+        device: layout.boot_partition.clone(),
+        filesystem: Filesystem::Fat32,
+        label: Some("EFI".to_string()),
+        force: false,
+    };
+    let output = run_script_safe(&format_boot)
+        .context("Failed to execute boot partition format")?;
+    output.ensure_success("Boot partition format")?;
+    log::info!("Boot partition formatted");
+
+    // Step 3: Format root partition
+    log::info!(
+        "Formatting root partition: {:?} as {:?}",
+        layout.root_partition,
+        layout.root_filesystem
+    );
+    let format_root = FormatPartitionArgs {
+        device: layout.root_partition.clone(),
+        filesystem: layout.root_filesystem,
+        label: Some("archroot".to_string()),
+        force: false,
+    };
+    let output = run_script_safe(&format_root)
+        .context("Failed to execute root partition format")?;
+    output.ensure_success("Root partition format")?;
+    log::info!("Root partition formatted");
+
+    // Step 4: Mount root partition FIRST
+    // CRITICAL: Root must be mounted before boot so /mnt/boot exists
+    log::info!(
+        "Mounting root partition: {:?} -> {:?}",
+        layout.root_partition,
+        layout.target_root
+    );
+    let mount_root = MountPartitionArgs {
+        device: layout.root_partition.clone(),
+        mountpoint: layout.target_root.clone(),
+        options: None,
+    };
+    let output = run_script_safe(&mount_root)
+        .context("Failed to execute root partition mount")?;
+    output.ensure_success("Root partition mount")?;
+    log::info!("Root partition mounted");
+
+    // Step 5: Create boot mount point and mount boot partition
+    let boot_mountpoint = layout.target_root.join("boot");
+    log::info!(
+        "Mounting boot partition: {:?} -> {:?}",
+        layout.boot_partition,
+        boot_mountpoint
+    );
+
+    // Ensure boot directory exists
+    std::fs::create_dir_all(&boot_mountpoint)
+        .with_context(|| format!("Failed to create boot mountpoint: {:?}", boot_mountpoint))?;
+
+    let mount_boot = MountPartitionArgs {
+        device: layout.boot_partition.clone(),
+        mountpoint: boot_mountpoint,
+        options: None,
+    };
+    let output = run_script_safe(&mount_boot)
+        .context("Failed to execute boot partition mount")?;
+    output.ensure_success("Boot partition mount")?;
+    log::info!("Boot partition mounted");
+
+    log::info!("Disk preparation complete");
+    Ok(())
 }

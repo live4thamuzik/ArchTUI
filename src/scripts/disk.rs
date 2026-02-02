@@ -3,8 +3,9 @@
 //! This module provides typed argument structs for disk-related scripts:
 //! - `WipeDiskArgs` for `wipe_disk.sh`
 //! - `FormatPartitionArgs` for `format_partition.sh`
+//! - `MountPartitionArgs` for simple mount operations
+//! - `MountPartitionsArgs` for advanced mount/umount operations
 //! - `CheckDiskHealthArgs` for `check_disk_health.sh`
-//! - `MountPartitionsArgs` for `mount_partitions.sh`
 //! - `ManualPartitionArgs` for `manual_partition.sh`
 //!
 //! # Why This Exists
@@ -12,16 +13,35 @@
 //! The bash script `wipe_disk.sh` expects `--disk`, but early Rust code used `--device`.
 //! This caused runtime failures. By using typed structs, the mapping is explicit and
 //! verified at compile time.
+//!
+//! # Filesystem Enum
+//!
+//! `FormatPartitionArgs` uses the `Filesystem` enum from `types.rs` to prevent
+//! string typos like "etx4" instead of "ext4".
 
 use std::path::PathBuf;
 
 use crate::script_traits::ScriptArgs;
+use crate::types::Filesystem;
 
 // ============================================================================
 // Format Partition
 // ============================================================================
 
 /// Type-safe arguments for `scripts/tools/format_partition.sh`.
+///
+/// # Filesystem Enum
+///
+/// Uses the `Filesystem` enum to prevent typos. The enum maps to the exact
+/// strings expected by the bash script:
+///
+/// | Enum Variant | String   |
+/// |--------------|----------|
+/// | `Ext4`       | `"ext4"` |
+/// | `Xfs`        | `"xfs"`  |
+/// | `Btrfs`      | `"btrfs"`|
+/// | `F2fs`       | `"f2fs"` |
+/// | `Fat32`      | `"fat32"`|
 ///
 /// # Field to Flag Mapping
 ///
@@ -35,8 +55,8 @@ use crate::script_traits::ScriptArgs;
 pub struct FormatPartitionArgs {
     /// Partition device path (e.g., `/dev/sda1`).
     pub device: PathBuf,
-    /// Filesystem type (e.g., `ext4`, `btrfs`, `vfat`).
-    pub filesystem: String,
+    /// Filesystem type - uses strict enum to prevent typos.
+    pub filesystem: Filesystem,
     /// Optional filesystem label.
     pub label: Option<String>,
     /// Force formatting even if mounted.
@@ -49,7 +69,8 @@ impl ScriptArgs for FormatPartitionArgs {
             "--device".to_string(),
             self.device.display().to_string(),
             "--filesystem".to_string(),
-            self.filesystem.clone(),
+            // Enum maps to lowercase string via strum Display
+            self.filesystem.to_string(),
         ];
         if let Some(ref label) = self.label {
             args.push("--label".to_string());
@@ -142,6 +163,80 @@ impl ScriptArgs for MountPartitionsArgs {
         if let Some(ref fs) = self.filesystem {
             args.push("--filesystem".to_string());
             args.push(fs.clone());
+        }
+        args
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+
+    fn script_name(&self) -> &'static str {
+        "mount_partitions.sh"
+    }
+}
+
+// ============================================================================
+// Mount Partition (Simple)
+// ============================================================================
+
+/// Simplified type-safe arguments for mounting a single partition.
+///
+/// This is a convenience wrapper for common mount operations during installation.
+/// For advanced operations (umount, list, info), use `MountPartitionsArgs`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field   | CLI Flag       | Required |
+/// |--------------|----------------|----------|
+/// | `device`     | `--device`     | Yes      |
+/// | `mountpoint` | `--mountpoint` | Yes      |
+/// | `options`    | `--options`    | No       |
+///
+/// # Example
+///
+/// ```
+/// use std::path::PathBuf;
+/// use archinstall_tui::scripts::disk::MountPartitionArgs;
+/// use archinstall_tui::script_traits::ScriptArgs;
+///
+/// // Mount root partition
+/// let args = MountPartitionArgs {
+///     device: PathBuf::from("/dev/sda2"),
+///     mountpoint: PathBuf::from("/mnt"),
+///     options: None,
+/// };
+///
+/// assert_eq!(args.to_cli_args(), vec![
+///     "--action", "mount",
+///     "--device", "/dev/sda2",
+///     "--mountpoint", "/mnt",
+/// ]);
+/// ```
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Used by installer::prepare_disks
+pub struct MountPartitionArgs {
+    /// Partition device path (e.g., `/dev/sda2`).
+    pub device: PathBuf,
+    /// Target mountpoint (e.g., `/mnt` or `/mnt/boot`).
+    pub mountpoint: PathBuf,
+    /// Optional mount options (e.g., `noatime,compress=zstd`).
+    pub options: Option<String>,
+}
+
+impl ScriptArgs for MountPartitionArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "--action".to_string(),
+            "mount".to_string(),
+            "--device".to_string(),
+            self.device.display().to_string(),
+            "--mountpoint".to_string(),
+            self.mountpoint.display().to_string(),
+        ];
+        if let Some(ref opts) = self.options {
+            args.push("--options".to_string());
+            args.push(opts.clone());
         }
         args
     }
@@ -470,5 +565,122 @@ mod tests {
 
         let cli_args = args.to_cli_args();
         assert_eq!(cli_args[1], "/dev/nvme0n1");
+    }
+
+    // ========================================================================
+    // FormatPartitionArgs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_format_partition_args_ext4() {
+        let args = FormatPartitionArgs {
+            device: PathBuf::from("/dev/sda2"),
+            filesystem: Filesystem::Ext4,
+            label: None,
+            force: false,
+        };
+
+        let cli_args = args.to_cli_args();
+        assert_eq!(cli_args[0], "--device");
+        assert_eq!(cli_args[1], "/dev/sda2");
+        assert_eq!(cli_args[2], "--filesystem");
+        assert_eq!(cli_args[3], "ext4", "Filesystem::Ext4 must map to 'ext4'");
+    }
+
+    #[test]
+    fn test_format_partition_args_fat32_for_efi() {
+        let args = FormatPartitionArgs {
+            device: PathBuf::from("/dev/sda1"),
+            filesystem: Filesystem::Fat32,
+            label: Some("EFI".to_string()),
+            force: false,
+        };
+
+        let cli_args = args.to_cli_args();
+        assert_eq!(cli_args[3], "fat32", "Filesystem::Fat32 must map to 'fat32'");
+        assert_eq!(cli_args[4], "--label");
+        assert_eq!(cli_args[5], "EFI");
+    }
+
+    #[test]
+    fn test_format_partition_args_btrfs_with_force() {
+        let args = FormatPartitionArgs {
+            device: PathBuf::from("/dev/sda2"),
+            filesystem: Filesystem::Btrfs,
+            label: Some("archroot".to_string()),
+            force: true,
+        };
+
+        let cli_args = args.to_cli_args();
+        assert_eq!(cli_args[3], "btrfs");
+        assert!(cli_args.contains(&"--force".to_string()));
+        assert!(cli_args.contains(&"--label".to_string()));
+    }
+
+    #[test]
+    fn test_format_partition_script_name() {
+        let args = FormatPartitionArgs {
+            device: PathBuf::from("/dev/sda1"),
+            filesystem: Filesystem::Ext4,
+            label: None,
+            force: false,
+        };
+        assert_eq!(args.script_name(), "format_partition.sh");
+    }
+
+    // ========================================================================
+    // MountPartitionArgs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_mount_partition_args_root() {
+        let args = MountPartitionArgs {
+            device: PathBuf::from("/dev/sda2"),
+            mountpoint: PathBuf::from("/mnt"),
+            options: None,
+        };
+
+        let cli_args = args.to_cli_args();
+        assert_eq!(cli_args[0], "--action");
+        assert_eq!(cli_args[1], "mount");
+        assert_eq!(cli_args[2], "--device");
+        assert_eq!(cli_args[3], "/dev/sda2");
+        assert_eq!(cli_args[4], "--mountpoint");
+        assert_eq!(cli_args[5], "/mnt");
+    }
+
+    #[test]
+    fn test_mount_partition_args_boot() {
+        let args = MountPartitionArgs {
+            device: PathBuf::from("/dev/sda1"),
+            mountpoint: PathBuf::from("/mnt/boot"),
+            options: None,
+        };
+
+        let cli_args = args.to_cli_args();
+        assert_eq!(cli_args[5], "/mnt/boot");
+    }
+
+    #[test]
+    fn test_mount_partition_args_with_options() {
+        let args = MountPartitionArgs {
+            device: PathBuf::from("/dev/sda2"),
+            mountpoint: PathBuf::from("/mnt"),
+            options: Some("noatime,compress=zstd".to_string()),
+        };
+
+        let cli_args = args.to_cli_args();
+        assert!(cli_args.contains(&"--options".to_string()));
+        assert!(cli_args.contains(&"noatime,compress=zstd".to_string()));
+    }
+
+    #[test]
+    fn test_mount_partition_script_name() {
+        let args = MountPartitionArgs {
+            device: PathBuf::from("/dev/sda2"),
+            mountpoint: PathBuf::from("/mnt"),
+            options: None,
+        };
+        assert_eq!(args.script_name(), "mount_partitions.sh");
     }
 }

@@ -34,6 +34,9 @@ pub enum Filesystem {
     Btrfs,
     #[strum(serialize = "f2fs")]
     F2fs,
+    /// FAT32 filesystem for EFI System Partition
+    #[strum(serialize = "fat32")]
+    Fat32,
 }
 
 /// Disk partitioning strategy
