@@ -255,9 +255,76 @@ archinstall-tui/
     └── lint_rules.md        # CI enforcement rules
 ```
 
-## 6. Why This Is Safer Than Traditional Installers
+## 6. Package Management: ALPM vs Bash
 
-### 6.1 vs. Shell-Script Installers
+The installer uses a hybrid approach: ALPM (Arch Linux Package Manager) bindings for
+package operations, and Bash scripts for disk/system operations.
+
+### 6.1 Why ALPM for Packages?
+
+Direct ALPM bindings (via `alpm-rs`) provide:
+
+| Benefit | Explanation |
+|---------|-------------|
+| **Type Safety** | Package names, versions, and dependencies are typed |
+| **Progress Callbacks** | Native `log_cb` provides real-time install progress |
+| **Error Handling** | ALPM errors map to Rust Result types |
+| **No Parsing** | No parsing pacman stdout for progress percentage |
+
+```rust
+// Example: Type-safe package installation
+let pkg = db.pkg("base")?;  // Returns Result, not string
+alpm.trans_add_pkg(pkg)?;   // Compile-time checked
+```
+
+### 6.2 Why Bash for Disk Operations?
+
+Disk operations use Bash because:
+
+| Reason | Explanation |
+|--------|-------------|
+| **CLI-only tools** | `cryptsetup`, `sgdisk`, `mkfs.*` have no stable Rust bindings |
+| **Auditability** | Security reviewers can inspect shell scripts directly |
+| **Environment gating** | `CONFIRM_*` variables are shell-native patterns |
+| **Existing ecosystem** | Leverage battle-tested Arch Wiki commands |
+
+### 6.3 The Hybrid Approach
+
+| Operation | Implementation | Reason |
+|-----------|----------------|--------|
+| Package install | ALPM (Rust) | Type-safe, progress callbacks, no stdout parsing |
+| Package queries | ALPM (Rust) | Structured data, not string parsing |
+| Disk partitioning | Bash script | sgdisk CLI only, auditable |
+| Disk formatting | Bash script | mkfs.* CLI only, auditable |
+| LUKS encryption | Bash script | cryptsetup CLI only, security-sensitive |
+| Bootloader install | Bash script | grub-install CLI, arch-chroot needed |
+
+### 6.4 Security Boundary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    RUST (Type-Safe)                         │
+│  ┌─────────────────┐  ┌─────────────────────────────────┐  │
+│  │  ALPM Bindings  │  │  Process Guard + Death Pact     │  │
+│  │  - pkg install  │  │  - Spawns bash in process group │  │
+│  │  - pkg query    │  │  - Sets CONFIRM_* env vars      │  │
+│  │  - progress cb  │  │  - Kills on parent death        │  │
+│  └─────────────────┘  └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    BASH (Execution Only)                    │
+│  - Refuses without CONFIRM_* variables                      │
+│  - Executes CLI tools (sgdisk, cryptsetup, mkfs)           │
+│  - Reports exit codes to Rust                               │
+│  - No decision making, no prompts                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 7. Why This Is Safer Than Traditional Installers
+
+### 7.1 vs. Shell-Script Installers
 
 | Traditional | ArchInstall TUI |
 |-------------|-----------------|
@@ -267,7 +334,7 @@ archinstall-tui/
 | Orphaned processes possible | Death pact prevents orphans |
 | Implicit dependencies | Explicit manifest contracts |
 
-### 6.2 vs. Python-Based Installers
+### 7.2 vs. Python-Based Installers
 
 | Python Installer | ArchInstall TUI |
 |------------------|-----------------|
@@ -276,7 +343,7 @@ archinstall-tui/
 | Exception handling varies | Explicit Result types |
 | Process management complex | Built-in death pact |
 
-### 6.3 Concrete Safety Guarantees
+### 7.3 Concrete Safety Guarantees
 
 1. **No orphaned processes**: PR_SET_PDEATHSIG + process groups ensure all children die with parent
 2. **No silent failures**: `set -euo pipefail` in all scripts, errors propagate to Rust
@@ -284,21 +351,21 @@ archinstall-tui/
 4. **No unauthorized destruction**: Environment confirmation required before disk operations
 5. **No implicit state**: All state owned by `InstallerContext`, not global variables
 
-## 7. Testing Strategy
+## 8. Testing Strategy
 
-### 7.1 Unit Tests
+### 8.1 Unit Tests
 
 - State machine transitions (`src/install_state.rs`)
 - Manifest validation (`src/script_manifest.rs`)
 - Configuration parsing (`src/config_file.rs`)
 
-### 7.2 Integration Tests
+### 8.2 Integration Tests
 
 - Process death pact (`tests/death_pact_forced_crash.rs`)
 - Script execution contracts
 - Full installation flow (QEMU)
 
-### 7.3 CI Enforcement
+### 8.3 CI Enforcement
 
 The CI system enforces invariants via `ci/lint_rules.md`:
 
@@ -307,7 +374,7 @@ The CI system enforces invariants via `ci/lint_rules.md`:
 - No `unwrap()` without comment in Rust
 - No `Command::new` without `.in_new_process_group()`
 
-## 8. Contributing
+## 9. Contributing
 
 When contributing:
 

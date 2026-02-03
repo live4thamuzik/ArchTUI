@@ -339,6 +339,12 @@ impl KeybindingContext {
                 KeyAction::Confirm,
                 KeyAction::Cancel,
             ],
+            AppMode::DryRunSummary => vec![
+                KeyAction::ScrollUp,
+                KeyAction::ScrollDown,
+                KeyAction::Back,
+                KeyAction::Dismiss,
+            ],
         };
 
         // Combine Up/Down into single item for cleaner display

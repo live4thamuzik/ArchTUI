@@ -370,26 +370,106 @@ fn create_config_item(
     ListItem::new(text).style(style)
 }
 
-/// Render start button
+/// Render action buttons (Test Config + Start Install) - Sprint 8
 fn render_start_button(f: &mut Frame, area: Rect, state: &AppState) {
-    let is_selected = state.config_scroll.selected_index == state.config.options.len();
-    let button_text = if is_selected {
-        "  START INSTALLATION (Press Enter)  "
+    let is_button_row = state.config_scroll.selected_index == state.config.options.len();
+
+    // Split area into two buttons
+    let button_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    // Test Config button (index 0)
+    let test_selected = is_button_row && state.installer_button_selection == 0;
+    let test_text = if test_selected {
+        "  TEST CONFIG (Enter)  "
+    } else {
+        "  TEST CONFIG  "
+    };
+    let test_style = if test_selected {
+        Style::default()
+            .fg(Colors::BG_PRIMARY)
+            .bg(Colors::PRIMARY)
+    } else if is_button_row {
+        Style::default().fg(Colors::PRIMARY)
+    } else {
+        Style::default().fg(Colors::FG_MUTED)
+    };
+    let test_button = Paragraph::new(test_text)
+        .block(Block::default().borders(Borders::ALL))
+        .alignment(Alignment::Center)
+        .style(test_style);
+    f.render_widget(test_button, button_chunks[0]);
+
+    // Start Install button (index 1)
+    let start_selected = is_button_row && state.installer_button_selection == 1;
+    let start_text = if start_selected {
+        "  START INSTALLATION (Enter)  "
     } else {
         "  START INSTALLATION  "
     };
-
-    let style = if is_selected {
+    let start_style = if start_selected {
         Style::default()
-            .fg(Colors::SECONDARY)
+            .fg(Colors::BG_PRIMARY)
             .bg(Colors::SUCCESS)
-    } else {
+    } else if is_button_row {
         Style::default().fg(Colors::SUCCESS)
+    } else {
+        Style::default().fg(Colors::FG_MUTED)
     };
-
-    let button = Paragraph::new(button_text)
+    let start_button = Paragraph::new(start_text)
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center)
-        .style(style);
-    f.render_widget(button, area);
+        .style(start_style);
+    f.render_widget(start_button, button_chunks[1]);
+}
+
+/// Render dry-run summary in specified area (Sprint 8)
+pub fn render_dry_run_summary_in_area(
+    f: &mut Frame,
+    state: &AppState,
+    area: Rect,
+    header: &HeaderRenderer,
+) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(7), // Header
+            Constraint::Length(3), // Title
+            Constraint::Min(0),    // Summary content
+        ])
+        .split(area);
+
+    header.render_header(f, chunks[0]);
+    header.render_title(f, chunks[1], "Dry Run Summary - Actions to be Performed");
+
+    // Build summary content
+    let summary_lines: Vec<ListItem> = if let Some(ref summary) = state.dry_run_summary {
+        summary
+            .iter()
+            .map(|line| {
+                let style = if line.starts_with("[DESTRUCTIVE]") {
+                    Style::default().fg(Colors::ERROR)
+                } else if line.starts_with("[SKIP]") {
+                    Style::default().fg(Colors::FG_MUTED)
+                } else if line.starts_with("  ->") {
+                    Style::default().fg(Colors::FG_SECONDARY)
+                } else {
+                    Style::default().fg(Colors::FG_PRIMARY)
+                };
+                ListItem::new(line.as_str()).style(style)
+            })
+            .collect()
+    } else {
+        vec![ListItem::new("No actions to perform").style(Style::default().fg(Colors::FG_MUTED))]
+    };
+
+    let summary_list = List::new(summary_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Actions (Press B to go back, Enter to dismiss) ")
+            .title_style(Style::default().fg(Colors::PRIMARY)),
+    );
+    f.render_widget(summary_list, chunks[2]);
 }
