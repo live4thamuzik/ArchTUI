@@ -80,6 +80,10 @@ pub struct AppState {
     pub confirm_dialog: Option<ConfirmDialogState>,
     /// Previous mode to return to after dialog
     pub pre_dialog_mode: Option<AppMode>,
+    /// Dry-run summary output (Sprint 8)
+    pub dry_run_summary: Option<Vec<String>>,
+    /// Button selection in guided installer (0 = Test Config, 1 = Start Install)
+    pub installer_button_selection: usize,
 }
 
 /// Application operating modes
@@ -117,6 +121,8 @@ pub enum AppMode {
     FileBrowser,
     /// Confirmation dialog for destructive operations
     ConfirmDialog,
+    /// Dry-run summary display (Sprint 8)
+    DryRunSummary,
 }
 
 impl Default for AppState {
@@ -139,6 +145,8 @@ impl Default for AppState {
             file_browser: None,
             confirm_dialog: None,
             pre_dialog_mode: None,
+            dry_run_summary: None,
+            installer_button_selection: 1, // Default to "Start Install"
         }
     }
 }

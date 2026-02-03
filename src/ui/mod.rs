@@ -358,6 +358,9 @@ impl UiRenderer {
                 // Render the confirmation dialog on top
                 dialogs::render_confirm_dialog(f, state);
             }
+            AppMode::DryRunSummary => {
+                installer::render_dry_run_summary_in_area(f, state, content_area, &self.header);
+            }
         }
 
         // Render navigation bar
