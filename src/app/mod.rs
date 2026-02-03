@@ -880,6 +880,12 @@ impl App {
                 // Handle confirmation dialog selection
                 self.handle_confirm_dialog_enter()?;
             }
+            AppMode::DryRunSummary => {
+                // Dismiss dry-run summary and return to guided installer
+                let mut state = self.lock_state_mut()?;
+                state.mode = AppMode::GuidedInstaller;
+                state.dry_run_summary = None;
+            }
         }
 
         Ok(())
@@ -1506,6 +1512,12 @@ impl App {
                     state.mode = AppMode::ToolsMenu;
                 }
                 state.status_message = "Operation cancelled".to_string();
+            }
+            AppMode::DryRunSummary => {
+                // Return to guided installer from dry-run summary
+                state.mode = AppMode::GuidedInstaller;
+                state.dry_run_summary = None;
+                state.status_message = "Dry-run complete - review your configuration".to_string();
             }
         }
         Ok(())

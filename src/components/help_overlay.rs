@@ -77,6 +77,7 @@ impl HelpOverlay {
             AppMode::FloatingOutput => "Output View",
             AppMode::FileBrowser => "File Browser",
             AppMode::ConfirmDialog => "Confirmation",
+            AppMode::DryRunSummary => "Dry Run Summary",
         };
         lines.push(Line::from(vec![
             Span::styled("Current: ", Style::default().fg(Colors::FG_MUTED)),
