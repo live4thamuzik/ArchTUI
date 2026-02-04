@@ -39,6 +39,7 @@
 // Library API - these types are exported for external use but not yet consumed by the binary
 #![allow(dead_code)]
 
+use crate::hardware::{FirmwareMode, HardwareInfo, NetworkState};
 use std::fmt;
 use thiserror::Error;
 
@@ -259,6 +260,12 @@ pub struct InstallerContext {
 
     /// Whether destructive operations have been confirmed
     destructive_confirmed: bool,
+
+    /// Detected firmware mode (UEFI or BIOS) — set once at startup
+    firmware_mode: FirmwareMode,
+
+    /// Detected network connectivity — set at startup, can be refreshed
+    network_state: NetworkState,
 }
 
 impl Default for InstallerContext {
@@ -268,14 +275,53 @@ impl Default for InstallerContext {
 }
 
 impl InstallerContext {
-    /// Create a new installer context in the NotStarted state
+    /// Create a new installer context in the NotStarted state.
+    ///
+    /// Defaults to BIOS firmware and Offline network (safe defaults).
+    /// Use `with_hardware()` to initialize with detected hardware info.
     pub fn new() -> Self {
         Self {
             current: InstallStage::NotStarted,
             failed_at: None,
             stage_history: Vec::with_capacity(InstallStage::all_stages().len()),
             destructive_confirmed: false,
+            firmware_mode: FirmwareMode::Bios,
+            network_state: NetworkState::Offline,
         }
+    }
+
+    /// Create a new installer context initialized with detected hardware info.
+    ///
+    /// This is the preferred constructor for production use. It runs hardware
+    /// detection at creation time and stores the results for the lifetime of
+    /// the installation.
+    pub fn with_hardware(hw: HardwareInfo) -> Self {
+        Self {
+            current: InstallStage::NotStarted,
+            failed_at: None,
+            stage_history: Vec::with_capacity(InstallStage::all_stages().len()),
+            destructive_confirmed: false,
+            firmware_mode: hw.firmware,
+            network_state: hw.network,
+        }
+    }
+
+    /// Returns the detected firmware mode (UEFI or BIOS).
+    #[inline]
+    pub fn firmware_mode(&self) -> FirmwareMode {
+        self.firmware_mode
+    }
+
+    /// Returns the detected network connectivity state.
+    #[inline]
+    pub fn network_state(&self) -> NetworkState {
+        self.network_state
+    }
+
+    /// Refresh network connectivity state (e.g., after user plugs in cable).
+    pub fn refresh_network(&mut self) {
+        self.network_state = crate::hardware::detect_internet();
+        log::info!("Network state refreshed: {}", self.network_state);
     }
 
     /// Returns the current installation stage

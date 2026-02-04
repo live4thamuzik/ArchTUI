@@ -152,6 +152,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
     debug!("Initializing terminal for TUI mode");
 
+    // Detect hardware environment before entering TUI
+    let hw = hardware::HardwareInfo::detect();
+    info!("Hardware detected: {}", hw);
+
     // Initialize terminal
     enable_raw_mode()
         .map_err(|e| error::general_error(format!("Failed to enable raw mode: {}", e)))?;
@@ -163,8 +167,8 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
     let mut terminal = Terminal::new(backend)
         .map_err(|e| error::general_error(format!("Failed to create terminal: {}", e)))?;
 
-    // Create and run application
-    let mut app = app::App::new(None);
+    // Create and run application with detected hardware
+    let mut app = app::App::new(None, hw);
     let result = app.run(&mut terminal);
 
     // Cleanup terminal (always attempt cleanup, even if app failed)
@@ -268,6 +272,10 @@ fn run_tui_installer_with_save(
 fn run_tui_installer_with_save_path(
     save_path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Detect hardware environment before entering TUI
+    let hw = hardware::HardwareInfo::detect();
+    info!("Hardware detected: {}", hw);
+
     // Initialize terminal
     enable_raw_mode()
         .map_err(|e| error::general_error(format!("Failed to enable raw mode: {}", e)))?;
@@ -279,8 +287,8 @@ fn run_tui_installer_with_save_path(
     let mut terminal = Terminal::new(backend)
         .map_err(|e| error::general_error(format!("Failed to create terminal: {}", e)))?;
 
-    // Create and run application with save path
-    let mut app = app::App::new(Some(save_path.to_path_buf()));
+    // Create and run application with save path and detected hardware
+    let mut app = app::App::new(Some(save_path.to_path_buf()), hw);
     let result = app.run(&mut terminal);
 
     // Cleanup terminal (always attempt cleanup, even if app failed)
