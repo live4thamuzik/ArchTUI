@@ -15,6 +15,7 @@ mod installer;
 mod package_manager;
 mod package_utils;
 mod process_guard;
+mod profiles;
 mod script_manifest;
 mod script_runner;
 mod script_traits;
