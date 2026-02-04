@@ -18,12 +18,14 @@ use archtui::process_guard::{CommandProcessGroup, ChildRegistry};
 
 #[test]
 fn test_binary_exists() {
-    assert!(std::path::Path::new("./archtui").exists(), "Binary should exist");
+    let bin = env!("CARGO_BIN_EXE_archtui");
+    assert!(std::path::Path::new(bin).exists(), "Binary should exist at {}", bin);
 }
 
 #[test]
 fn test_binary_executable() {
-    let metadata = std::fs::metadata("./archtui")
+    let bin = env!("CARGO_BIN_EXE_archtui");
+    let metadata = std::fs::metadata(bin)
         .expect("Should be able to read binary metadata");
     assert!(metadata.permissions().mode() & 0o111 != 0, "Binary should be executable");
 }
@@ -53,8 +55,9 @@ fn test_plymouth_themes_exist() {
 fn test_binary_runs_without_crashing() {
     // Test that the binary can start without immediately crashing
     // We use a timeout to prevent hanging
+    let bin = env!("CARGO_BIN_EXE_archtui");
     let output = Command::new("timeout")
-        .args(&["5s", "./archtui"])
+        .args(["5s", bin])
         .output();
     
     // The binary should either exit cleanly or with a TUI error (expected in non-TTY environments)

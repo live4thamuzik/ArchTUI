@@ -26,4 +26,5 @@ shell=bash
 # SC2128: Array without index - intentional first element access
 # SC2269: Variable assigned to itself - initialization pattern
 # SC2002: Useless cat - stylistic preference, doesn't affect functionality
-disable=SC2155,SC2034,SC2015,SC2126,SC2086,SC2059,SC2005,SC2181,SC2178,SC2128,SC2269,SC2002
+# SC2329: Function never invoked - false positive for trap handlers and sourced helpers
+disable=SC2155,SC2034,SC2015,SC2126,SC2086,SC2059,SC2005,SC2181,SC2178,SC2128,SC2269,SC2002,SC2329
