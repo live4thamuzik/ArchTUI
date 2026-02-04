@@ -7,10 +7,13 @@ mod cli;
 mod components;
 mod config;
 mod config_file;
+mod engine;
 mod error;
+mod hardware;
 mod input;
 mod install_state;
 mod installer;
+mod logic;
 #[cfg(feature = "alpm")]
 mod package_manager;
 mod package_utils;
