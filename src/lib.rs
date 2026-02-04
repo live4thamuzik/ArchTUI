@@ -7,10 +7,13 @@ pub mod cli;
 pub mod components;
 pub mod config;
 pub mod config_file;
+pub mod engine;
 pub mod error;
+pub mod hardware;
 pub mod input;
 pub mod install_state;
 pub mod installer;
+pub mod logic;
 #[cfg(feature = "alpm")]
 pub mod package_manager;
 pub mod package_utils;
@@ -57,3 +60,12 @@ pub use types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
 };
+
+// Hardware detection (Sprint 14)
+pub use hardware::{FirmwareMode, HardwareInfo, NetworkState};
+
+// Storage engine (Sprint 15)
+pub use engine::storage::{StorageOp, StoragePlan, calculate_storage_plan};
+
+// Package/service resolver (Sprint 16)
+pub use logic::resolver::{resolve_packages, resolve_services};

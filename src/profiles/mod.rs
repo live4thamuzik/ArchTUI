@@ -302,6 +302,69 @@ impl Profile {
 }
 
 // ============================================================================
+// Package Constants (used by logic::resolver)
+// ============================================================================
+
+/// GPU driver packages indexed by driver type.
+pub mod gpu_packages {
+    /// Nvidia proprietary driver packages.
+    pub const NVIDIA: &[&str] = &["nvidia", "nvidia-utils", "nvidia-settings", "lib32-nvidia-utils"];
+
+    /// AMD open-source driver packages (mesa-based).
+    pub const AMD: &[&str] = &["mesa", "xf86-video-amdgpu", "vulkan-radeon", "lib32-mesa"];
+
+    /// Intel integrated graphics packages.
+    pub const INTEL: &[&str] = &["mesa", "intel-ucode", "vulkan-intel", "lib32-mesa"];
+
+    /// Fallback packages when GPU is auto-detected at runtime.
+    pub const AUTO: &[&str] = &["mesa"];
+}
+
+/// Kernel packages indexed by kernel variant.
+pub mod kernel_packages {
+    /// Standard Linux kernel.
+    pub const LINUX: &[&str] = &["linux", "linux-headers"];
+
+    /// Long-term support kernel.
+    pub const LINUX_LTS: &[&str] = &["linux-lts", "linux-lts-headers"];
+
+    /// Performance-tuned kernel.
+    pub const LINUX_ZEN: &[&str] = &["linux-zen", "linux-zen-headers"];
+
+    /// Security-hardened kernel.
+    pub const LINUX_HARDENED: &[&str] = &["linux-hardened", "linux-hardened-headers"];
+}
+
+/// Base system packages always installed.
+pub const BASE_PACKAGES: &[&str] = &[
+    "base",
+    "base-devel",
+    "linux-firmware",
+    "networkmanager",
+    "vim",
+    "sudo",
+    "git",
+];
+
+/// Bootloader packages.
+pub mod bootloader_packages {
+    /// GRUB bootloader packages.
+    pub const GRUB: &[&str] = &["grub", "efibootmgr", "os-prober"];
+
+    /// systemd-boot (included in systemd, no extra packages needed).
+    pub const SYSTEMD_BOOT: &[&str] = &[];
+}
+
+/// AUR helper packages (installed from AUR, not official repos).
+pub mod aur_packages {
+    /// Paru AUR helper.
+    pub const PARU: &str = "paru";
+
+    /// Yay AUR helper.
+    pub const YAY: &str = "yay";
+}
+
+// ============================================================================
 // Dotfiles Configuration
 // ============================================================================
 
