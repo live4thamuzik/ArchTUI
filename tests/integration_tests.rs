@@ -1,4 +1,4 @@
-// Integration tests for archinstall-tui
+// Integration tests for archtui
 //
 // Sprint 1.2: Death Pact Integration Tests
 // These tests verify that the process lifecycle management works correctly:
@@ -14,16 +14,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 // Re-export process guard functionality for testing
-use archinstall_tui::process_guard::{CommandProcessGroup, ChildRegistry};
+use archtui::process_guard::{CommandProcessGroup, ChildRegistry};
 
 #[test]
 fn test_binary_exists() {
-    assert!(std::path::Path::new("./archinstall-tui").exists(), "Binary should exist");
+    assert!(std::path::Path::new("./archtui").exists(), "Binary should exist");
 }
 
 #[test]
 fn test_binary_executable() {
-    let metadata = std::fs::metadata("./archinstall-tui")
+    let metadata = std::fs::metadata("./archtui")
         .expect("Should be able to read binary metadata");
     assert!(metadata.permissions().mode() & 0o111 != 0, "Binary should be executable");
 }
@@ -54,7 +54,7 @@ fn test_binary_runs_without_crashing() {
     // Test that the binary can start without immediately crashing
     // We use a timeout to prevent hanging
     let output = Command::new("timeout")
-        .args(&["5s", "./archinstall-tui"])
+        .args(&["5s", "./archtui"])
         .output();
     
     // The binary should either exit cleanly or with a TUI error (expected in non-TTY environments)
@@ -77,7 +77,7 @@ fn test_binary_runs_without_crashing() {
 #[test]
 fn test_config_structure() {
     // Test that we can load the configuration structure
-    use archinstall_tui::config::Configuration;
+    use archtui::config::Configuration;
     
     let config = Configuration::default();
     assert!(!config.options.is_empty(), "Configuration should have options");

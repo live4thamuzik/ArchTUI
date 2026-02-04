@@ -1,4 +1,4 @@
-# Shellcheck configuration for ArchInstall
+# Shellcheck configuration for ArchTUI
 # Tells shellcheck where to find sourced scripts
 
 # Look for sources relative to the script's directory

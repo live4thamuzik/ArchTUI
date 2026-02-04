@@ -1,11 +1,11 @@
-# Makefile for archinstall-tui development and testing
+# Makefile for archtui development and testing
 # NOTE: This Makefile is for DEVELOPMENT ONLY, not for use in Arch ISO
 
 .PHONY: help build test test-rust test-bash clean install dev-setup format lint deps dev quick ci iso-ready
 
 # Default target
 help:
-	@echo "ArchInstall TUI - Development Makefile"
+	@echo "ArchTUI - Development Makefile"
 	@echo "⚠️  DEVELOPMENT ONLY - Not for use in Arch ISO"
 	@echo ""
 	@echo "Available targets:"
@@ -25,11 +25,11 @@ help:
 # Build targets
 build:
 	cargo build --release
-	cp target/release/archinstall-tui ./
+	cp target/release/archtui ./
 
 build-debug:
 	cargo build
-	cp target/debug/archinstall-tui ./
+	cp target/debug/archtui ./
 
 # Testing
 test: test-rust test-bash
@@ -48,12 +48,12 @@ test-bash:
 # Cleanup
 clean:
 	cargo clean
-	rm -f ./archinstall-tui
+	rm -f ./archtui
 
 # Installation
 install: build
-	sudo cp ./archinstall-tui /usr/local/bin/
-	sudo chmod +x /usr/local/bin/archinstall-tui
+	sudo cp ./archtui /usr/local/bin/
+	sudo chmod +x /usr/local/bin/archtui
 
 # Development setup
 dev-setup:
@@ -84,16 +84,16 @@ ci: format lint test build
 # ISO readiness check
 iso-ready:
 	@echo "Checking ArchInstall readiness for ISO deployment..."
-	@if [ -f "./archinstall-tui" ]; then \
-		echo "✅ Binary exists: ./archinstall-tui"; \
-		if [ -x "./archinstall-tui" ]; then \
+	@if [ -f "./archtui" ]; then \
+		echo "✅ Binary exists: ./archtui"; \
+		if [ -x "./archtui" ]; then \
 			echo "✅ Binary is executable"; \
 		else \
 			echo "❌ Binary is not executable"; \
 			exit 1; \
 		fi; \
 	else \
-		echo "❌ Binary missing: ./archinstall-tui"; \
+		echo "❌ Binary missing: ./archtui"; \
 		echo "   Run 'make build' to create the binary"; \
 		exit 1; \
 	fi

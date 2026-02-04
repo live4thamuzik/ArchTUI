@@ -1,4 +1,4 @@
-//! ArchInstall TUI Library
+//! ArchTUI Library
 //!
 //! This library provides the core functionality for the Arch Linux TUI installer.
 
@@ -34,7 +34,7 @@ pub use ui::{WizardData, WizardState};
 // Re-export main types for convenience
 pub use config::{ConfigOption, Configuration, Package};
 pub use config_file::InstallationConfig;
-pub use error::ArchInstallError;
+pub use error::ArchTuiError;
 pub use install_state::{InstallStage, InstallTransitionError, InstallerContext};
 pub use process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 pub use script_manifest::{

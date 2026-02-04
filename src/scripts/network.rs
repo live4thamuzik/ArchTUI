@@ -245,7 +245,7 @@ impl std::fmt::Display for MirrorSortMethod {
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::scripts::network::{UpdateMirrorsArgs, MirrorSortMethod};
+/// use archtui::scripts::network::{UpdateMirrorsArgs, MirrorSortMethod};
 ///
 /// let args = UpdateMirrorsArgs {
 ///     country: Some("US".to_string()),

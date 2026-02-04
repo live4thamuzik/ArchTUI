@@ -1,10 +1,10 @@
 [package]
-name = "archinstall-tui"
+name = "archtui"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "archinstall_tui"
+name = "archtui"
 
 [[bin]]
 name = "death_pact_test_helper"
