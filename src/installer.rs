@@ -27,6 +27,14 @@ use crate::scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
 use crate::scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod,
 };
+use crate::scripts::encryption::{LuksCipher, LuksFormatArgs, LuksOpenArgs, SecretFile};
+use crate::scripts::network::{CheckConnectivityArgs, MirrorSortMethod, UpdateMirrorsArgs};
+use crate::scripts::profiles::InstallDotfilesArgs;
+#[cfg(feature = "alpm")]
+use crate::scripts::profiles::EnableServicesArgs;
+use crate::profiles::DotfilesConfig;
+#[cfg(feature = "alpm")]
+use crate::profiles::Profile;
 use crate::types::Filesystem;
 use anyhow::{Context, Result};
 use std::io::{BufRead, BufReader};
@@ -734,4 +742,325 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
 
     log::info!("System configuration complete");
     Ok(())
+}
+
+// ============================================================================
+// LUKS Encryption (Sprint 11)
+// ============================================================================
+
+/// Encryption configuration for a partition.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Library API
+pub struct EncryptionConfig {
+    /// Password for the encrypted volume (stored temporarily in SecretFile).
+    pub password: String,
+    /// Device mapper name (e.g., "cryptroot").
+    pub mapper_name: String,
+    /// Optional LUKS label.
+    pub label: Option<String>,
+    /// Cipher configuration.
+    pub cipher: LuksCipher,
+}
+
+impl Default for EncryptionConfig {
+    fn default() -> Self {
+        Self {
+            password: String::new(),
+            mapper_name: "cryptroot".to_string(),
+            label: Some("archcrypt".to_string()),
+            cipher: LuksCipher::default(),
+        }
+    }
+}
+
+/// Encrypt a partition with LUKS2.
+///
+/// This function handles the secure encryption workflow:
+/// 1. Write password to a temporary keyfile (SecretFile with 0600 permissions)
+/// 2. Call cryptsetup luksFormat with the keyfile
+/// 3. Securely wipe and delete the keyfile (even on failure)
+///
+/// # Security Model
+///
+/// - Password is NEVER passed via CLI (visible in `ps aux`)
+/// - Password is written to `/tmp` which is RAM-backed on Arch ISO
+/// - `SecretFile` uses RAII to ensure cleanup on panic/error
+/// - Requires `CONFIRM_LUKS_FORMAT=yes` environment variable
+///
+/// # Arguments
+///
+/// * `device` - Partition to encrypt (e.g., `/dev/sda2`)
+/// * `config` - Encryption configuration (password, mapper name, cipher)
+/// * `confirm` - Explicit confirmation for destructive operation
+///
+/// # Returns
+///
+/// - `Ok(PathBuf)` - Path to the decrypted device (`/dev/mapper/<mapper_name>`)
+/// - `Err` - Encryption failed
+///
+/// # Example
+///
+/// ```ignore
+/// use archinstall_tui::installer::{encrypt_partition, EncryptionConfig};
+/// use std::path::PathBuf;
+///
+/// let config = EncryptionConfig {
+///     password: "mysecretpassword".to_string(),
+///     mapper_name: "cryptroot".to_string(),
+///     label: Some("archcrypt".to_string()),
+///     cipher: LuksCipher::default(),
+/// };
+///
+/// let decrypted_device = encrypt_partition(
+///     &PathBuf::from("/dev/sda2"),
+///     &config,
+///     true, // confirm
+/// )?;
+/// // decrypted_device = /dev/mapper/cryptroot
+/// ```
+#[allow(dead_code)] // Library API
+pub fn encrypt_partition(
+    device: &PathBuf,
+    config: &EncryptionConfig,
+    confirm: bool,
+) -> Result<PathBuf> {
+    log::info!("Starting LUKS encryption for {:?}", device);
+
+    // SECURITY: Create temporary keyfile with password
+    // SecretFile ensures cleanup via Drop trait (even on panic)
+    let keyfile = SecretFile::new(&config.password)
+        .context("Failed to create temporary keyfile")?;
+
+    log::info!("Temporary keyfile created: {:?}", keyfile.path());
+
+    // Format the device with LUKS2
+    let format_args = LuksFormatArgs {
+        device: device.clone(),
+        cipher: config.cipher,
+        key_file: keyfile.path().to_path_buf(),
+        label: config.label.clone(),
+        confirm,
+    };
+
+    // SELF-AUDIT: Verify password is NOT in CLI args
+    let cli_args = format_args.to_cli_args();
+    debug_assert!(
+        !cli_args.iter().any(|a| a.contains(&config.password)),
+        "BUG: Password found in LUKS format CLI args! This is a security vulnerability."
+    );
+
+    log::info!("Executing LUKS format on {:?}", device);
+    let output = run_script_safe(&format_args)
+        .context("Failed to execute LUKS format")?;
+    output.ensure_success("LUKS format")?;
+    log::info!("LUKS format completed successfully");
+
+    // Open the encrypted device
+    let open_args = LuksOpenArgs {
+        device: device.clone(),
+        mapper_name: config.mapper_name.clone(),
+        key_file: keyfile.path().to_path_buf(),
+    };
+
+    log::info!("Opening LUKS device as {:?}", config.mapper_name);
+    let output = run_script_safe(&open_args)
+        .context("Failed to open LUKS device")?;
+    output.ensure_success("LUKS open")?;
+
+    // SecretFile is dropped here, securely wiping the keyfile
+    let decrypted_device = PathBuf::from(format!("/dev/mapper/{}", config.mapper_name));
+    log::info!(
+        "LUKS encryption complete. Decrypted device: {:?}",
+        decrypted_device
+    );
+
+    Ok(decrypted_device)
+}
+
+// ============================================================================
+// Desktop Profile Installation (Sprint 12)
+// ============================================================================
+
+/// Install a desktop profile (DE/WM).
+///
+/// Installs the packages for the selected profile and enables the
+/// display manager service.
+///
+/// # Arguments
+///
+/// * `target_root` - Target installation root (e.g., `/mnt`)
+/// * `profile` - Desktop profile to install
+///
+/// # Returns
+///
+/// - `Ok(())` - Profile installed successfully
+/// - `Err` - Installation failed
+#[cfg(feature = "alpm")]
+#[allow(dead_code)] // Library API
+pub fn install_profile(target_root: &Path, profile: Profile) -> Result<()> {
+    log::info!("Installing profile: {:?}", profile);
+
+    // Get packages for the profile
+    let packages = profile.get_packages();
+    log::info!("Profile packages: {:?}", packages);
+
+    // Install packages using ALPM
+    let db_path = target_root.join("var/lib/pacman");
+    std::fs::create_dir_all(&db_path)
+        .with_context(|| format!("Failed to create pacman db path: {:?}", db_path))?;
+
+    let mut pm = PackageManager::new(target_root, &db_path)
+        .context("Failed to initialize ALPM package manager")?;
+
+    let live_pacman_conf = Path::new("/etc/pacman.conf");
+    if live_pacman_conf.exists() {
+        pm = PackageManager::from_pacman_conf(target_root, live_pacman_conf)
+            .context("Failed to load pacman.conf")?;
+    }
+
+    pm.install_packages(packages)
+        .context("Failed to install profile packages")?;
+
+    // Enable display manager if present
+    if let Some(dm) = profile.get_display_manager() {
+        log::info!("Enabling display manager: {}", dm);
+
+        let mut services: Vec<String> = vec![dm.to_string()];
+        services.extend(profile.get_services().iter().map(|s| s.to_string()));
+
+        let enable_args = EnableServicesArgs {
+            services,
+            root: target_root.to_path_buf(),
+        };
+
+        let output = run_script_safe(&enable_args)
+            .context("Failed to enable services")?;
+        output.ensure_success("Enable services")?;
+    }
+
+    log::info!("Profile {:?} installed successfully", profile);
+    Ok(())
+}
+
+/// Install dotfiles from a Git repository.
+///
+/// Clones the dotfiles repository for the specified user.
+///
+/// # Prerequisites
+///
+/// - Git must be installed (included in most profiles)
+/// - Target user must exist
+///
+/// # Arguments
+///
+/// * `config` - Dotfiles configuration (repo URL, target user)
+///
+/// # Returns
+///
+/// - `Ok(())` - Dotfiles installed successfully
+/// - `Err` - Installation failed
+#[allow(dead_code)] // Library API
+pub fn install_dotfiles(config: &DotfilesConfig) -> Result<()> {
+    log::info!(
+        "Installing dotfiles from {} for user {}",
+        config.repo_url,
+        config.target_user
+    );
+
+    let args = InstallDotfilesArgs {
+        repo_url: config.repo_url.clone(),
+        target_user: config.target_user.clone(),
+        target_dir: config.target_dir.as_ref().map(PathBuf::from),
+        branch: config.branch.clone(),
+        backup: true, // Always backup existing files
+    };
+
+    let output = run_script_safe(&args)
+        .context("Failed to install dotfiles")?;
+    output.ensure_success("Dotfiles installation")?;
+
+    log::info!("Dotfiles installed successfully");
+    Ok(())
+}
+
+// ============================================================================
+// Mirror Ranking (Sprint 13)
+// ============================================================================
+
+/// Update pacman mirrorlist using reflector.
+///
+/// Ranks mirrors by speed and updates `/etc/pacman.d/mirrorlist`.
+/// Should be called at the start of installation for faster downloads.
+///
+/// # Network Requirement
+///
+/// This function requires network connectivity. Call `check_network_connectivity()`
+/// first to verify the network is up.
+///
+/// # Arguments
+///
+/// * `country` - Optional country filter (ISO 3166-1 alpha-2 code)
+/// * `limit` - Number of mirrors to keep (default: 20)
+/// * `sort` - Sort method (default: rate)
+///
+/// # Returns
+///
+/// - `Ok(())` - Mirrors updated successfully
+/// - `Err` - Update failed (possibly due to network)
+#[allow(dead_code)] // Library API
+pub fn update_mirrors(
+    country: Option<&str>,
+    limit: u32,
+    sort: MirrorSortMethod,
+) -> Result<()> {
+    log::info!("Updating pacman mirrors (country={:?}, limit={}, sort={})",
+               country, limit, sort);
+
+    // Check network connectivity first
+    log::info!("Checking network connectivity...");
+    let connectivity = CheckConnectivityArgs::default();
+    let output = run_script_safe(&connectivity)
+        .context("Failed to check network connectivity")?;
+
+    if !output.success {
+        anyhow::bail!(
+            "Network connectivity check failed. Cannot update mirrors without network access."
+        );
+    }
+    log::info!("Network connectivity OK");
+
+    // Update mirrors
+    let args = UpdateMirrorsArgs {
+        country: country.map(String::from),
+        limit,
+        sort,
+        protocol: Some("https".to_string()),
+        save: true,
+    };
+
+    log::info!("Running reflector to rank mirrors...");
+    let output = run_script_safe(&args)
+        .context("Failed to update mirrors")?;
+    output.ensure_success("Mirror update")?;
+
+    log::info!("Mirrors updated successfully");
+    Ok(())
+}
+
+/// Check network connectivity before network-dependent operations.
+///
+/// # Returns
+///
+/// - `Ok(true)` - Network is available
+/// - `Ok(false)` - Network is not available
+/// - `Err` - Check failed
+#[allow(dead_code)] // Library API
+pub fn check_network_connectivity() -> Result<bool> {
+    log::info!("Checking network connectivity...");
+
+    let args = CheckConnectivityArgs::default();
+    let output = run_script_safe(&args)
+        .context("Failed to check network connectivity")?;
+
+    Ok(output.success)
 }

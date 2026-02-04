@@ -15,6 +15,7 @@ pub mod installer;
 pub mod package_manager;
 pub mod package_utils;
 pub mod process_guard;
+pub mod profiles;
 pub mod script_manifest;
 pub mod script_runner;
 pub mod script_traits;
@@ -45,6 +46,10 @@ pub use scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod, WipeMethodError,
 };
 pub use scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
+pub use scripts::encryption::{LuksCipher, LuksCloseArgs, LuksFormatArgs, LuksOpenArgs, SecretFile};
+pub use scripts::network::{CheckConnectivityArgs, MirrorSortMethod, UpdateMirrorsArgs};
+pub use scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
+pub use profiles::{DotfilesConfig, Profile};
 pub use installer::{configure_system, prepare_disks, DiskLayout, SystemConfig};
 #[cfg(feature = "alpm")]
 pub use installer::{install_base_system, install_base_system_with_extras};
