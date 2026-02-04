@@ -69,3 +69,13 @@ pub use engine::storage::{StorageOp, StoragePlan, calculate_storage_plan};
 
 // Package/service resolver (Sprint 16)
 pub use logic::resolver::{resolve_packages, resolve_services};
+
+// Pre-install orchestration (Sprint 17)
+pub use logic::preinstall::{rank_mirrors, MirrorRankResult, PreinstallConfig, SkipReason};
+
+// Post-install orchestration (Sprint 18)
+pub use logic::postinstall::{
+    clone_dotfiles_safe, install_aur_helper_safe, run_postinstall,
+    PostInstallConfig, PostInstallResult,
+};
+pub use scripts::user_ops::{CloneDotfilesArgs, InstallAurHelperArgs, UserRunArgs};
