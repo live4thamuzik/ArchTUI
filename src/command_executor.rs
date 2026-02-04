@@ -5,6 +5,7 @@
 //! the `CommandResponse` back to the main application thread. This ensures the main TUI
 //! thread remains responsive and prevents freezing during I/O operations.
 
+use crate::process_guard::CommandProcessGroup;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
 use log::{debug, error};
@@ -63,6 +64,7 @@ pub fn spawn_executor_thread(
                 CommandType::LsblkAll => {
                     Command::new("lsblk")
                         .args(["-d", "-n", "-o", "NAME,SIZE,TYPE,RO,TRAN"])
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {
@@ -76,6 +78,7 @@ pub fn spawn_executor_thread(
                 CommandType::LsblkModel(disk) => {
                     Command::new("lsblk")
                         .args(["-d", "-n", "-o", "MODEL", &disk])
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {
@@ -89,6 +92,7 @@ pub fn spawn_executor_thread(
                 CommandType::LsblkSize(disk) => {
                     Command::new("lsblk")
                         .args(["-d", "-n", "-o", "SIZE", &disk])
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {
@@ -102,6 +106,7 @@ pub fn spawn_executor_thread(
                 CommandType::LsblkPartitions(disk) => {
                     Command::new("lsblk")
                         .args(["-n", "-o", "NAME,TYPE,SIZE", &disk])
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {
@@ -115,6 +120,7 @@ pub fn spawn_executor_thread(
                 CommandType::FdiskL(disk) => {
                     Command::new("fdisk")
                         .args(["-l", &disk])
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {
@@ -127,6 +133,7 @@ pub fn spawn_executor_thread(
                 }
                 CommandType::Mount => {
                     Command::new("mount")
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {
@@ -140,6 +147,7 @@ pub fn spawn_executor_thread(
                 CommandType::BlockdevSs(disk) => {
                     Command::new("blockdev")
                         .args(["--getss", &disk])
+                        .in_new_process_group()
                         .output()
                         .map_err(|e| e.to_string())
                         .and_then(|output| {

@@ -7,6 +7,7 @@
 //! If any check fails, the program exits with a clear error message
 //! before the TUI is initialized.
 
+use crate::process_guard::CommandProcessGroup;
 use std::process::Command;
 
 /// Result of environment verification
@@ -41,6 +42,7 @@ const OPTIONAL_BINARIES: &[&str] = &[
 fn binary_exists(name: &str) -> bool {
     Command::new("which")
         .arg(name)
+        .in_new_process_group()
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
