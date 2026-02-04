@@ -33,7 +33,7 @@ git clone https://github.com/live4thamuzik/ArchTUI.git
 cd ArchTUI
 ```
 
-A pre-compiled binary (`archtui`) is intended to ship in the repo for use on the Arch live ISO without needing a Rust toolchain. To build from source:
+A pre-compiled binary (`archtui`) ships in the repo. The Arch live ISO does not have the space or tooling to build from source — the Rust toolchain alone exceeds available ISO memory, and the build also requires `jq`. Clone and run directly. To build from source on a full system:
 
 ```
 cargo build --release
