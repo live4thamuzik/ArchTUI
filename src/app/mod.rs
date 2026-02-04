@@ -19,6 +19,7 @@ use crate::components::keybindings::KeybindingContext;
 use crate::components::pty_terminal::{PtyTerminal, PtyTerminalState};
 use crate::config::Configuration;
 use crate::error;
+use crate::hardware::HardwareInfo;
 use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
@@ -64,6 +65,9 @@ pub struct App {
     /// Process guard for child process lifecycle management
     /// Ensures all spawned bash scripts are terminated when App is dropped
     _process_guard: ProcessGuard,
+    /// Detected hardware info (firmware mode, network state)
+    /// Set once at startup via HardwareInfo::detect()
+    hardware_info: HardwareInfo,
 }
 
 impl App {
@@ -86,8 +90,11 @@ impl App {
     }
 
     /// Create a new application instance
-    pub fn new(save_config_path: Option<std::path::PathBuf>) -> Self {
-        info!("Creating new App instance");
+    ///
+    /// Accepts `HardwareInfo` from `HardwareInfo::detect()` so the TUI knows
+    /// the firmware mode and network state before presenting options.
+    pub fn new(save_config_path: Option<std::path::PathBuf>, hardware_info: HardwareInfo) -> Self {
+        info!("Creating new App instance ({})", hardware_info);
         let (tool_tx, tool_rx) = mpsc::channel();
 
         // ProcessGuard ensures all child processes are killed when App is dropped
@@ -106,6 +113,7 @@ impl App {
             tool_tx,
             tool_rx,
             _process_guard: process_guard,
+            hardware_info,
         }
     }
 
@@ -113,6 +121,12 @@ impl App {
     #[allow(dead_code)] // API method available for future use
     pub fn keybinding_context(&self) -> &KeybindingContext {
         &self.keybinding_context
+    }
+
+    /// Get reference to detected hardware info
+    #[allow(dead_code)] // API method — consumed when InstallerContext is created
+    pub fn hardware_info(&self) -> &HardwareInfo {
+        &self.hardware_info
     }
 
     /// Toggle help overlay visibility
