@@ -1,4 +1,4 @@
-//! ArchInstall TUI - Main entry point
+//! ArchTUI - Main entry point
 //!
 //! A clean, modular TUI for Arch Linux installation with proper separation of concerns.
 
@@ -78,7 +78,7 @@ fn init_logger() {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging first
     init_logger();
-    info!("ArchInstall TUI starting up");
+    info!("ArchTUI starting up");
 
     // Initialize signal handlers for graceful child process cleanup
     // This ensures bash scripts are terminated if we receive SIGINT/SIGTERM
@@ -208,7 +208,7 @@ fn run_installer_with_config(
         .spawn()
         .map_err(|e| {
             error!("Failed to spawn installer script: {}", e);
-            error::ArchInstallError::script(format!("Failed to spawn installer: {}", e))
+            error::ArchTuiError::script(format!("Failed to spawn installer: {}", e))
         })?;
 
     // Capture and print stdout in real-time
@@ -259,7 +259,7 @@ fn run_tui_installer_with_save(
     );
     println!("Configure your installation, then the config will be saved automatically!");
     println!(
-        "After saving, you can run: ./archinstall-tui install --config {}",
+        "After saving, you can run: ./archtui install --config {}",
         save_path.display()
     );
     println!();

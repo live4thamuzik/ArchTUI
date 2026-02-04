@@ -1,4 +1,4 @@
-//! Type-safe configuration types for the ArchInstall TUI
+//! Type-safe configuration types for the ArchTUI
 //!
 //! This module replaces stringly-typed configuration with proper Rust enums
 //! that provide compile-time validation and exhaustive matching.

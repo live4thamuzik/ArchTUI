@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-/// ArchInstall TUI - A friendly Arch Linux installer
+/// ArchTUI - A friendly Arch Linux installer
 #[derive(Parser)]
-#[command(name = "archinstall-tui")]
+#[command(name = "archtui")]
 #[command(about = "A user-friendly Arch Linux installer with TUI interface")]
 #[command(version)]
 pub struct Cli {
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn test_cli_no_args() {
         // Running with no args should succeed (defaults to TUI mode)
-        let result = Cli::try_parse_from(["archinstall-tui"]);
+        let result = Cli::try_parse_from(["archtui"]);
         assert!(result.is_ok());
         let cli = result.unwrap();
         assert!(cli.command.is_none());
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn test_cli_install_with_config() {
         let result = Cli::try_parse_from([
-            "archinstall-tui",
+            "archtui",
             "install",
             "--config",
             "/path/to/config.json",
@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn test_cli_validate_command() {
         let result = Cli::try_parse_from([
-            "archinstall-tui",
+            "archtui",
             "validate",
             "/path/to/config.json",
         ]);
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn test_cli_disk_format_tool() {
         let result = Cli::try_parse_from([
-            "archinstall-tui",
+            "archtui",
             "tools",
             "disk",
             "format",
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn test_cli_system_bootloader_tool() {
         let result = Cli::try_parse_from([
-            "archinstall-tui",
+            "archtui",
             "tools",
             "system",
             "bootloader",
@@ -372,7 +372,7 @@ mod tests {
     #[test]
     fn test_cli_user_add_tool() {
         let result = Cli::try_parse_from([
-            "archinstall-tui",
+            "archtui",
             "tools",
             "user",
             "add",
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn test_cli_network_test_tool() {
         let result = Cli::try_parse_from([
-            "archinstall-tui",
+            "archtui",
             "tools",
             "network",
             "test",

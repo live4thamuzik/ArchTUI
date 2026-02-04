@@ -685,10 +685,10 @@ impl ManifestRegistry {
     }
 }
 
-// Convert ManifestError to the main ArchInstallError type
-impl From<ManifestError> for crate::error::ArchInstallError {
+// Convert ManifestError to the main ArchTuiError type
+impl From<ManifestError> for crate::error::ArchTuiError {
     fn from(err: ManifestError) -> Self {
-        crate::error::ArchInstallError::Manifest(err.to_string())
+        crate::error::ArchTuiError::Manifest(err.to_string())
     }
 }
 

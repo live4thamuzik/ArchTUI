@@ -18,7 +18,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use archinstall_tui::process_guard::CommandProcessGroup;
+use archtui::process_guard::CommandProcessGroup;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

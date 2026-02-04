@@ -36,8 +36,8 @@ use crate::script_traits::ScriptArgs;
 ///
 /// ```
 /// use std::path::PathBuf;
-/// use archinstall_tui::scripts::config::GenFstabArgs;
-/// use archinstall_tui::script_traits::ScriptArgs;
+/// use archtui::scripts::config::GenFstabArgs;
+/// use archtui::script_traits::ScriptArgs;
 ///
 /// let args = GenFstabArgs {
 ///     root: PathBuf::from("/mnt"),
@@ -96,8 +96,8 @@ impl ScriptArgs for GenFstabArgs {
 /// # Example
 ///
 /// ```
-/// use archinstall_tui::scripts::config::UserAddArgs;
-/// use archinstall_tui::script_traits::ScriptArgs;
+/// use archtui::scripts::config::UserAddArgs;
+/// use archtui::script_traits::ScriptArgs;
 ///
 /// let args = UserAddArgs {
 ///     username: "archuser".to_string(),

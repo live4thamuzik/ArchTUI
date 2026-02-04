@@ -62,8 +62,8 @@ use std::process::{Command, Stdio};
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::scripts::disk::{WipeDiskArgs, WipeMethod};
-/// use archinstall_tui::script_runner::run_script_safe;
+/// use archtui::scripts::disk::{WipeDiskArgs, WipeMethod};
+/// use archtui::script_runner::run_script_safe;
 ///
 /// let args = WipeDiskArgs {
 ///     device: PathBuf::from("/dev/sda"),

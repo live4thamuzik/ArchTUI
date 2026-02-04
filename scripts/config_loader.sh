@@ -23,7 +23,7 @@ fi
 check_jq_available() {
     if ! command -v jq >/dev/null 2>&1; then
         log_error "jq is required for parsing JSON configuration files"
-        log_info "Note: The TUI (archinstall-tui) does not require jq - only direct bash script usage needs it"
+        log_info "Note: The TUI (archtui) does not require jq - only direct bash script usage needs it"
         log_info "Attempting to install jq automatically..."
         if command -v pacman >/dev/null 2>&1; then
             pacman -Sy --noconfirm jq

@@ -234,7 +234,7 @@ pub enum InstallTransitionError {
 /// # Example
 ///
 /// ```
-/// use archinstall_tui::install_state::{InstallerContext, InstallStage};
+/// use archtui::install_state::{InstallerContext, InstallStage};
 ///
 /// let mut ctx = InstallerContext::new();
 /// assert_eq!(ctx.current_stage(), InstallStage::NotStarted);
@@ -515,10 +515,10 @@ impl InstallerContext {
     }
 }
 
-// Convert InstallTransitionError to the main ArchInstallError type
-impl From<InstallTransitionError> for crate::error::ArchInstallError {
+// Convert InstallTransitionError to the main ArchTuiError type
+impl From<InstallTransitionError> for crate::error::ArchTuiError {
     fn from(err: InstallTransitionError) -> Self {
-        crate::error::ArchInstallError::InstallTransition(err.to_string())
+        crate::error::ArchTuiError::InstallTransition(err.to_string())
     }
 }
 

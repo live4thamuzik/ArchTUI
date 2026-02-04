@@ -451,7 +451,7 @@ fn test_forced_crash_destructive_operation_stops() {
 /// Checks /proc/<pid>/status for the death signal configuration
 #[test]
 fn test_verify_pdeathsig_is_set() {
-    use archinstall_tui::process_guard::CommandProcessGroup;
+    use archtui::process_guard::CommandProcessGroup;
 
     let child = Command::new("sleep")
         .arg("100")
@@ -493,7 +493,7 @@ fn test_verify_pdeathsig_is_set() {
 /// Check that child's PGID equals its PID (new process group leader)
 #[test]
 fn test_verify_process_group_is_new() {
-    use archinstall_tui::process_guard::CommandProcessGroup;
+    use archtui::process_guard::CommandProcessGroup;
 
     let child = Command::new("sleep")
         .arg("100")
@@ -546,7 +546,7 @@ fn test_verify_process_group_is_new() {
 /// We then clean them up manually.
 #[test]
 fn test_doc_why_signal_handlers_required() {
-    use archinstall_tui::process_guard::CommandProcessGroup;
+    use archtui::process_guard::CommandProcessGroup;
 
     // Spawn bash WITHOUT signal handlers - this is what happens if lint rules are violated
     let parent = Command::new("bash")

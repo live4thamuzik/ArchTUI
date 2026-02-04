@@ -77,8 +77,8 @@ pub fn is_dry_run() -> bool {
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::script_traits::ScriptArgs;
-/// use archinstall_tui::scripts::disk::WipeDiskArgs;
+/// use archtui::script_traits::ScriptArgs;
+/// use archtui::scripts::disk::WipeDiskArgs;
 ///
 /// let args = WipeDiskArgs {
 ///     device: PathBuf::from("/dev/sda"),

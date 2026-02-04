@@ -1,10 +1,10 @@
-# ArchInstall TUI Safety Model
+# ArchTUI Safety Model
 
-This document provides a unified overview of the safety guarantees in ArchInstall TUI.
+This document provides a unified overview of the safety guarantees in ArchTUI.
 
 ## Overview
 
-ArchInstall TUI is designed with **defense in depth**. Multiple independent safety mechanisms ensure that:
+ArchTUI is designed with **defense in depth**. Multiple independent safety mechanisms ensure that:
 
 1. **No orphaned processes** can continue after the TUI exits
 2. **No unauthorized destruction** occurs without explicit confirmation
@@ -290,7 +290,7 @@ INSTALL_DISK=/dev/sda ./scripts/tools/wipe_disk.sh
 | Silent failures | set -euo pipefail + Result types | Runtime |
 | Unauthorized execution | Manifest validation | Pre-execution |
 
-ArchInstall TUI is designed so that **accidental data loss is structurally impossible** when using the TUI interface correctly.
+ArchTUI is designed so that **accidental data loss is structurally impossible** when using the TUI interface correctly.
 
 ---
 

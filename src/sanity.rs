@@ -83,7 +83,7 @@ pub fn verify_environment() -> SanityCheckResult {
 pub fn print_error_and_exit(result: &SanityCheckResult) -> ! {
     eprintln!();
     eprintln!("╔══════════════════════════════════════════════════════════════════╗");
-    eprintln!("║              ArchInstall TUI - Pre-flight Check Failed           ║");
+    eprintln!("║              ArchTUI - Pre-flight Check Failed           ║");
     eprintln!("╚══════════════════════════════════════════════════════════════════╝");
     eprintln!();
 
@@ -92,7 +92,7 @@ pub fn print_error_and_exit(result: &SanityCheckResult) -> ! {
         eprintln!("   This installer must be run as root to partition disks and install packages.");
         eprintln!();
         eprintln!("   Solution: Run with sudo or as root user:");
-        eprintln!("     sudo ./archinstall-tui");
+        eprintln!("     sudo ./archtui");
         eprintln!();
     }
 
@@ -150,9 +150,9 @@ pub fn run_preflight_checks() {
 }
 
 /// Skip root check (for development/testing)
-/// Set ARCHINSTALL_SKIP_ROOT_CHECK=1 to skip
+/// Set ARCHTUI_SKIP_ROOT_CHECK=1 to skip
 pub fn should_skip_root_check() -> bool {
-    std::env::var("ARCHINSTALL_SKIP_ROOT_CHECK")
+    std::env::var("ARCHTUI_SKIP_ROOT_CHECK")
         .map(|v| v == "1" || v.to_lowercase() == "true")
         .unwrap_or(false)
 }
@@ -165,7 +165,7 @@ pub fn run_preflight_checks_with_options(skip_root: bool) {
 
     // Allow skipping root check for development
     if skip_root || should_skip_root_check() {
-        log::warn!("Root check skipped (ARCHINSTALL_SKIP_ROOT_CHECK=1)");
+        log::warn!("Root check skipped (ARCHTUI_SKIP_ROOT_CHECK=1)");
         result.is_root = true; // Pretend we're root
     }
 

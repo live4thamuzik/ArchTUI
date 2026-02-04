@@ -6,7 +6,7 @@
 //!
 //! # Usage
 //! ```rust
-//! use archinstall_tui::theme::{Colors, Styles, Theme, LogLevel};
+//! use archtui::theme::{Colors, Styles, Theme, LogLevel};
 //! use ratatui::style::Style;
 //!
 //! // Use color constants

@@ -72,7 +72,7 @@ Preview destructive operations without executing them.
 **Usage:**
 ```bash
 export DRY_RUN=true
-./archinstall-tui install
+./archtui install
 ```
 
 **What's Previewed:**

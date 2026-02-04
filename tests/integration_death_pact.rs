@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use archinstall_tui::process_guard::CommandProcessGroup;
+use archtui::process_guard::CommandProcessGroup;
 
 /// Helper: Check if a process is alive (not dead or zombie)
 fn is_process_alive(pid: u32) -> bool {
@@ -250,7 +250,7 @@ fn test_death_pact_entire_tree_killed() {
 /// This is what happens when the TUI App struct is dropped
 #[test]
 fn test_death_pact_registry_terminate_all() {
-    use archinstall_tui::process_guard::ChildRegistry;
+    use archtui::process_guard::ChildRegistry;
 
     // Spawn multiple processes
     let mut pids = Vec::new();
@@ -380,7 +380,7 @@ fn test_death_pact_rapid_spawn_kill() {
 /// Test: Already-dead process doesn't cause errors in terminate_all
 #[test]
 fn test_death_pact_handles_already_dead() {
-    use archinstall_tui::process_guard::ChildRegistry;
+    use archtui::process_guard::ChildRegistry;
 
     // Spawn a process that exits immediately
     let mut child = Command::new("bash")
