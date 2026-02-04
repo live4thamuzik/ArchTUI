@@ -1,6 +1,6 @@
 # Process Safety Model
 
-This document describes how ArchInstall TUI guarantees that no child process survives the parent's termination.
+This document describes how ArchTUI guarantees that no child process survives the parent's termination.
 
 ## The Problem
 
@@ -19,7 +19,7 @@ This is unacceptable for an installer that performs destructive disk operations.
 
 ## The Solution: Death Pact
 
-ArchInstall TUI implements a "Death Pact" using two complementary mechanisms:
+ArchTUI implements a "Death Pact" using two complementary mechanisms:
 
 1. **PR_SET_PDEATHSIG**: Kernel-level automatic child termination
 2. **Process Group Signaling**: Application-level coordinated shutdown

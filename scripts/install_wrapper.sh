@@ -13,7 +13,7 @@ export LANG=C
 export LC_ALL=C
 
 # Signal to install.sh that we're running from the TUI
-export ARCHINSTALL_TUI=1
+export ARCHTUI_MODE=1
 
 # Redirect stderr to stdout so all output goes through the same pipe
 exec 2>&1

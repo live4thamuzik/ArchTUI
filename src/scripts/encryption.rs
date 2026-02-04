@@ -48,7 +48,7 @@ use crate::script_traits::ScriptArgs;
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::scripts::encryption::SecretFile;
+/// use archtui::scripts::encryption::SecretFile;
 ///
 /// let secret = SecretFile::new("my_password")?;
 /// // Use secret.path() for the keyfile path

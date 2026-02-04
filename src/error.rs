@@ -1,4 +1,4 @@
-//! Error handling module for the ArchInstall TUI
+//! Error handling module for the ArchTUI
 //!
 //! Provides centralized error handling with proper error types using thiserror.
 //! All errors in the application should use these types for consistency.
@@ -7,9 +7,9 @@
 
 use thiserror::Error;
 
-/// Main error type for the ArchInstall TUI
+/// Main error type for the ArchTUI
 #[derive(Error, Debug)]
-pub enum ArchInstallError {
+pub enum ArchTuiError {
     /// IO errors (file operations, terminal, etc.)
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -56,10 +56,10 @@ pub enum ArchInstallError {
 }
 
 /// Result type alias for ArchInstall operations
-pub type Result<T> = std::result::Result<T, ArchInstallError>;
+pub type Result<T> = std::result::Result<T, ArchTuiError>;
 
 // Convenient error constructors
-impl ArchInstallError {
+impl ArchTuiError {
     /// Create a configuration error
     pub fn config(msg: impl Into<String>) -> Self {
         Self::Config(msg.into())
@@ -107,8 +107,8 @@ impl ArchInstallError {
 }
 
 /// Helper function to create general errors (for backward compatibility)
-pub fn general_error(msg: impl Into<String>) -> ArchInstallError {
-    ArchInstallError::General(msg.into())
+pub fn general_error(msg: impl Into<String>) -> ArchTuiError {
+    ArchTuiError::General(msg.into())
 }
 
 #[cfg(test)]
@@ -117,26 +117,26 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = ArchInstallError::config("invalid hostname");
+        let err = ArchTuiError::config("invalid hostname");
         assert_eq!(err.to_string(), "Configuration error: invalid hostname");
 
-        let err = ArchInstallError::validation("password too short");
+        let err = ArchTuiError::validation("password too short");
         assert_eq!(err.to_string(), "Validation error: password too short");
     }
 
     #[test]
     fn test_io_error_conversion() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-        let err: ArchInstallError = io_err.into();
-        assert!(matches!(err, ArchInstallError::Io(_)));
+        let err: ArchTuiError = io_err.into();
+        assert!(matches!(err, ArchTuiError::Io(_)));
     }
 
     #[test]
     fn test_error_constructors() {
-        let err = ArchInstallError::script("script failed");
-        assert!(matches!(err, ArchInstallError::Script(_)));
+        let err = ArchTuiError::script("script failed");
+        assert!(matches!(err, ArchTuiError::Script(_)));
 
-        let err = ArchInstallError::system("command not found");
-        assert!(matches!(err, ArchInstallError::System(_)));
+        let err = ArchTuiError::system("command not found");
+        assert!(matches!(err, ArchTuiError::System(_)));
     }
 }

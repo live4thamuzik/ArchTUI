@@ -1,6 +1,6 @@
-# ArchInstall TUI Architecture
+# ArchTUI Architecture
 
-This document describes the architecture of ArchInstall TUI, a terminal-based Arch Linux installer designed with determinism, safety, and recoverability as core principles.
+This document describes the architecture of ArchTUI, a terminal-based Arch Linux installer designed with determinism, safety, and recoverability as core principles.
 
 ## 1. Design Goals
 
@@ -326,7 +326,7 @@ Disk operations use Bash because:
 
 ### 7.1 vs. Shell-Script Installers
 
-| Traditional | ArchInstall TUI |
+| Traditional | ArchTUI |
 |-------------|-----------------|
 | Scripts make decisions | Rust makes all decisions |
 | Interactive prompts | Environment-based confirmation |
@@ -336,7 +336,7 @@ Disk operations use Bash because:
 
 ### 7.2 vs. Python-Based Installers
 
-| Python Installer | ArchInstall TUI |
+| Python Installer | ArchTUI |
 |------------------|-----------------|
 | Runtime type errors | Compile-time type safety |
 | GC pauses during I/O | Predictable performance |

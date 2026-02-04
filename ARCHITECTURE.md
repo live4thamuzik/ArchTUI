@@ -1,10 +1,10 @@
-# ArchInstall TUI Architecture
+# ArchTUI Architecture
 
-This document describes the architecture and design of the ArchInstall TUI project.
+This document describes the architecture and design of the ArchTUI project.
 
 ## Overview
 
-ArchInstall TUI is a hybrid Rust/Bash application for installing Arch Linux. The architecture uses Rust for the terminal user interface (TUI) and orchestration, while leveraging Bash scripts for actual system operations.
+ArchTUI is a hybrid Rust/Bash application for installing Arch Linux. The architecture uses Rust for the terminal user interface (TUI) and orchestration, while leveraging Bash scripts for actual system operations.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

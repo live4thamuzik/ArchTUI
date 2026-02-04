@@ -95,7 +95,7 @@ impl Installer {
         let env_vars = self.config.to_env_vars();
 
         // Determine script path - use wrapper for TUI-friendly output
-        let script_path = std::env::var("ARCHINSTALL_SCRIPTS_DIR")
+        let script_path = std::env::var("ARCHTUI_SCRIPTS_DIR")
             .map(|dir| format!("{}/install_wrapper.sh", dir))
             .unwrap_or_else(|_| "./scripts/install_wrapper.sh".to_string());
 
@@ -285,8 +285,8 @@ impl Default for DiskLayout {
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::installer::{DiskLayout, prepare_disks};
-/// use archinstall_tui::types::Filesystem;
+/// use archtui::installer::{DiskLayout, prepare_disks};
+/// use archtui::types::Filesystem;
 /// use std::path::PathBuf;
 ///
 /// let layout = DiskLayout {
@@ -430,7 +430,7 @@ const BASE_PACKAGES: &[&str] = &["base", "linux", "linux-firmware", "base-devel"
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::installer::install_base_system;
+/// use archtui::installer::install_base_system;
 /// use std::path::Path;
 ///
 /// // After mounting /mnt
@@ -620,7 +620,7 @@ impl Default for SystemConfig {
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::installer::{SystemConfig, configure_system};
+/// use archtui::installer::{SystemConfig, configure_system};
 /// use std::path::PathBuf;
 ///
 /// let config = SystemConfig {
@@ -803,7 +803,7 @@ impl Default for EncryptionConfig {
 /// # Example
 ///
 /// ```ignore
-/// use archinstall_tui::installer::{encrypt_partition, EncryptionConfig};
+/// use archtui::installer::{encrypt_partition, EncryptionConfig};
 /// use std::path::PathBuf;
 ///
 /// let config = EncryptionConfig {

@@ -212,8 +212,8 @@ impl ScriptArgs for MountPartitionsArgs {
 ///
 /// ```
 /// use std::path::PathBuf;
-/// use archinstall_tui::scripts::disk::MountPartitionArgs;
-/// use archinstall_tui::script_traits::ScriptArgs;
+/// use archtui::scripts::disk::MountPartitionArgs;
+/// use archtui::script_traits::ScriptArgs;
 ///
 /// // Mount root partition
 /// let args = MountPartitionArgs {
@@ -412,8 +412,8 @@ impl std::error::Error for WipeMethodError {}
 ///
 /// ```
 /// use std::path::PathBuf;
-/// use archinstall_tui::scripts::disk::{WipeDiskArgs, WipeMethod};
-/// use archinstall_tui::script_traits::ScriptArgs;
+/// use archtui::scripts::disk::{WipeDiskArgs, WipeMethod};
+/// use archtui::script_traits::ScriptArgs;
 ///
 /// let args = WipeDiskArgs {
 ///     device: PathBuf::from("/dev/sda"),
