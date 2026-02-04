@@ -33,6 +33,7 @@ use std::path::PathBuf;
 
 use crate::cli::Cli;
 use crate::config_file::InstallationConfig;
+use crate::process_guard::CommandProcessGroup;
 use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
 use crate::scripts::disk::{
@@ -196,6 +197,7 @@ fn run_installer_with_config(
         .arg(config_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .in_new_process_group()
         .spawn()
         .map_err(|e| {
             error!("Failed to spawn installer script: {}", e);

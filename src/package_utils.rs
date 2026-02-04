@@ -1,4 +1,5 @@
 use crate::config::Package;
+use crate::process_guard::CommandProcessGroup;
 use std::process::Command;
 
 /// Search for pacman packages using pacman -Ss
@@ -17,6 +18,7 @@ pub fn search_pacman_packages(search_term: &str) -> Result<Vec<Package>, String>
 
     let output = Command::new("pacman")
         .args(["-Ss", search_term])
+        .in_new_process_group()
         .output()
         .map_err(|e| format!("Failed to run pacman: {}", e))?;
 
@@ -98,6 +100,7 @@ pub fn search_aur_packages(search_term: &str) -> Result<Vec<Package>, String> {
 
     let output = Command::new("curl")
         .args(["-s", &url])
+        .in_new_process_group()
         .output()
         .map_err(|e| format!("Failed to run curl: {}", e))?;
 

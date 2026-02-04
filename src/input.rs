@@ -3,6 +3,7 @@
 //! Handles different types of user input including popups, text input, and selection dialogs.
 
 use crate::config::Package;
+use crate::process_guard::CommandProcessGroup;
 use crate::types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
@@ -1408,6 +1409,7 @@ impl InputHandler {
         // Try to use lsblk to get disk information with more details
         if let Ok(output) = Command::new("lsblk")
             .args(["-d", "-n", "-o", "NAME,SIZE,TYPE,RO,TRAN"])
+            .in_new_process_group()
             .output()
         {
             let output_str = String::from_utf8_lossy(&output.stdout);
@@ -1539,6 +1541,7 @@ impl InputHandler {
         for disk in &disk_paths {
             if let Ok(output) = std::process::Command::new("lsblk")
                 .args(["-d", "-n", "-o", "SIZE", disk])
+                .in_new_process_group()
                 .output()
             {
                 let size_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -1624,6 +1627,7 @@ impl InputHandler {
                 .stdin(Stdio::inherit())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
+                .in_new_process_group()
                 .status();
 
             match status {
@@ -1692,6 +1696,7 @@ impl InputHandler {
         for disk in &disk_paths {
             if let Ok(output) = Command::new("lsblk")
                 .args(["-n", "-o", "NAME,TYPE,SIZE", disk])
+                .in_new_process_group()
                 .output()
             {
                 let output_str = String::from_utf8_lossy(&output.stdout);
@@ -1713,7 +1718,7 @@ impl InputHandler {
         if boot_mode.to_lowercase() == "uefi" {
             // Check for GPT partition table and ESP partition
             for disk in &disk_paths {
-                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("GPT") {
                         // Good, GPT partition table
@@ -1725,7 +1730,7 @@ impl InputHandler {
 
             // Check for ESP partition (EF00 type)
             for disk in &disk_paths {
-                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("EF00") || output_str.contains("EFI System") {
                         has_esp = true;
@@ -1742,7 +1747,7 @@ impl InputHandler {
         } else {
             // BIOS mode - check for MBR or GPT with BIOS Boot Partition
             for disk in &disk_paths {
-                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("MBR") || output_str.contains("DOS") {
                         has_boot = true; // MBR has boot sector
@@ -1763,7 +1768,7 @@ impl InputHandler {
 
         // Check for root partition (Linux filesystem)
         for disk in &disk_paths {
-            if let Ok(output) = Command::new("fdisk").args(["-l", disk]).output() {
+            if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
                 let output_str = String::from_utf8_lossy(&output.stdout);
                 if output_str.contains("8300") || output_str.contains("Linux filesystem") {
                     has_root = true;
@@ -1796,7 +1801,7 @@ impl InputHandler {
         let mut info_parts = Vec::<String>::new();
 
         // Check if disk is mounted (safety check)
-        if let Ok(output) = Command::new("mount").output() {
+        if let Ok(output) = Command::new("mount").in_new_process_group().output() {
             let output_str = String::from_utf8_lossy(&output.stdout);
             if output_str.contains(disk) {
                 info_parts.push("MOUNTED".to_string());
@@ -1806,6 +1811,7 @@ impl InputHandler {
         // Get disk model for RAID compatibility
         if let Ok(output) = Command::new("lsblk")
             .args(["-d", "-n", "-o", "MODEL", disk])
+            .in_new_process_group()
             .output()
         {
             let model = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -1815,7 +1821,7 @@ impl InputHandler {
         }
 
         // Get sector size for RAID compatibility
-        if let Ok(output) = Command::new("blockdev").args(["--getss", disk]).output() {
+        if let Ok(output) = Command::new("blockdev").args(["--getss", disk]).in_new_process_group().output() {
             if let Ok(sector_size) = String::from_utf8_lossy(&output.stdout)
                 .trim()
                 .parse::<u32>()

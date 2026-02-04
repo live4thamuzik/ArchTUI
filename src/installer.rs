@@ -21,6 +21,7 @@ use crate::app::AppState;
 use crate::config::Configuration;
 #[cfg(feature = "alpm")]
 use crate::package_manager::PackageManager;
+use crate::process_guard::CommandProcessGroup;
 use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
 use crate::scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
@@ -106,6 +107,7 @@ impl Installer {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .stdin(Stdio::null())
+            .in_new_process_group()
             .spawn()?;
 
         // Handle stdout in separate thread
