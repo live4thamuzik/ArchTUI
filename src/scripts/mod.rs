@@ -29,3 +29,4 @@ pub mod network;
 pub mod profiles;
 pub mod system;
 pub mod user;
+pub mod user_ops;
