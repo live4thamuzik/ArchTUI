@@ -12,24 +12,35 @@ use ratatui::widgets::ListState;
 use strum::IntoEnumIterator;
 
 /// Information about a partition
+///
+/// Used by manual partitioning flow to display partition details.
 #[derive(Debug, Clone)]
 pub struct PartitionInfo {
-    #[allow(dead_code)]
+    /// Partition device name (e.g., "sda1")
+    #[allow(dead_code)] // WIP: Manual partitioning UI
     pub name: String,
-    #[allow(dead_code)]
+    /// Human-readable size (e.g., "512M", "100G")
+    #[allow(dead_code)] // WIP: Manual partitioning UI
     pub size: String,
 }
 
 /// Layout information for manually partitioned disks
+///
+/// Tracks partition layout for validation before installation.
 #[derive(Debug, Clone)]
 pub struct PartitionLayout {
+    /// List of detected partitions
     pub partitions: Vec<PartitionInfo>,
+    /// Partition table type (gpt or dos)
     pub table_type: String,
-    #[allow(dead_code)]
+    /// Whether an EFI System Partition exists
+    #[allow(dead_code)] // WIP: Manual partitioning validation
     pub has_esp: bool,
-    #[allow(dead_code)]
+    /// Whether a /boot partition exists
+    #[allow(dead_code)] // WIP: Manual partitioning validation
     pub has_boot: bool,
-    #[allow(dead_code)]
+    /// Whether a root partition exists
+    #[allow(dead_code)] // WIP: Manual partitioning validation
     pub has_root: bool,
 }
 

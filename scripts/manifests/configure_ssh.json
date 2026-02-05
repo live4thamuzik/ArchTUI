@@ -1,0 +1,17 @@
+{
+  "script": "scripts/tools/configure_ssh.sh",
+  "description": "Configure SSH server settings including installation, port configuration, root login, and password authentication.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_SSH_CONFIG",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "SSH_PORT",
+      "description": "SSH port number",
+      "default": "22"
+    }
+  ]
+}

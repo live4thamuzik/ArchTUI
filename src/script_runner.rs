@@ -25,8 +25,9 @@
 
 use crate::process_guard::{ChildRegistry, CommandProcessGroup};
 use crate::script_traits::{is_dry_run, ScriptArgs};
-use anyhow::{Context, Result};
-use log::info;
+use anyhow::{bail, Context, Result};
+use log::{info, warn};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 /// Execute a tool script with type-safe arguments.
@@ -76,6 +77,13 @@ use std::process::{Command, Stdio};
 pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     let script_name = args.script_name();
     let script_path = format!("scripts/tools/{}", script_name);
+
+    // Validate script exists before attempting execution
+    if !Path::new(&script_path).exists() {
+        warn!("Script not found: {}", script_path);
+        bail!("Script not found: {}. Ensure scripts/tools/ directory is accessible.", script_name);
+    }
+
     let cli_args = args.to_cli_args();
     let env_vars = args.get_env_vars();
 
@@ -142,8 +150,10 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     // Register PID for cleanup on parent exit
     {
         let registry = ChildRegistry::global();
-        // Lock is held briefly, panic is acceptable if poisoned
-        let mut guard = registry.lock().expect("ChildRegistry mutex poisoned");
+        // Recover from poison - the registry state is still usable
+        let mut guard = registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.register(pid);
     }
 
@@ -155,7 +165,10 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     // Unregister PID after completion
     {
         let registry = ChildRegistry::global();
-        let mut guard = registry.lock().expect("ChildRegistry mutex poisoned");
+        // Recover from poison - the registry state is still usable
+        let mut guard = registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         guard.unregister(pid);
     }
 
@@ -198,13 +211,13 @@ pub struct ScriptOutput {
     pub success: bool,
     /// Whether this was a dry-run (script not actually executed).
     /// Callers can check this to know if the output is real or simulated.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // API: Checked by callers to distinguish real vs simulated output
     pub dry_run: bool,
 }
 
 impl ScriptOutput {
     /// Check if the script succeeded and return an error if not.
-    #[allow(dead_code)] // Used by installer::prepare_disks
+    #[allow(dead_code)] // API: Used by installer::prepare_disks and script_execution_tests
     pub fn ensure_success(&self, context: &str) -> Result<()> {
         if self.success {
             Ok(())

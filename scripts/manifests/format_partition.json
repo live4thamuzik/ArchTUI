@@ -1,0 +1,11 @@
+{
+  "script": "scripts/tools/format_partition.sh",
+  "description": "Format a partition with a specified filesystem type. Supports ext4, xfs, btrfs, fat32, and ntfs.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_FORMAT_PARTITION",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": []
+}

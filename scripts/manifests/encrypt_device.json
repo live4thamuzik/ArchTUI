@@ -1,0 +1,11 @@
+{
+  "script": "scripts/tools/encrypt_device.sh",
+  "description": "LUKS2 encryption operations: format a device with encryption, open/unlock, or close/lock encrypted volumes.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_LUKS_FORMAT",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": []
+}

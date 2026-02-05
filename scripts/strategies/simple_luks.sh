@@ -1,5 +1,5 @@
 #!/bin/bash
-# simple_luks.sh - Simple LUKS partitioning strategy with ESP + XBOOTLDR (UEFI) or boot partition (BIOS)
+# simple_luks.sh - Simple LUKS partitioning strategy (ESP + boot + encrypted root/home)
 set -euo pipefail
 
 # Source common utilities via source_or_die
@@ -9,29 +9,42 @@ source_or_die "$SCRIPT_DIR/../disk_utils.sh"
 
 # Execute simple LUKS partitioning strategy
 execute_simple_luks_partitioning() {
-    echo "=== PHASE 1: Simple LUKS Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting simple LUKS partitioning with ESP + XBOOTLDR for $INSTALL_DISK..."
-    
+    echo "=== PHASE 1: Simple LUKS Partitioning ==="
+    log_info "Starting simple LUKS partitioning for $INSTALL_DISK..."
+
+    # Setup cleanup trap for error recovery
+    setup_partitioning_trap
+
     # Validate requirements
     validate_partitioning_requirements
+
+    # Dual-boot detection
+    if detect_other_os; then
+        export OS_PROBER="yes"
+    fi
 
     # Wipe disk with explicit confirmation
     wipe_disk "$INSTALL_DISK" "CONFIRMED"
 
     local current_start_mib=1
     local part_num=1
-    
+    local esp_part_num=0
+    local boot_part_num=0
+    local luks_part_num=0
+
     # Create partition table
     create_partition_table "$INSTALL_DISK"
-    
-    # ESP Partition (for UEFI only) - mounted to /efi
+
+    # ESP Partition (for UEFI only) - 512MB FAT32 at /efi
     if [ "$BOOT_MODE" = "UEFI" ]; then
-        create_esp_partition "$INSTALL_DISK" "$part_num" "100"
-        current_start_mib=$((current_start_mib + 100))
+        esp_part_num=$part_num
+        create_esp_partition "$INSTALL_DISK" "$part_num" "512"
+        current_start_mib=$((current_start_mib + 512))
         part_num=$((part_num + 1))
 
-        # XBOOTLDR Partition - mounted to /boot
-        create_xbootldr_partition "$INSTALL_DISK" "$part_num" "1024"
+        # Boot partition - 1GB ext4 at /boot (unencrypted for bootloader)
+        boot_part_num=$part_num
+        create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
     else
@@ -40,7 +53,8 @@ execute_simple_luks_partitioning() {
         current_start_mib=$((current_start_mib + BIOS_BOOT_PART_SIZE_MIB))
         part_num=$((part_num + 1))
 
-        # Boot partition - mounted to /boot
+        # Boot partition - 1GB ext4 at /boot
+        boot_part_num=$part_num
         create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
@@ -55,6 +69,7 @@ execute_simple_luks_partitioning() {
     fi
     
     # LUKS partition (for root and optionally home)
+    luks_part_num=$part_num
     log_info "Creating LUKS partition..."
 
     # Use sgdisk for both UEFI and BIOS (GPT works with both)
@@ -66,7 +81,7 @@ execute_simple_luks_partitioning() {
     sync_partitions "$INSTALL_DISK"
 
     local luks_dev
-    luks_dev=$(get_partition_path "$INSTALL_DISK" "$part_num")
+    luks_dev=$(get_partition_path "$INSTALL_DISK" "$luks_part_num")
 
     # Verify partition exists before proceeding
     if [[ ! -b "$luks_dev" ]]; then
@@ -131,6 +146,36 @@ execute_simple_luks_partitioning() {
         safe_mount "/dev/mapper/crypthome" "/mnt/home"
     fi
     
+    # Mount boot and ESP partitions
+    log_info "Mounting boot and ESP partitions..."
+    mkdir -p /mnt/boot /mnt/efi
+
+    local boot_device
+    boot_device=$(get_partition_path "$INSTALL_DISK" "$boot_part_num")
+    safe_mount "$boot_device" "/mnt/boot"
+
+    if [ "$BOOT_MODE" = "UEFI" ]; then
+        local esp_device
+        esp_device=$(get_partition_path "$INSTALL_DISK" "$esp_part_num")
+        safe_mount "$esp_device" "/mnt/efi"
+        export EFI_DEVICE="$esp_device"
+    fi
+
+    # Capture UUIDs for bootloader config
+    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot")
+    LUKS_UUID=$(get_device_uuid "$luks_dev")
+    export ROOT_UUID LUKS_UUID
+
+    # Capture swap UUID if swap exists
+    if [ "$WANT_SWAP" = "yes" ]; then
+        # Find swap partition (it's before the LUKS partition)
+        local swap_part_num=$((luks_part_num - 1))
+        local swap_device
+        swap_device=$(get_partition_path "$INSTALL_DISK" "$swap_part_num")
+        SWAP_UUID=$(get_device_uuid "$swap_device")
+        export SWAP_UUID
+    fi
+
     # Generate crypttab entries for boot-time unlocking
     log_info "Generating crypttab entries..."
     mkdir -p /mnt/etc
@@ -139,5 +184,5 @@ execute_simple_luks_partitioning() {
         generate_crypttab "$luks_home_dev" "crypthome"
     fi
 
-    log_partitioning_complete "Simple LUKS ESP + XBOOTLDR"
+    log_partitioning_complete "Simple LUKS (ESP + boot + encrypted root)"
 }
