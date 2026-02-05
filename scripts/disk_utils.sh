@@ -447,6 +447,7 @@ validate_partitioning_requirements() {
 
 # Detect existing EFI System Partition on any disk
 # Returns: ESP device path if found, empty if not
+# shellcheck disable=SC2120  # Optional argument - may be called with or without disk parameter
 detect_existing_esp() {
     local target_disk="${1:-}"
 
@@ -483,11 +484,13 @@ detect_existing_esp() {
 
 # Detect if Windows is installed (check for Windows Boot Manager in ESP)
 # Returns: 0 if Windows found, 1 if not
+# shellcheck disable=SC2120  # Optional argument - may be called with or without ESP device
 detect_windows_installation() {
     local esp_device="${1:-}"
 
     # If no ESP provided, try to find one
     if [[ -z "$esp_device" ]]; then
+        # shellcheck disable=SC2119  # Intentional call without argument
         esp_device=$(detect_existing_esp)
     fi
 
@@ -528,6 +531,7 @@ detect_other_os() {
     local other_os_found=1
 
     # Check for Windows
+    # shellcheck disable=SC2119  # Intentional call without argument
     if detect_windows_installation; then
         other_os_found=0
     fi
