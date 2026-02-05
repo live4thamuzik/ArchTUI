@@ -1,0 +1,37 @@
+{
+  "script": "scripts/tools/configure_network.sh",
+  "description": "Configure network interface settings. Supports DHCP, static IP configuration, enabling/disabling interfaces, and status information.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_NETWORK_CONFIG",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "NETWORK_INTERFACE",
+      "description": "Network interface name (e.g., eth0, enp0s3)",
+      "default": ""
+    },
+    {
+      "name": "NETWORK_IP",
+      "description": "Static IP address for the interface",
+      "default": ""
+    },
+    {
+      "name": "NETWORK_NETMASK",
+      "description": "Network mask (e.g., 255.255.255.0 or /24)",
+      "default": "24"
+    },
+    {
+      "name": "NETWORK_GATEWAY",
+      "description": "Default gateway address",
+      "default": ""
+    },
+    {
+      "name": "NETWORK_DNS",
+      "description": "DNS servers (comma-separated)",
+      "default": ""
+    }
+  ]
+}

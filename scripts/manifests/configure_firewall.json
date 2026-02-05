@@ -1,0 +1,11 @@
+{
+  "script": "scripts/tools/configure_firewall.sh",
+  "description": "Configure firewall rules using iptables or UFW. Supports enabling, disabling, managing ports, and viewing status.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_FIREWALL_CHANGE",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": []
+}

@@ -1,0 +1,10 @@
+{
+  "script": "scripts/tools/system_info.sh",
+  "description": "Display comprehensive system information including hardware, network, storage, and environment details.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": []
+}

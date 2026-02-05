@@ -290,6 +290,12 @@ enable_base_services() {
     # SSD trim timer (good for SSDs)
     systemctl enable fstrim.timer 2>/dev/null || true
 
+    # Bluetooth support
+    systemctl enable bluetooth.service 2>/dev/null || log_warn "bluetooth service not found"
+
+    # Avahi mDNS/DNS-SD (network discovery)
+    systemctl enable avahi-daemon.service 2>/dev/null || log_warn "avahi-daemon service not found"
+
     log_success "Base services enabled"
 }
 
@@ -301,9 +307,31 @@ configure_mkinitcpio() {
     log_info "Configuring mkinitcpio..."
 
     # Build hooks list based on configuration
-    # Hook order matters! The order is:
-    # base udev autodetect modconf kms keyboard keymap consolefont block [mdadm_udev] [encrypt] [lvm2] [resume] filesystems [fsck]
-    local hooks="base udev autodetect modconf kms keyboard keymap consolefont block"
+    # Correct hook order per Arch Wiki (2024+):
+    # https://wiki.archlinux.org/title/Mkinitcpio
+    # https://wiki.archlinux.org/title/Dm-crypt/System_configuration
+    #
+    # Standard: base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck
+    # Encrypted: base udev autodetect microcode modconf kms keyboard keymap consolefont block [plymouth] encrypt [lvm2] [resume] filesystems [fsck]
+    #
+    # Key requirements per wiki:
+    # - microcode: AFTER autodetect (so autodetect can filter to current CPU only)
+    # - keyboard/keymap/consolefont: BEFORE encrypt (so keyboard works for password entry)
+    # - plymouth: BEFORE encrypt (for graphical password prompt)
+    # - For hardware compatibility (varying keyboards): keyboard BEFORE autodetect
+    #
+    # We use keyboard before autodetect for maximum hardware compatibility
+    local hooks=""
+
+    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        # Encrypted: keyboard before autodetect for hardware compatibility
+        # This ensures keyboard works even if booting on different hardware than image was built on
+        hooks="base udev keyboard keymap consolefont autodetect microcode modconf kms block"
+        log_info "Using encrypted system hook order (keyboard before autodetect for compatibility)"
+    else
+        # Non-encrypted: standard wiki order
+        hooks="base udev autodetect microcode modconf kms keyboard keymap consolefont block"
+    fi
 
     # Add RAID hook if using RAID (must come before encrypt/lvm2)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
@@ -316,6 +344,13 @@ configure_mkinitcpio() {
         fi
     fi
 
+    # Add Plymouth hook BEFORE encrypt (per Arch Wiki: "place plymouth before the encrypt hook")
+    # Do NOT use deprecated plymouth-encrypt - use separate hooks
+    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        hooks="$hooks plymouth"
+        log_info "Added plymouth hook (before encrypt per Arch Wiki)"
+    fi
+
     # Add encryption hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
     if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         hooks="$hooks encrypt"
@@ -326,19 +361,6 @@ configure_mkinitcpio() {
     if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
         hooks="$hooks lvm2"
         log_info "Added lvm2 hook"
-    fi
-
-    # Add Plymouth hook if enabled (must come after encrypt for plymouth-encrypt)
-    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
-        # Use plymouth-encrypt if encryption is enabled, otherwise just plymouth
-        if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-            # Replace encrypt with plymouth-encrypt for integrated password prompt
-            hooks="${hooks/encrypt/plymouth-encrypt}"
-            log_info "Using plymouth-encrypt hook for encrypted Plymouth"
-        else
-            hooks="$hooks plymouth"
-            log_info "Added plymouth hook"
-        fi
     fi
 
     # Add resume hook for hibernation (if swap exists)
@@ -370,6 +392,15 @@ configure_mkinitcpio() {
                 # Clean up double spaces
                 sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf
                 log_info "Added btrfs module to mkinitcpio.conf"
+            fi
+        fi
+
+        # Add amdgpu module for early KMS if AMD GPU detected
+        if lspci 2>/dev/null | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
+            if ! grep -q "amdgpu" /etc/mkinitcpio.conf; then
+                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 amdgpu)/' /etc/mkinitcpio.conf
+                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf
+                log_info "Added amdgpu module for early KMS"
             fi
         fi
 
@@ -439,9 +470,43 @@ install_systemd_boot() {
         return 1
     fi
 
-    # Determine ESP path
-    local esp_path="/efi"
-    if [[ ! -d "$esp_path" ]]; then
+    # systemd-boot can only read FAT32 partitions
+    # Two valid configurations:
+    # 1. ESP mounted at /boot (kernels on ESP) - simpler
+    # 2. ESP at /efi + /boot on ESP too (bind mount or same partition)
+    #
+    # NOT VALID: ESP at /efi + ext4 /boot (systemd-boot can't read ext4)
+
+    local esp_path=""
+    local boot_on_esp="no"
+
+    # Check if /boot is on ESP (FAT32)
+    local boot_fstype
+    boot_fstype=$(findmnt -n -o FSTYPE /boot 2>/dev/null || echo "")
+
+    if [[ "$boot_fstype" == "vfat" ]]; then
+        # /boot is FAT32 - ESP is mounted at /boot
+        esp_path="/boot"
+        boot_on_esp="yes"
+        log_info "ESP mounted at /boot - compatible with systemd-boot"
+    elif [[ -d "/efi" ]]; then
+        # Check if /efi exists and /boot is ext4
+        local efi_fstype
+        efi_fstype=$(findmnt -n -o FSTYPE /efi 2>/dev/null || echo "")
+        if [[ "$efi_fstype" == "vfat" && "$boot_fstype" == "ext4" ]]; then
+            log_error "systemd-boot incompatible with current layout!"
+            log_error "ESP is at /efi (FAT32) but /boot is ext4"
+            log_error "systemd-boot cannot read ext4 - kernels must be on FAT32"
+            log_error "Options:"
+            log_error "  1. Use GRUB instead (works with separate /boot)"
+            log_error "  2. Mount ESP at /boot (put kernels on ESP)"
+            log_warn "Falling back to GRUB for this installation"
+            export BOOTLOADER="grub"
+            install_grub
+            return $?
+        fi
+        esp_path="/efi"
+    else
         esp_path="/boot"
     fi
 
@@ -456,17 +521,70 @@ install_systemd_boot() {
     # Get root partition UUID
     local root_uuid="${ROOT_UUID:-}"
     if [[ -z "$root_uuid" ]]; then
-        # Try to detect it
         root_uuid=$(findmnt -n -o UUID /)
     fi
 
+    # Build options line
+    local options=""
+
+    # Handle encryption
+    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        if [[ -n "${LUKS_UUID:-}" ]]; then
+            local mapper_name="cryptroot"
+            [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
+            options="cryptdevice=UUID=${LUKS_UUID}:${mapper_name} root=/dev/mapper/${mapper_name}"
+        else
+            options="root=UUID=${root_uuid}"
+            log_warn "LUKS_UUID not set for encrypted system"
+        fi
+    else
+        options="root=UUID=${root_uuid}"
+    fi
+
+    # Add Btrfs rootflags
+    if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" == "btrfs" ]]; then
+        options="$options rootflags=subvol=@"
+    fi
+
+    options="$options rw"
+
+    # Resume for hibernation
+    if [[ "${WANT_SWAP:-no}" == "yes" && -n "${SWAP_UUID:-}" ]]; then
+        options="$options resume=UUID=${SWAP_UUID}"
+    fi
+
+    options="$options quiet"
+
+    # Plymouth splash
+    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        options="$options splash"
+    fi
+
+    # Microcode
+    local microcode_initrd=""
+    if [[ -f "${esp_path}/intel-ucode.img" ]]; then
+        microcode_initrd="intel-ucode.img"
+    elif [[ -f "${esp_path}/amd-ucode.img" ]]; then
+        microcode_initrd="amd-ucode.img"
+    fi
+
     # Create arch.conf entry
-    cat > "${esp_path}/loader/entries/arch.conf" << EOF
-title   Arch Linux
-linux   /vmlinuz-${KERNEL:-linux}
-initrd  /initramfs-${KERNEL:-linux}.img
-options root=UUID=${root_uuid} rw quiet
-EOF
+    {
+        echo "title   Arch Linux"
+        echo "linux   /vmlinuz-${KERNEL:-linux}"
+        [[ -n "$microcode_initrd" ]] && echo "initrd  /$microcode_initrd"
+        echo "initrd  /initramfs-${KERNEL:-linux}.img"
+        echo "options $options"
+    } > "${esp_path}/loader/entries/arch.conf"
+
+    # Create fallback entry
+    {
+        echo "title   Arch Linux (fallback)"
+        echo "linux   /vmlinuz-${KERNEL:-linux}"
+        [[ -n "$microcode_initrd" ]] && echo "initrd  /$microcode_initrd"
+        echo "initrd  /initramfs-${KERNEL:-linux}-fallback.img"
+        echo "options $options"
+    } > "${esp_path}/loader/entries/arch-fallback.conf"
 
     # Create loader.conf
     cat > "${esp_path}/loader/loader.conf" << EOF
@@ -476,7 +594,14 @@ console-mode max
 editor no
 EOF
 
-    log_success "systemd-boot installed"
+    # Add Windows entry if detected (systemd-boot auto-detects, but explicit is safer)
+    if [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+        log_info "Adding Windows Boot Manager entry for systemd-boot"
+        # systemd-boot auto-detects Windows, but we can add explicit entry
+        # Windows is usually auto-detected from \EFI\Microsoft\Boot\bootmgfw.efi
+    fi
+
+    log_success "systemd-boot installed at $esp_path"
 }
 
 configure_grub_settings() {
@@ -526,10 +651,37 @@ configure_grub_settings() {
     # Update GRUB_CMDLINE_LINUX_DEFAULT
     sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"/" "$grub_default"
 
-    # Enable os-prober if requested
-    if [[ "${OS_PROBER:-no}" == "yes" ]]; then
+    # Enable os-prober if requested OR if other OS was detected during partitioning
+    # This ensures dual-boot is properly configured even if user forgot to enable it
+    if [[ "${OS_PROBER:-no}" == "yes" ]] || [[ "${OTHER_OS_DETECTED:-}" == "yes" ]] || [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+        log_info "Enabling os-prober for dual-boot detection"
         if ! grep -q "^GRUB_DISABLE_OS_PROBER=false" "$grub_default"; then
             echo "GRUB_DISABLE_OS_PROBER=false" >> "$grub_default"
+        fi
+
+        # Install os-prober if not present
+        if ! command -v os-prober &>/dev/null; then
+            pacman -S --noconfirm --needed os-prober || log_warn "Failed to install os-prober"
+        fi
+    fi
+
+    # Add explicit Windows chainload entry if Windows was detected
+    # This provides a fallback if os-prober doesn't detect it
+    if [[ "${WINDOWS_DETECTED:-}" == "yes" && -n "${WINDOWS_EFI_PATH:-}" ]]; then
+        log_info "Adding Windows Boot Manager chainload entry"
+        # The entry will be in /etc/grub.d/40_custom
+        if [[ ! -f /etc/grub.d/40_custom ]] || ! grep -q "Windows Boot Manager" /etc/grub.d/40_custom; then
+            cat >> /etc/grub.d/40_custom << 'WINEOF'
+
+menuentry "Windows Boot Manager" {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    search --no-floppy --fs-uuid --set=root $hints_string $fs_uuid
+    chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+}
+WINEOF
+            log_info "Added Windows chainload entry to 40_custom"
         fi
     fi
 
@@ -540,6 +692,9 @@ configure_grub_settings() {
         fi
     fi
 
+    # Configure GRUB theme if requested
+    configure_grub_theme
+
     # Generate GRUB config
     grub-mkconfig -o /boot/grub/grub.cfg || {
         log_warn "grub-mkconfig failed, trying alternate path"
@@ -547,6 +702,109 @@ configure_grub_settings() {
     }
 
     log_success "GRUB configured"
+}
+
+configure_grub_theme() {
+    if [[ "${GRUB_THEME:-No}" != "Yes" ]]; then
+        log_info "GRUB theme not requested"
+        return 0
+    fi
+
+    local theme_name="${GRUB_THEME_SELECTION:-none}"
+    if [[ "$theme_name" == "none" || -z "$theme_name" ]]; then
+        log_info "No GRUB theme selected"
+        return 0
+    fi
+
+    log_info "Configuring GRUB theme: $theme_name"
+
+    local theme_dir="/boot/grub/themes/${theme_name}"
+    local grub_default="/etc/default/grub"
+
+    # Check potential theme sources (in order of preference)
+    local theme_sources=(
+        "/usr/share/archtui/themes/${theme_name}"
+        "/root/themes/${theme_name}"
+        "/usr/share/grub/themes/${theme_name}"
+    )
+
+    local source_found=""
+    for source_theme in "${theme_sources[@]}"; do
+        if [[ -d "$source_theme" ]]; then
+            source_found="$source_theme"
+            break
+        fi
+    done
+
+    if [[ -n "$source_found" ]]; then
+        # Copy from local source
+        log_info "Installing theme from: $source_found"
+        mkdir -p /boot/grub/themes
+        cp -r "$source_found" "$theme_dir"
+    else
+        # Try to install from AUR/community packages
+        log_info "Theme not found locally, attempting package installation..."
+
+        # Common GRUB theme packages
+        case "${theme_name,,}" in
+            "poly-dark"|"polydark")
+                pacman -S --noconfirm --needed grub-theme-poly-dark 2>/dev/null || {
+                    log_warn "Package grub-theme-poly-dark not available"
+                }
+                ;;
+            "vimix")
+                pacman -S --noconfirm --needed grub-theme-vimix 2>/dev/null || {
+                    log_warn "Package grub-theme-vimix not available"
+                }
+                ;;
+            "stylish")
+                pacman -S --noconfirm --needed grub-theme-stylish 2>/dev/null || {
+                    log_warn "Package grub-theme-stylish not available"
+                }
+                ;;
+            *)
+                log_warn "Unknown theme package for: $theme_name"
+                ;;
+        esac
+
+        # Check if theme was installed by package
+        local pkg_theme_dirs=(
+            "/usr/share/grub/themes/${theme_name}"
+            "/boot/grub/themes/${theme_name}"
+        )
+        for pkg_dir in "${pkg_theme_dirs[@]}"; do
+            if [[ -d "$pkg_dir" ]]; then
+                if [[ "$pkg_dir" != "$theme_dir" ]]; then
+                    mkdir -p /boot/grub/themes
+                    cp -r "$pkg_dir" "$theme_dir"
+                fi
+                source_found="$pkg_dir"
+                break
+            fi
+        done
+    fi
+
+    # Verify theme was installed and has theme.txt
+    if [[ -f "${theme_dir}/theme.txt" ]]; then
+        # Update GRUB config to use the theme
+        if grep -q "^GRUB_THEME=" "$grub_default"; then
+            sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"${theme_dir}/theme.txt\"|" "$grub_default"
+        else
+            echo "GRUB_THEME=\"${theme_dir}/theme.txt\"" >> "$grub_default"
+        fi
+
+        # Also set gfxmode for better theme rendering
+        if ! grep -q "^GRUB_GFXMODE=" "$grub_default"; then
+            echo "GRUB_GFXMODE=auto" >> "$grub_default"
+        fi
+
+        log_success "GRUB theme configured: $theme_name"
+    else
+        log_warn "Theme installation failed or theme.txt not found for: $theme_name"
+        return 1
+    fi
+
+    return 0
 }
 
 configure_secure_boot() {
@@ -977,8 +1235,8 @@ configure_snapper() {
         return 0
     fi
 
-    # Check if filesystem is btrfs
-    if [[ "${FILESYSTEM:-}" != "btrfs" ]]; then
+    # Check if filesystem is btrfs (use ROOT_FILESYSTEM_TYPE, not FILESYSTEM)
+    if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" != "btrfs" ]]; then
         log_info "Snapper requires btrfs filesystem, skipping"
         return 0
     fi
@@ -1034,16 +1292,55 @@ configure_snapper() {
         # Set timeline settings for automatic snapshots
         sed -i 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' /etc/snapper/configs/root
         sed -i 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' /etc/snapper/configs/root
-
-        # Keep reasonable number of snapshots
         sed -i 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY="5"/' /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY="7"/' /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY="0"/' /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY="0"/' /etc/snapper/configs/root
+
+        # Map user's frequency preference to snapper timeline settings
+        local keep_count="${BTRFS_KEEP_COUNT:-3}"
+        local frequency="${BTRFS_FREQUENCY:-weekly}"
+
+        # Reset all limits to 0 first, then set based on frequency
+        local hourly_limit="0"
+        local daily_limit="0"
+        local weekly_limit="0"
+        local monthly_limit="0"
+
+        case "${frequency,,}" in
+            hourly)
+                hourly_limit="$keep_count"
+                log_info "Snapper: keeping $keep_count hourly snapshots"
+                ;;
+            daily)
+                daily_limit="$keep_count"
+                log_info "Snapper: keeping $keep_count daily snapshots"
+                ;;
+            weekly)
+                weekly_limit="$keep_count"
+                log_info "Snapper: keeping $keep_count weekly snapshots"
+                ;;
+            monthly)
+                monthly_limit="$keep_count"
+                log_info "Snapper: keeping $keep_count monthly snapshots"
+                ;;
+            *)
+                # Default to weekly if unknown
+                weekly_limit="$keep_count"
+                log_warn "Unknown frequency '$frequency', defaulting to weekly"
+                ;;
+        esac
+
+        sed -i "s/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY=\"$hourly_limit\"/" /etc/snapper/configs/root
+        sed -i "s/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY=\"$daily_limit\"/" /etc/snapper/configs/root
+        sed -i "s/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY=\"$weekly_limit\"/" /etc/snapper/configs/root
+        sed -i "s/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY=\"$monthly_limit\"/" /etc/snapper/configs/root
         sed -i 's/^TIMELINE_LIMIT_YEARLY=.*/TIMELINE_LIMIT_YEARLY="0"/' /etc/snapper/configs/root
 
-        log_info "Configured snapper timeline settings"
+        log_info "Configured snapper timeline settings (frequency: $frequency, keep: $keep_count)"
+    fi
+
+    # Install btrfs-assistant if requested
+    if [[ "${BTRFS_ASSISTANT:-No}" == "Yes" ]]; then
+        log_info "Installing btrfs-assistant..."
+        pacman -S --noconfirm --needed btrfs-assistant || log_warn "Failed to install btrfs-assistant"
     fi
 
     # Enable snapper timers

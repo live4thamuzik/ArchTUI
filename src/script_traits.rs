@@ -45,7 +45,7 @@ pub fn enable_dry_run() {
 /// Disable dry-run mode globally.
 ///
 /// Used in tests and when toggling dry-run mode dynamically.
-#[allow(dead_code)]
+#[allow(dead_code)] // Test utility: Complements enable_dry_run() for test cleanup
 pub fn disable_dry_run() {
     DRY_RUN.store(false, Ordering::SeqCst);
 }

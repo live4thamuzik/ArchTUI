@@ -81,13 +81,13 @@ pub struct InstallationConfig {
 
 impl InstallationConfig {
     /// Create a new empty configuration with sensible defaults
-    #[allow(dead_code)] // API method available for external use
+    #[allow(dead_code)] // API: Constructor for external consumers
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Save configuration to a JSON file
-    #[allow(dead_code)]
+    #[allow(dead_code)] // API: Used by --save-config CLI option
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let json = serde_json::to_string_pretty(self)
             .context("Failed to serialize configuration to JSON")?;
@@ -194,7 +194,7 @@ impl InstallationConfig {
     }
 
     /// Convert to environment variables for Bash scripts
-    #[allow(dead_code)]
+    #[allow(dead_code)] // API: Used when passing config to install scripts
     pub fn to_env_vars(&self) -> Vec<(String, String)> {
         vec![
             ("BOOT_MODE".to_string(), self.boot_mode.to_string()),

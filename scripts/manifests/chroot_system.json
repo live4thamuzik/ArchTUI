@@ -1,0 +1,16 @@
+{
+  "script": "scripts/tools/chroot_system.sh",
+  "description": "Chroot into a mounted Linux system. Automatically mounts /proc, /sys, /dev, and /dev/pts.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": true,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "ROOT_PATH",
+      "description": "Root directory to chroot into",
+      "default": "/mnt"
+    }
+  ]
+}

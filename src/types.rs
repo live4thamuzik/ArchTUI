@@ -64,7 +64,7 @@ pub enum PartitionScheme {
     Manual,
 }
 
-#[allow(dead_code)] // Methods available for future use
+#[allow(dead_code)] // API: Utility methods for partition strategy selection logic
 impl PartitionScheme {
     /// Check if this scheme requires RAID (multiple disks)
     pub fn requires_raid(&self) -> bool {
@@ -188,7 +188,7 @@ pub enum Toggle {
     No,
 }
 
-#[allow(dead_code)] // Method available for future use
+#[allow(dead_code)] // API: Convenience method for Toggle → bool conversion
 impl Toggle {
     /// Convert to boolean
     pub fn as_bool(&self) -> bool {

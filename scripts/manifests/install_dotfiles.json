@@ -1,0 +1,22 @@
+{
+  "script": "scripts/tools/install_dotfiles.sh",
+  "description": "Clone and install dotfiles from a Git repository to a user's home directory. Supports branch selection and backup of existing files.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_INSTALL_DOTFILES",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "DOTFILES_REPO",
+      "description": "Git repository URL for dotfiles (https:// or git://)",
+      "default": ""
+    },
+    {
+      "name": "DOTFILES_BRANCH",
+      "description": "Branch to clone from the repository",
+      "default": ""
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "script": "scripts/tools/add_user.sh",
+  "description": "Create a new user account with optional groups, shell, and home directory configuration.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_ADD_USER",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "USER_PASSWORD",
+      "description": "Password for the new user (if not set, user will have no password)",
+      "default": ""
+    }
+  ]
+}

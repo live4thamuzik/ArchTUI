@@ -488,6 +488,7 @@ install_base_system() {
         "base"
         "base-devel"
         "linux-firmware"
+        "sof-firmware"  # For modern onboard audio (Sound Open Firmware)
         "$KERNEL"
         "${KERNEL}-headers"
     )
@@ -507,6 +508,12 @@ install_base_system() {
         "man-db"
         "man-pages"
         "texinfo"
+        # Bluetooth support
+        "bluez"
+        "bluez-utils"
+        # Network discovery (mDNS/Bonjour)
+        "avahi"
+        "nss-mdns"
     )
 
     # Add filesystem tools based on selected filesystems
@@ -680,9 +687,15 @@ export ENCRYPTION="$ENCRYPTION"
 export ROOT_FILESYSTEM="$ROOT_FILESYSTEM"
 export HOME_FILESYSTEM="$HOME_FILESYSTEM"
 export BTRFS_SNAPSHOTS="$BTRFS_SNAPSHOTS"
+export BTRFS_FREQUENCY="$BTRFS_FREQUENCY"
+export BTRFS_KEEP_COUNT="$BTRFS_KEEP_COUNT"
+export BTRFS_ASSISTANT="$BTRFS_ASSISTANT"
 export SWAP="$SWAP"
+export WANT_SWAP="$WANT_SWAP"
+export SWAP_UUID="${SWAP_UUID:-}"
 export ROOT_UUID="${ROOT_UUID:-}"
 export LUKS_UUID="${LUKS_UUID:-}"
+export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM_TYPE"
 CONFIGEOF
 
     chmod +x /mnt/root/install_config.sh

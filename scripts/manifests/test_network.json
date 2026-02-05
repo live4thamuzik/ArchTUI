@@ -1,0 +1,10 @@
+{
+  "script": "scripts/tools/test_network.sh",
+  "description": "Test network connectivity with ping, DNS resolution, and HTTP tests. Supports basic and full connectivity testing.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0, 1],
+  "required_env": [],
+  "optional_env": []
+}

@@ -1,0 +1,27 @@
+{
+  "script": "scripts/tools/install_bootloader.sh",
+  "description": "Install or repair bootloader (GRUB or systemd-boot). Supports both UEFI and BIOS boot modes.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_INSTALL_BOOTLOADER",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "BOOTLOADER_TYPE",
+      "description": "Bootloader type: grub or systemd-boot",
+      "default": "grub"
+    },
+    {
+      "name": "BOOT_MODE",
+      "description": "Boot mode: uefi or bios (auto-detected if not specified)",
+      "default": ""
+    },
+    {
+      "name": "ROOT_PATH",
+      "description": "Root directory of the target system",
+      "default": "/mnt"
+    }
+  ]
+}

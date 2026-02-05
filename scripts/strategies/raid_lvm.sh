@@ -11,7 +11,10 @@ source_or_die "$SCRIPT_DIR/../disk_utils.sh"
 execute_raid_lvm_partitioning() {
     echo "=== RAID + LVM Partitioning ==="
     log_info "Starting RAID + LVM partitioning strategy"
-    
+
+    # Setup cleanup trap for error recovery
+    setup_partitioning_trap
+
     # Validate that we have multiple disks
     if [[ ${#INSTALL_DISKS[@]} -lt 2 ]]; then
         error_exit "RAID + LVM requires at least 2 disks, but only ${#INSTALL_DISKS[@]} provided"

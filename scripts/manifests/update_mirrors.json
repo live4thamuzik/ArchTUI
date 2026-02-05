@@ -1,0 +1,32 @@
+{
+  "script": "scripts/tools/update_mirrors.sh",
+  "description": "Rank and update pacman mirrorlist using reflector. Supports country filtering, protocol selection, and various sort methods.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_UPDATE_MIRRORS",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "MIRROR_LIMIT",
+      "description": "Number of mirrors to include in the list",
+      "default": "20"
+    },
+    {
+      "name": "MIRROR_SORT",
+      "description": "Sort method: rate, age, country, or score",
+      "default": "rate"
+    },
+    {
+      "name": "MIRROR_COUNTRY",
+      "description": "Two-letter country code to filter mirrors",
+      "default": ""
+    },
+    {
+      "name": "MIRROR_PROTOCOL",
+      "description": "Protocol filter: https, http, or ftp",
+      "default": ""
+    }
+  ]
+}

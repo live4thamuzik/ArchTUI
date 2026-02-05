@@ -70,6 +70,32 @@ pub struct App {
     hardware_info: HardwareInfo,
 }
 
+// =============================================================================
+// SECTION: Application State Management
+// =============================================================================
+//
+// AppState Machine Overview:
+//
+//   MainMenu ──┬── GuidedInstaller ───── Installation ───── Complete
+//              │
+//              ├── AutomatedInstall ───── FileBrowser ───── Installation
+//              │
+//              └── ToolsMenu ──┬── DiskTools ──┬── ToolDialog ── ToolExecution
+//                              │               │
+//                              ├── SystemTools │── EmbeddedTerminal
+//                              │               │
+//                              ├── UserTools   └── ConfirmDialog
+//                              │
+//                              └── NetworkTools
+//
+// State Transitions:
+// - Navigation (Up/Down/Enter/Esc) drives menu traversal
+// - Tool execution creates FloatingOutput or EmbeddedTerminal
+// - Confirmation dialogs gate destructive operations
+// - Installation mode runs in background with streaming output
+//
+// =============================================================================
+
 impl App {
     /// Helper function to safely lock the state mutex
     fn lock_state(
@@ -387,6 +413,24 @@ impl App {
         }
         Ok(())
     }
+
+    // =========================================================================
+    // SECTION: Main Event Loop
+    // =========================================================================
+    //
+    // The main loop runs at ~20Hz (50ms poll timeout) and:
+    // 1. Polls PTY for embedded terminal output
+    // 2. Polls tool_rx channel for script execution output
+    // 3. Handles keyboard/resize events
+    // 4. Checks for completion
+    // 5. Renders UI
+    //
+    // Exit conditions:
+    // - User selects Quit from main menu
+    // - Mode reaches AppMode::Complete after installation
+    // - Ctrl+C / SIGTERM (handled by ProcessGuard)
+    //
+    // =========================================================================
 
     /// Run the main application loop
     pub fn run(
@@ -721,6 +765,15 @@ impl App {
         Ok(false)
     }
 
+    // =========================================================================
+    // SECTION: Navigation Handlers
+    // =========================================================================
+    //
+    // These functions handle Up/Down/PageUp/PageDown/Home/End key navigation
+    // within menus and dialogs. Each mode has its own navigation bounds.
+    //
+    // =========================================================================
+
     /// Navigate to previous option
     fn navigate_up(&self) {
         if let Ok(mut state) = self.lock_state_mut() {
@@ -839,6 +892,23 @@ impl App {
         }
     }
 
+    // =========================================================================
+    // SECTION: Enter Key / Selection Handlers
+    // =========================================================================
+    //
+    // These functions handle Enter key presses and menu selections.
+    // Each AppMode has specific behavior when Enter is pressed:
+    //
+    // - MainMenu: Navigate to Guided/Automated/Tools or Quit
+    // - ToolsMenu: Navigate to tool categories (Disk/System/User/Network)
+    // - DiskTools/SystemTools/UserTools/NetworkTools: Execute selected tool
+    // - GuidedInstaller: Open input dialog for current option
+    // - ToolDialog: Submit parameters and execute tool
+    // - ConfirmDialog: Execute or cancel confirmed action
+    // - FloatingOutput: Dismiss output window
+    //
+    // =========================================================================
+
     /// Handle Enter key press
     fn handle_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let current_mode = {
@@ -905,6 +975,18 @@ impl App {
         Ok(())
     }
 
+    // =========================================================================
+    // SECTION: Confirmation Dialog Handlers
+    // =========================================================================
+    //
+    // Confirmation dialogs gate destructive operations (wipe disk, format, etc.)
+    // The dialog stores:
+    // - confirm_action: Name of the action to execute if confirmed
+    // - action_data: Optional data (e.g., device path)
+    // - pre_dialog_mode: Mode to return to after dialog closes
+    //
+    // =========================================================================
+
     /// Handle confirmation dialog Enter key
     fn handle_confirm_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (confirmed, action, action_data, pre_mode) = {
@@ -943,9 +1025,10 @@ impl App {
                     }
                 }
                 "format_partition" => {
-                    if let Some(partition) = action_data {
+                    if let Some(partition) = action_data.clone() {
                         log::info!("Confirmed: formatting partition {}", partition);
-                        // Execute format operation
+                        // Execute format operation via execute_confirmed_action
+                        self.execute_confirmed_action("format_partition", Some(partition))?;
                     }
                 }
                 "start_installation" => {
@@ -961,15 +1044,15 @@ impl App {
         Ok(())
     }
 
-    /// Execute wipe disk operation
+    /// Execute wipe disk operation by spawning wipe_disk.sh script
     fn execute_wipe_disk(&mut self, disk: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Show floating output for the operation
-        let mut state = self.lock_state_mut()?;
-        state.floating_output = Some(FloatingOutputState::new(&format!("Wiping {}", disk)));
-        state.floating_output.as_mut().unwrap().append_line(format!("Starting secure wipe of {}...", disk));
-        state.floating_output.as_mut().unwrap().append_line("This may take a while depending on disk size.".to_string());
-        state.mode = AppMode::FloatingOutput;
-        Ok(())
+        // Use quick wipe method by default (can be made configurable later)
+        // Methods: quick (random header/footer), zero (full zero write), random (full random write)
+        self.execute_tool_with_device(
+            "wipe_disk.sh",
+            disk,
+            &["--method", "quick", "--confirm", "yes"],
+        )
     }
 
     /// Execute action after confirmation dialog
@@ -1014,6 +1097,23 @@ impl App {
         }
         Ok(())
     }
+
+    // =========================================================================
+    // SECTION: Menu Selection Handlers
+    // =========================================================================
+    //
+    // These functions map menu indices to actions:
+    //
+    // MainMenu:
+    //   0 → GuidedInstaller, 1 → AutomatedInstall, 2 → ToolsMenu, 3 → Quit
+    //
+    // ToolsMenu:
+    //   0 → DiskTools, 1 → SystemTools, 2 → UserTools, 3 → NetworkTools, 4 → Back
+    //
+    // DiskTools/SystemTools/UserTools/NetworkTools:
+    //   Index maps to specific tool, last index is always "Back"
+    //
+    // =========================================================================
 
     /// Handle main menu selection
     fn handle_main_menu_selection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -1681,6 +1781,23 @@ impl App {
             false
         }
     }
+
+    // =========================================================================
+    // SECTION: Installation
+    // =========================================================================
+    //
+    // Installation flow:
+    //
+    // 1. User completes guided installer config
+    // 2. Confirmation dialog shown → start_install_confirm()
+    // 3. User confirms → start_installation()
+    // 4. Config optionally saved to file
+    // 5. Mode changed to AppMode::Installation
+    // 6. Installer.start() spawns scripts/install_wrapper.sh
+    // 7. Output streams to UI via ToolMessage channel
+    // 8. On completion → AppMode::Complete
+    //
+    // =========================================================================
 
     /// Start the installation process
     fn start_installation(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -2451,6 +2568,20 @@ impl App {
         Ok(())
     }
 
+    // =========================================================================
+    // SECTION: Tool Parameter Definitions
+    // =========================================================================
+    //
+    // Each tool that requires user input has parameter definitions here.
+    // Parameters can be:
+    // - Text: Free-form text input
+    // - Selection: Dropdown/list selection
+    // - Boolean: Yes/No toggle
+    //
+    // Parameters marked `required: true` must be filled before execution.
+    //
+    // =========================================================================
+
     /// Get tool parameter definitions for a specific tool
     fn get_tool_parameters(tool_name: &str) -> Vec<ToolParam> {
         match tool_name {
@@ -3197,6 +3328,22 @@ impl App {
 
         Ok(())
     }
+
+    // =========================================================================
+    // SECTION: Tool Execution
+    // =========================================================================
+    //
+    // Tool execution flow:
+    //
+    // 1. User selects tool from menu → execute_tool()
+    // 2. If tool needs params → show ToolDialog
+    // 3. User fills params → handle_tool_dialog_enter()
+    // 4. Params validated → execute_tool_with_params()
+    // 5. Params mapped to CLI args → spawn_tool_script()
+    // 6. Script runs → output streams to FloatingOutput
+    // 7. Completion message → user dismisses with Enter
+    //
+    // =========================================================================
 
     /// Execute a tool with the collected parameters
     pub fn execute_tool_with_params(
