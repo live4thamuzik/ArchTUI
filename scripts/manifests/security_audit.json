@@ -1,0 +1,10 @@
+{
+  "script": "scripts/tools/security_audit.sh",
+  "description": "Perform system security audit including file permissions, user accounts, network services, installed packages, updates, and firewall status.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": []
+}

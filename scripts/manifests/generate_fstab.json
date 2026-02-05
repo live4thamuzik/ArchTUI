@@ -1,0 +1,17 @@
+{
+  "script": "scripts/tools/generate_fstab.sh",
+  "description": "Generate fstab file for the installed system using genfstab. Backs up existing fstab before generating new one.",
+  "destructive": true,
+  "required_confirmation": "CONFIRM_GENERATE_FSTAB",
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "ROOT_PATH",
+      "description": "Root directory of the target system",
+      "default": "/mnt"
+    }
+  ]
+}

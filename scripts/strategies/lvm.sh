@@ -1,5 +1,5 @@
 #!/bin/bash
-# lvm.sh - LVM partitioning strategy with ESP + XBOOTLDR (UEFI) or boot partition (BIOS)
+# lvm.sh - LVM partitioning strategy (ESP + boot + LVM root/home)
 set -euo pipefail
 
 # Source common utilities via source_or_die
@@ -9,33 +9,46 @@ source_or_die "$SCRIPT_DIR/../disk_utils.sh"
 
 # Execute LVM partitioning strategy
 execute_lvm_partitioning() {
-    echo "=== PHASE 1: LVM Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting LVM partitioning with ESP + XBOOTLDR for $INSTALL_DISK..."
-    
+    echo "=== PHASE 1: LVM Partitioning ==="
+    log_info "Starting LVM partitioning for $INSTALL_DISK..."
+
+    # Setup cleanup trap for error recovery
+    setup_partitioning_trap
+
     # Validate requirements
     validate_partitioning_requirements
+
+    # Dual-boot detection
+    if detect_other_os; then
+        export OS_PROBER="yes"
+    fi
 
     # Wipe disk with explicit confirmation
     wipe_disk "$INSTALL_DISK" "CONFIRMED"
 
     local current_start_mib=1
     local part_num=1
-    
+    local esp_part_num=0
+    local boot_part_num=0
+
     # Create partition table
     create_partition_table "$INSTALL_DISK"
-    
-    # ESP Partition (for UEFI only) - mounted to /efi
+
+    # ESP Partition (for UEFI only) - 512MB FAT32 at /efi
     if [ "$BOOT_MODE" = "UEFI" ]; then
-        create_esp_partition "$INSTALL_DISK" "$part_num" "100"
-        current_start_mib=$((current_start_mib + 100))
+        esp_part_num=$part_num
+        create_esp_partition "$INSTALL_DISK" "$part_num" "512"
+        current_start_mib=$((current_start_mib + 512))
         part_num=$((part_num + 1))
 
-        # XBOOTLDR Partition - mounted to /boot
-        create_xbootldr_partition "$INSTALL_DISK" "$part_num" "1024"
+        # Boot partition - 1GB ext4 at /boot
+        boot_part_num=$part_num
+        create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
     else
-        # BIOS: Boot partition - mounted to /boot
+        # BIOS: Boot partition at /boot
+        boot_part_num=$part_num
         create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
@@ -56,8 +69,9 @@ execute_lvm_partitioning() {
     else
         printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create LVM partition."
     fi
-    partprobe "$INSTALL_DISK"
-    local lvm_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
+    sync_partitions "$INSTALL_DISK"
+    local lvm_part
+    lvm_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
     
     # Create LVM setup
     log_info "Setting up LVM..."
@@ -85,12 +99,24 @@ execute_lvm_partitioning() {
         mkdir -p /mnt/home
         safe_mount "/dev/arch/home" "/mnt/home"
     fi
-    
-    # Store LVM device mapping
-    LVM_DEVICES_MAP["arch_root"]="/dev/arch/root"
-    if [ "$WANT_HOME_PARTITION" = "yes" ]; then
-        LVM_DEVICES_MAP["arch_home"]="/dev/arch/home"
+
+    # Mount boot and ESP partitions
+    mkdir -p /mnt/boot /mnt/efi
+
+    local boot_device
+    boot_device=$(get_partition_path "$INSTALL_DISK" "$boot_part_num")
+    safe_mount "$boot_device" "/mnt/boot"
+
+    if [ "$BOOT_MODE" = "UEFI" ]; then
+        local esp_device
+        esp_device=$(get_partition_path "$INSTALL_DISK" "$esp_part_num")
+        safe_mount "$esp_device" "/mnt/efi"
+        export EFI_DEVICE="$esp_device"
     fi
-    
-    log_partitioning_complete "LVM ESP + XBOOTLDR"
+
+    # Capture root UUID
+    ROOT_UUID=$(get_device_uuid "/dev/arch/root")
+    export ROOT_UUID
+
+    log_partitioning_complete "LVM (ESP + boot + LVM)"
 }

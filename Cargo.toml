@@ -40,6 +40,14 @@ pacmanconf = { version = "3", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+proptest = "1.4"
+
+# Documentation settings
+[package.metadata.docs.rs]
+# Document all features
+all-features = true
+# Build docs for these targets
+targets = ["x86_64-unknown-linux-gnu"]
 
 # Release profile optimizations for minimal binary size on the ISO
 [profile.release]

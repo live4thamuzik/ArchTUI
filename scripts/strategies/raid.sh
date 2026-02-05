@@ -9,14 +9,17 @@ source_or_die "$SCRIPT_DIR/../disk_utils.sh"
 
 # Execute RAID partitioning strategy
 execute_raid_partitioning() {
-    echo "=== PHASE 1: RAID Partitioning (ESP + XBOOTLDR) ==="
-    log_info "Starting auto RAID partitioning with ESP + XBOOTLDR for multiple disks (RAID Level: ${RAID_LEVEL:-raid1})..."
-    
+    echo "=== PHASE 1: RAID Partitioning (ESP + boot + RAID) ==="
+    log_info "Starting RAID partitioning for multiple disks (RAID Level: ${RAID_LEVEL:-raid1})..."
+
+    # Setup cleanup trap for error recovery
+    setup_partitioning_trap
+
     # Validate RAID requirements
-    if [ ${#RAID_DEVICES[@]} -lt 2 ]; then 
+    if [ ${#RAID_DEVICES[@]} -lt 2 ]; then
         error_exit "RAID requires at least 2 disks. Current disks: ${RAID_DEVICES[*]}"
     fi
-    
+
     # Validate requirements
     validate_partitioning_requirements
     
@@ -38,23 +41,23 @@ execute_raid_partitioning() {
         # Create partition table (GPT for UEFI, MBR for BIOS)
         create_partition_table "$disk"
 
-        # 1. ESP partition on each disk (if UEFI) - NOT in RAID
+        # 1. ESP partition on each disk (if UEFI) - NOT in RAID, 512MB
         if [ "$BOOT_MODE" = "UEFI" ]; then
-            sgdisk -n "$efi_part_num:0:+100M" -t "$efi_part_num:$EFI_PARTITION_TYPE" "$disk" || error_exit "Failed to create ESP partition on $disk."
-            current_start_mib=$((current_start_mib + 100))
+            sgdisk -n "$efi_part_num:0:+512M" -t "$efi_part_num:$EFI_PARTITION_TYPE" -c "$efi_part_num:EFI" "$disk" || error_exit "Failed to create ESP partition on $disk."
+            current_start_mib=$((current_start_mib + 512))
         fi
 
-        # 2. Boot partition on each disk (if BIOS) - NOT in RAID
+        # 2. Boot partition on each disk - NOT in RAID, 1GB ext4
         if [ "$BOOT_MODE" = "BIOS" ]; then
-            printf "n\np\n$xbootldr_part_num\n\n+1024M\nw\n" | fdisk "$disk" || error_exit "Failed to create boot partition on $disk."
-            current_start_mib=$((current_start_mib + 1024))
+            # BIOS boot partition first
+            sgdisk -n "1:0:+1M" -t "1:$BIOS_BOOT_PARTITION_TYPE" -c "1:BIOSBOOT" "$disk" || error_exit "Failed to create BIOS boot partition on $disk."
+            current_start_mib=$((current_start_mib + 1))
         fi
 
-        # 3. XBOOTLDR partition on each disk (UEFI only) - NOT in RAID
-        if [ "$BOOT_MODE" = "UEFI" ]; then
-            sgdisk -n "$xbootldr_part_num:0:+1024M" -t "$xbootldr_part_num:$XBOOTLDR_PARTITION_TYPE" "$disk" || error_exit "Failed to create XBOOTLDR partition on $disk."
-            current_start_mib=$((current_start_mib + 1024))
-        fi
+        # 3. Boot partition (for kernels) - NOT in RAID, standard Linux type
+        local boot_part_num=$xbootldr_part_num
+        sgdisk -n "$boot_part_num:0:+1024M" -t "$boot_part_num:$LINUX_PARTITION_TYPE" -c "$boot_part_num:BOOT" "$disk" || error_exit "Failed to create boot partition on $disk."
+        current_start_mib=$((current_start_mib + 1024))
         
         # 4. Data partition on each disk (takes rest of disk) - IN RAID
         if [ "$BOOT_MODE" = "UEFI" ]; then
@@ -63,7 +66,7 @@ execute_raid_partitioning() {
             printf "n\np\n$data_part_num\n\n\nw\n" | fdisk "$disk" || error_exit "Failed to create data partition on $disk."
         fi
         
-        partprobe "$disk"
+        sync_partitions "$disk"
     done
 
     # --- Phase 2: Create RAID array ---
@@ -151,5 +154,14 @@ execute_raid_partitioning() {
         fi
     fi
     
-    log_partitioning_complete "RAID ESP + XBOOTLDR"
+    # Capture UUIDs for bootloader config
+    ROOT_UUID=$(get_device_uuid "/dev/md0")
+    export ROOT_UUID
+
+    # Save RAID configuration for boot
+    mkdir -p /mnt/etc
+    mdadm --detail --scan >> /mnt/etc/mdadm.conf
+    log_info "Saved RAID configuration to /mnt/etc/mdadm.conf"
+
+    log_partitioning_complete "RAID (ESP + boot + RAID array)"
 }

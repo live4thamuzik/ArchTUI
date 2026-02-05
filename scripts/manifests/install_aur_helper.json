@@ -1,0 +1,16 @@
+{
+  "script": "scripts/tools/install_aur_helper.sh",
+  "description": "Install an AUR helper (paru or yay) as a non-root user inside a chroot environment.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0, 1],
+  "required_env": [],
+  "optional_env": [
+    {
+      "name": "AUR_HELPER",
+      "description": "AUR helper to install: paru or yay",
+      "default": "paru"
+    }
+  ]
+}

@@ -163,59 +163,62 @@ if [[ "$NO_LOGIN" == true ]]; then
 fi
 echo "=================================================="
 
-# Build useradd command
-USERADD_CMD="useradd"
+# Build useradd command using array (SAFE - no eval needed)
+USERADD_ARGS=()
 
 # Add system user flag
 if [[ "$SYSTEM_USER" == true ]]; then
-    USERADD_CMD="$USERADD_CMD --system"
+    USERADD_ARGS+=(--system)
 fi
 
 # Add no login flag
 if [[ "$NO_LOGIN" == true ]]; then
-    USERADD_CMD="$USERADD_CMD --no-log-init --shell /bin/false"
+    USERADD_ARGS+=(--no-log-init --shell /bin/false)
 else
-    USERADD_CMD="$USERADD_CMD --shell $SHELL"
+    USERADD_ARGS+=(--shell "$SHELL")
 fi
 
 # Add home directory options
 if [[ "$CREATE_HOME" == true ]]; then
-    USERADD_CMD="$USERADD_CMD --create-home"
+    USERADD_ARGS+=(--create-home)
 else
-    USERADD_CMD="$USERADD_CMD --no-create-home"
+    USERADD_ARGS+=(--no-create-home)
 fi
 
 # Add custom home directory
 if [[ -n "$HOME_DIR" ]]; then
-    USERADD_CMD="$USERADD_CMD --home-dir $HOME_DIR"
+    USERADD_ARGS+=(--home-dir "$HOME_DIR")
 fi
 
 # Add user ID
 if [[ -n "$USER_ID" ]]; then
-    USERADD_CMD="$USERADD_CMD --uid $USER_ID"
+    USERADD_ARGS+=(--uid "$USER_ID")
 fi
 
 # Add group ID
 if [[ -n "$GROUP_ID" ]]; then
-    USERADD_CMD="$USERADD_CMD --gid $GROUP_ID"
+    USERADD_ARGS+=(--gid "$GROUP_ID")
 fi
 
 # Add skeleton directory
 if [[ -n "$SKEL_DIR" ]]; then
-    USERADD_CMD="$USERADD_CMD --skel $SKEL_DIR"
+    USERADD_ARGS+=(--skel "$SKEL_DIR")
 fi
 
 # Add full name (GECOS field)
 if [[ -n "$FULL_NAME" ]]; then
-    USERADD_CMD="$USERADD_CMD --comment '$FULL_NAME'"
+    USERADD_ARGS+=(--comment "$FULL_NAME")
 fi
 
-# Execute useradd command
-log_info "🔧 Creating user '$USERNAME'..."
-log_info "Command: $USERADD_CMD $USERNAME"
+# Add the username as final argument
+USERADD_ARGS+=("$USERNAME")
 
-if eval "$USERADD_CMD $USERNAME"; then
-    log_success "✅ User '$USERNAME' created successfully"
+# Execute useradd command (SAFE - array expansion, no injection)
+log_info "Creating user '$USERNAME'..."
+log_info "Command: useradd ${USERADD_ARGS[*]}"
+
+if useradd "${USERADD_ARGS[@]}"; then
+    log_success "User '$USERNAME' created successfully"
 else
     error_exit "Failed to create user '$USERNAME'"
 fi
@@ -275,11 +278,11 @@ echo "Username: $USERNAME"
 echo "UID: $(id -u "$USERNAME")"
 echo "GID: $(id -g "$USERNAME")"
 echo "Groups: $(id -Gn "$USERNAME")"
-echo "Home: $(eval echo ~$USERNAME)"
+echo "Home: $(getent passwd "$USERNAME" | cut -d: -f6)"
 echo "Shell: $(getent passwd "$USERNAME" | cut -d: -f7)"
 
 if [[ "$CREATE_HOME" == true ]]; then
-    HOME_PATH=$(eval echo ~$USERNAME)
+    HOME_PATH=$(getent passwd "$USERNAME" | cut -d: -f6)
     if [[ -d "$HOME_PATH" ]]; then
         echo "Home directory: $HOME_PATH (created)"
         if [[ -n "$SKEL_DIR" ]]; then

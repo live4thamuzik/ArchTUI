@@ -162,7 +162,7 @@ pub struct WizardData {
     pub extra_packages: Vec<String>,
     /// Dry run mode - don't execute destructive operations.
     /// Used when wizard is fully integrated with script execution.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // WIP: Wizard dry-run integration
     pub dry_run: bool,
 }
 
