@@ -1295,10 +1295,8 @@ impl App {
                         self.create_tool_dialog("chroot")?;
                     }
                     3 => {
-                        // Enable/Disable Services
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("manage_services".to_string());
-                        state.status_message = "Service management tool...".to_string();
+                        // Enable/Disable Services - Create dialog
+                        self.create_tool_dialog("manage_services")?;
                     }
                     4 => {
                         // System Information - Simple tool with no parameters
@@ -1330,22 +1328,30 @@ impl App {
                         self.create_tool_dialog("reset_password")?;
                     }
                     2 => {
-                        // Manage User Groups
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("manage_groups".to_string());
-                        state.status_message = "User group management tool...".to_string();
+                        // Manage User Groups - Create dialog
+                        self.create_tool_dialog("manage_groups")?;
                     }
                     3 => {
-                        // Configure SSH
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("configure_ssh".to_string());
-                        state.status_message = "SSH configuration tool...".to_string();
+                        // Configure SSH - Create dialog
+                        self.create_tool_dialog("configure_ssh")?;
                     }
                     4 => {
-                        // Security Audit
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("security_audit".to_string());
-                        state.status_message = "Security audit tool...".to_string();
+                        // Security Audit - Simple tool
+                        {
+                            let mut state = self.lock_state_mut()?;
+                            state.current_tool = Some("security_audit".to_string());
+                            state.status_message =
+                                "Running security audit...".to_string();
+                        }
+                        if let Err(e) = self.execute_simple_tool(
+                            "security_audit.sh",
+                            &["--action", "basic"],
+                        ) {
+                            eprintln!("Failed to execute security audit: {}", e);
+                            let mut state = self.lock_state_mut()?;
+                            state.status_message =
+                                "Security audit failed".to_string();
+                        }
                     }
                     _ => {}
                 }
@@ -1354,7 +1360,7 @@ impl App {
                 match selection {
                     0 => {
                         // Configure Network Interface - Create dialog
-                        self.create_tool_dialog("configure")?;
+                        self.create_tool_dialog("configure_network")?;
                     }
                     1 => {
                         // Test Network Connectivity - Simple tool
@@ -1374,16 +1380,30 @@ impl App {
                         }
                     }
                     2 => {
-                        // Configure Firewall
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("configure_firewall".to_string());
-                        state.status_message = "Firewall configuration tool...".to_string();
+                        // Configure Firewall - Create dialog
+                        self.create_tool_dialog("configure_firewall")?;
                     }
                     3 => {
-                        // Network Diagnostics
-                        let mut state = self.lock_state_mut()?;
-                        state.current_tool = Some("network_diagnostics".to_string());
-                        state.status_message = "Network diagnostics tool...".to_string();
+                        // Network Diagnostics - Simple tool
+                        {
+                            let mut state = self.lock_state_mut()?;
+                            state.current_tool =
+                                Some("network_diagnostics".to_string());
+                            state.status_message =
+                                "Running network diagnostics...".to_string();
+                        }
+                        if let Err(e) = self.execute_simple_tool(
+                            "network_diagnostics.sh",
+                            &["--action", "basic"],
+                        ) {
+                            eprintln!(
+                                "Failed to execute network diagnostics: {}",
+                                e
+                            );
+                            let mut state = self.lock_state_mut()?;
+                            state.status_message =
+                                "Network diagnostics failed".to_string();
+                        }
                     }
                     _ => {}
                 }
@@ -2856,6 +2876,88 @@ impl App {
                     required: false,
                 },
             ],
+            "manage_services" => vec![
+                ToolParam {
+                    name: "action".to_string(),
+                    description: "Action to perform".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "enable".to_string(),
+                            "disable".to_string(),
+                            "status".to_string(),
+                            "list".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "service".to_string(),
+                    description: "Service name (e.g., NetworkManager, sshd)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+            ],
+            "manage_groups" => vec![
+                ToolParam {
+                    name: "action".to_string(),
+                    description: "Action to perform".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "add".to_string(),
+                            "remove".to_string(),
+                            "list".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "user".to_string(),
+                    description: "Username".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "group".to_string(),
+                    description: "Group name (e.g., wheel, audio, video)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+            ],
+            "configure_ssh" => vec![
+                ToolParam {
+                    name: "action".to_string(),
+                    description: "Action to perform".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "status".to_string(),
+                            "install".to_string(),
+                            "enable".to_string(),
+                            "disable".to_string(),
+                            "configure".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+            ],
+            "configure_firewall" => vec![
+                ToolParam {
+                    name: "action".to_string(),
+                    description: "Action to perform".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "status".to_string(),
+                            "enable".to_string(),
+                            "disable".to_string(),
+                            "rules".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+            ],
             _ => vec![],
         }
     }
@@ -3531,6 +3633,42 @@ impl App {
                     args.push(params[5].clone());
                 }
             }
+            "manage_services" => {
+                if !params.is_empty() {
+                    args.push("--action".to_string());
+                    args.push(params[0].clone());
+                }
+                if params.len() >= 2 && !params[1].is_empty() {
+                    args.push("--service".to_string());
+                    args.push(params[1].clone());
+                }
+            }
+            "manage_groups" => {
+                if !params.is_empty() {
+                    args.push("--action".to_string());
+                    args.push(params[0].clone());
+                }
+                if params.len() >= 2 && !params[1].is_empty() {
+                    args.push("--user".to_string());
+                    args.push(params[1].clone());
+                }
+                if params.len() >= 3 && !params[2].is_empty() {
+                    args.push("--group".to_string());
+                    args.push(params[2].clone());
+                }
+            }
+            "configure_ssh" => {
+                if !params.is_empty() {
+                    args.push("--action".to_string());
+                    args.push(params[0].clone());
+                }
+            }
+            "configure_firewall" => {
+                if !params.is_empty() {
+                    args.push("--action".to_string());
+                    args.push(params[0].clone());
+                }
+            }
             _ => {
                 // Generic parameter handling for other tools
                 for param in &params {
@@ -3554,6 +3692,10 @@ impl App {
             "reset_password" => "reset_password.sh",
             "configure_network" => "configure_network.sh",
             "manual_partition" => "manual_partition.sh",
+            "manage_services" => "manage_services.sh",
+            "manage_groups" => "manage_groups.sh",
+            "configure_ssh" => "configure_ssh.sh",
+            "configure_firewall" => "configure_firewall.sh",
             _ => {
                 return Err(format!("Unknown tool: {}", tool_name).into());
             }
