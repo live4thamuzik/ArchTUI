@@ -133,11 +133,23 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
                 ""
             };
 
-            // Mask password fields with asterisks for security
-            let display_value = if matches!(param.param_type, ToolParameter::Password(_)) {
-                "*".repeat(raw_value.len())
-            } else {
-                raw_value.to_string()
+            // Format display value based on parameter type
+            let display_value = match &param.param_type {
+                ToolParameter::Password(_) => "*".repeat(raw_value.len()),
+                ToolParameter::Selection(options, _) => {
+                    // Show selection with arrow indicators
+                    let current_val = if raw_value.is_empty() {
+                        options.first().map(|s| s.as_str()).unwrap_or("")
+                    } else {
+                        raw_value
+                    };
+                    if i == dialog.current_param {
+                        format!("< {} >", current_val)
+                    } else {
+                        current_val.to_string()
+                    }
+                }
+                _ => raw_value.to_string(),
             };
 
             param_items.push(ListItem::new(Line::from(vec![
@@ -160,7 +172,7 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
         );
 
         f.render_widget(
-            Paragraph::new("Enter: Next parameter | b: Back to tools")
+            Paragraph::new("Enter: Next/Execute | Left/Right: Change option | Esc: Back")
                 .style(Style::default().fg(Colors::FG_SECONDARY)),
             instruction_area,
         );
