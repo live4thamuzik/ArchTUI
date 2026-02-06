@@ -349,6 +349,34 @@ impl App {
     }
 
     /// Poll for tool execution messages from background threads
+    /// Strip ANSI escape sequences from a string to prevent terminal corruption
+    fn strip_ansi(s: &str) -> String {
+        let mut result = String::with_capacity(s.len());
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                // Skip ESC [ ... (letter) sequences (CSI)
+                if chars.peek() == Some(&'[') {
+                    chars.next(); // consume '['
+                    // Consume until we hit a letter (the terminator)
+                    while let Some(&next) = chars.peek() {
+                        chars.next();
+                        if next.is_ascii_alphabetic() {
+                            break;
+                        }
+                    }
+                }
+                // Skip other ESC sequences (ESC followed by one char)
+                else if chars.peek().is_some() {
+                    chars.next();
+                }
+            } else {
+                result.push(c);
+            }
+        }
+        result
+    }
+
     fn poll_tool_messages(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Process all pending messages without blocking
         while let Ok(msg) = self.tool_rx.try_recv() {
@@ -357,7 +385,7 @@ impl App {
             match msg {
                 ToolMessage::Stdout(line) => {
                     if let Some(ref mut floating) = state.floating_output {
-                        floating.append_line(line);
+                        floating.append_line(Self::strip_ansi(&line));
                         // Auto-scroll to bottom if enabled
                         if floating.auto_scroll {
                             floating.scroll_offset = floating.content.len().saturating_sub(1);
@@ -366,7 +394,7 @@ impl App {
                 }
                 ToolMessage::Stderr(line) => {
                     if let Some(ref mut floating) = state.floating_output {
-                        floating.append_line(format!("⚠ {}", line));
+                        floating.append_line(format!("⚠ {}", Self::strip_ansi(&line)));
                         if floating.auto_scroll {
                             floating.scroll_offset = floating.content.len().saturating_sub(1);
                         }
@@ -3005,17 +3033,20 @@ impl App {
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
                         }
-                        "install_bootloader" | "generate_fstab" | "chroot" | "info" => {
+                        "install_bootloader" | "generate_fstab" | "chroot" | "info"
+                        | "manage_services" | "system_info" => {
                             state.mode = AppMode::SystemTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
-                        "reset_password" => {
+                        "add_user" | "reset_password" | "manage_groups"
+                        | "configure_ssh" | "security_audit" => {
                             state.mode = AppMode::UserTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
-                        "configure" => {
+                        "configure_network" | "configure_firewall"
+                        | "test_network" | "network_diagnostics" => {
                             state.mode = AppMode::NetworkTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Network Tools".to_string();
@@ -3034,21 +3065,49 @@ impl App {
                         "Arch Linux Tools - System repair and administration".to_string();
                 }
             }
-            KeyCode::Char(c) => {
-                // Handle text input for current parameter
+            KeyCode::Left | KeyCode::Right => {
+                // Cycle through Selection parameter options
                 let mut state = self.lock_state_mut()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
-                    if dialog.current_param < dialog.param_values.len() {
-                        dialog.param_values[dialog.current_param].push(c);
+                    let idx = dialog.current_param;
+                    if idx < dialog.parameters.len() {
+                        if let ToolParameter::Selection(ref options, _) = dialog.parameters[idx].param_type {
+                            if !options.is_empty() {
+                                // Find current selection index
+                                let current_val = &dialog.param_values[idx];
+                                let current_idx = options.iter().position(|o| o == current_val).unwrap_or(0);
+                                let new_idx = if key_event.code == KeyCode::Right {
+                                    (current_idx + 1) % options.len()
+                                } else {
+                                    current_idx.checked_sub(1).unwrap_or(options.len() - 1)
+                                };
+                                dialog.param_values[idx] = options[new_idx].clone();
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::Char(c) => {
+                // Handle text input for current parameter (skip for Selection types)
+                let mut state = self.lock_state_mut()?;
+                if let Some(ref mut dialog) = state.tool_dialog {
+                    let idx = dialog.current_param;
+                    if idx < dialog.param_values.len() {
+                        if !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _)) {
+                            dialog.param_values[idx].push(c);
+                        }
                     }
                 }
             }
             KeyCode::Backspace => {
-                // Handle backspace for current parameter
+                // Handle backspace for current parameter (skip for Selection types)
                 let mut state = self.lock_state_mut()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
-                    if dialog.current_param < dialog.param_values.len() {
-                        dialog.param_values[dialog.current_param].pop();
+                    let idx = dialog.current_param;
+                    if idx < dialog.param_values.len() {
+                        if !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _)) {
+                            dialog.param_values[idx].pop();
+                        }
                     }
                 }
             }
@@ -3106,9 +3165,19 @@ impl App {
     /// Create a tool dialog for parameter collection
     fn create_tool_dialog(&mut self, tool_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let parameters = Self::get_tool_parameters(tool_name);
-        let param_values = vec![String::new(); parameters.len()];
+        // Initialize param_values with defaults — Selection params get their default option
+        let param_values: Vec<String> = parameters
+            .iter()
+            .map(|p| match &p.param_type {
+                ToolParameter::Selection(options, default_idx) => {
+                    options.get(*default_idx).cloned().unwrap_or_default()
+                }
+                _ => String::new(),
+            })
+            .collect();
 
         let mut state = self.lock_state_mut()?;
+        state.current_tool = Some(tool_name.to_string());
         state.tool_dialog = Some(ToolDialogState {
             tool_name: tool_name.to_string(),
             parameters,

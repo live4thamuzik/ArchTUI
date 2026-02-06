@@ -84,15 +84,28 @@ test_ping() {
 test_dns() {
     local target="$1"
     log_info "Testing DNS resolution for $target..."
-    
-    if nslookup "$target" >/dev/null 2>&1; then
-        local ip=$(nslookup "$target" | grep -A1 "Name:" | tail -1 | awk '{print $2}')
-        log_success "DNS resolution for $target successful: $ip"
-        return 0
-    else
-        log_error "DNS resolution for $target failed"
-        return 1
+
+    # Use getent (always available) for DNS resolution
+    local ip=""
+    if ip=$(getent hosts "$target" 2>/dev/null | awk '{print $1; exit}'); then
+        if [[ -n "$ip" ]]; then
+            log_success "DNS resolution for $target successful: $ip"
+            return 0
+        fi
     fi
+
+    # Fallback to dig if available
+    if command -v dig >/dev/null 2>&1; then
+        if ip=$(dig +short "$target" 2>/dev/null | head -1); then
+            if [[ -n "$ip" ]]; then
+                log_success "DNS resolution for $target successful: $ip"
+                return 0
+            fi
+        fi
+    fi
+
+    log_error "DNS resolution for $target failed"
+    return 1
 }
 
 # Function to test HTTP connectivity
@@ -147,35 +160,39 @@ get_network_info() {
 # Function to test specific connectivity
 test_specific() {
     local test_type="$1"
-    local targets=("$@")
     shift
-    
+    local targets=("$@")
+
     local success_count=0
     local total_count=${#targets[@]}
-    
+
     for target in "${targets[@]}"; do
         case "$test_type" in
             ping)
                 if test_ping "$target"; then
-                    ((success_count++))
+                    success_count=$((success_count + 1))
                 fi
                 ;;
             dns)
                 if test_dns "$target"; then
-                    ((success_count++))
+                    success_count=$((success_count + 1))
                 fi
                 ;;
             http)
                 if test_http "$target"; then
-                    ((success_count++))
+                    success_count=$((success_count + 1))
                 fi
                 ;;
         esac
         echo
     done
-    
+
     log_info "Results: $success_count/$total_count tests passed"
-    return $((success_count == total_count ? 0 : 1))
+    if [[ "$success_count" -eq "$total_count" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Main execution
