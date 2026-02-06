@@ -49,8 +49,9 @@ cleanup_on_exit() {
     exit $exit_code
 }
 
-# Set up exit trap
+# Set up exit and signal traps (process-safety.md: death pact compliance)
 trap cleanup_on_exit EXIT
+trap 'cleanup_on_exit' SIGTERM SIGINT
 
 # Debug: Show script startup
 echo "=== INSTALLATION ENGINE STARTED ==="
@@ -357,13 +358,13 @@ prepare_system() {
     pacman -Sy --noconfirm 2>&1 | while IFS= read -r line; do
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*)
-                echo -e "${LOG_COLORS[ERROR]}  [pacman] $line${COLORS[RESET]}"
+                echo -e "${RED}  [pacman] $line${RESET}"
                 ;;
             *"warning"*|*"Warning"*|*"WARNING"*)
-                echo -e "${LOG_COLORS[WARN]}  [pacman] $line${COLORS[RESET]}"
+                echo -e "${YELLOW}  [pacman] $line${RESET}"
                 ;;
             *)
-                echo -e "${LOG_COLORS[COMMAND]}  [pacman] $line${COLORS[RESET]}"
+                echo -e "${CYAN}  [pacman] $line${RESET}"
                 ;;
         esac
     done
@@ -391,13 +392,13 @@ configure_mirrors() {
         reflector --country "${MIRROR_COUNTRY:-US}" --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 2>&1 | while IFS= read -r line; do
             case "$line" in
                 *"error"*|*"Error"*)
-                    echo -e "${LOG_COLORS[ERROR]}  [reflector] $line${COLORS[RESET]}"
+                    echo -e "${RED}  [reflector] $line${RESET}"
                     ;;
                 *"warning"*|*"Warning"*)
-                    echo -e "${LOG_COLORS[WARN]}  [reflector] $line${COLORS[RESET]}"
+                    echo -e "${YELLOW}  [reflector] $line${RESET}"
                     ;;
                 *)
-                    echo -e "${LOG_COLORS[COMMAND]}  [reflector] $line${COLORS[RESET]}"
+                    echo -e "${CYAN}  [reflector] $line${RESET}"
                     ;;
             esac
         done
@@ -587,17 +588,17 @@ install_base_system() {
         # Filter and format pacstrap output for readability with colors
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*|*"failed"*)
-                echo -e "${LOG_COLORS[ERROR]}  [pacstrap] $line${COLORS[RESET]}"
+                echo -e "${RED}  [pacstrap] $line${RESET}"
                 ;;
             *"warning"*|*"Warning"*|*"WARNING"*)
-                echo -e "${LOG_COLORS[WARN]}  [pacstrap] $line${COLORS[RESET]}"
+                echo -e "${YELLOW}  [pacstrap] $line${RESET}"
                 ;;
             *"downloading"*|*"installing"*|*"Packages"*|*"Total"*|*"::"*)
-                echo -e "${LOG_COLORS[COMMAND]}  [pacstrap] $line${COLORS[RESET]}"
+                echo -e "${CYAN}  [pacstrap] $line${RESET}"
                 ;;
             *)
                 # Show other lines dimmed
-                echo -e "${COLORS[DIM]}  $line${COLORS[RESET]}"
+                echo -e "${RESET}  $line${RESET}"
                 ;;
         esac
     done
@@ -722,19 +723,19 @@ CONFIGEOF
             # Add colors based on content
             case "$line" in
                 *"ERROR"*|*"error"*|*"Error"*|*"failed"*|*"FAILED"*)
-                    echo -e "${LOG_COLORS[ERROR]}  [chroot] $line${COLORS[RESET]}"
+                    echo -e "${RED}  [chroot] $line${RESET}"
                     ;;
                 *"WARN"*|*"warning"*|*"Warning"*)
-                    echo -e "${LOG_COLORS[WARN]}  [chroot] $line${COLORS[RESET]}"
+                    echo -e "${YELLOW}  [chroot] $line${RESET}"
                     ;;
                 *"SUCCESS"*|*"success"*|*"complete"*|*"Complete"*)
-                    echo -e "${LOG_COLORS[SUCCESS]}  [chroot] $line${COLORS[RESET]}"
+                    echo -e "${GREEN}  [chroot] $line${RESET}"
                     ;;
                 *"==="*)
-                    echo -e "${LOG_COLORS[PHASE]}  [chroot] $line${COLORS[RESET]}"
+                    echo -e "${BOLD}${CYAN}  [chroot] $line${RESET}"
                     ;;
                 *)
-                    echo -e "${LOG_COLORS[COMMAND]}  [chroot] $line${COLORS[RESET]}"
+                    echo -e "${CYAN}  [chroot] $line${RESET}"
                     ;;
             esac
         fi
