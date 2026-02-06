@@ -189,3 +189,112 @@ format_filesystem() {
         *) return 1 ;;
     esac
 }
+
+# --- Initialization Functions ---
+
+# Initialize logging to a file on disk
+# Sets LOG_FILE and creates the log directory
+# Falls back to /dev/null if directory creation fails
+setup_logging() {
+    local log_dir="/var/log/archtui"
+    if ! mkdir -p "$log_dir" 2>/dev/null; then
+        log_dir="/tmp"
+    fi
+    export LOG_FILE="${log_dir}/install-$(date +%Y%m%d-%H%M%S).log"
+    log_info "Logging initialized: $LOG_FILE"
+}
+
+# Pre-flight checks before installation begins
+# Validates: root privileges, live ISO environment, EFI state
+# Fails fast if any check fails (per architecture.md)
+perform_preflight_checks() {
+    log_info "Running pre-flight checks..."
+
+    # Must be root
+    if [[ "$(id -u)" -ne 0 ]]; then
+        log_error "This script must be run as root"
+        return 1
+    fi
+
+    # Must be on Arch live ISO (check for archiso marker)
+    if [[ ! -d "/run/archiso" ]] && [[ ! -f "/etc/arch-release" ]]; then
+        log_warn "Not running on Arch Linux ISO — proceeding with caution"
+    fi
+
+    # Check that we have basic network connectivity
+    if ! ping -c 1 -W 3 archlinux.org >/dev/null 2>&1; then
+        log_error "No network connectivity. Cannot reach archlinux.org"
+        log_error "Please configure networking before running the installer"
+        return 1
+    fi
+
+    log_success "Pre-flight checks passed"
+    return 0
+}
+
+# Check for and install required dependencies on the live ISO
+# These are tools needed by partitioning strategies and install phases
+check_and_install_dependencies() {
+    log_info "Checking required dependencies..."
+
+    local -a missing_deps=()
+    local -a required_cmds=(
+        "sgdisk"
+        "mkfs.ext4"
+        "mkfs.fat"
+        "arch-chroot"
+        "genfstab"
+        "pacstrap"
+        "reflector"
+    )
+
+    for cmd in "${required_cmds[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing_deps+=("$cmd")
+        fi
+    done
+
+    if [[ ${#missing_deps[@]} -eq 0 ]]; then
+        log_success "All required dependencies present"
+        return 0
+    fi
+
+    log_warn "Missing commands: ${missing_deps[*]}"
+    log_info "Attempting to install missing dependencies..."
+
+    # Map commands to packages
+    local -a packages_to_install=()
+    for cmd in "${missing_deps[@]}"; do
+        case "$cmd" in
+            sgdisk)       packages_to_install+=("gptfdisk") ;;
+            mkfs.ext4)    packages_to_install+=("e2fsprogs") ;;
+            mkfs.fat)     packages_to_install+=("dosfstools") ;;
+            arch-chroot)  packages_to_install+=("arch-install-scripts") ;;
+            genfstab)     packages_to_install+=("arch-install-scripts") ;;
+            pacstrap)     packages_to_install+=("arch-install-scripts") ;;
+            reflector)    packages_to_install+=("reflector") ;;
+            *)            log_warn "Unknown command: $cmd — cannot resolve package" ;;
+        esac
+    done
+
+    # Deduplicate
+    local -a unique_packages=()
+    local seen=""
+    for pkg in "${packages_to_install[@]}"; do
+        if [[ "$seen" != *"$pkg"* ]]; then
+            unique_packages+=("$pkg")
+            seen="$seen $pkg"
+        fi
+    done
+
+    if [[ ${#unique_packages[@]} -gt 0 ]]; then
+        log_info "Installing: ${unique_packages[*]}"
+        if ! pacman -Sy --noconfirm "${unique_packages[@]}" 2>&1; then
+            log_error "Failed to install dependencies: ${unique_packages[*]}"
+            return 1
+        fi
+        log_success "Dependencies installed"
+    fi
+
+    return 0
+}
