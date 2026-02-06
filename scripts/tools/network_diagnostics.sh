@@ -95,19 +95,19 @@ show_routing() {
 # Function to show DNS information
 show_dns() {
     log_info "DNS Configuration:"
-    
+
     if [[ -f /etc/resolv.conf ]]; then
         cat /etc/resolv.conf
     else
         log_warning "/etc/resolv.conf not found"
     fi
-    
+
     echo
     log_info "DNS Resolution Test:"
     local test_hosts=("google.com" "archlinux.org" "8.8.8.8")
     for host in "${test_hosts[@]}"; do
-        if nslookup "$host" >/dev/null 2>&1; then
-            local ip=$(nslookup "$host" | grep -A1 "Name:" | tail -1 | awk '{print $2}')
+        local ip=""
+        if ip=$(getent hosts "$host" 2>/dev/null | awk '{print $1; exit}') && [[ -n "$ip" ]]; then
             log_success "DNS: $host -> $ip"
         else
             log_error "DNS: $host -> FAILED"
@@ -130,9 +130,9 @@ show_connections() {
     echo
     log_info "Listening Services:"
     if command -v ss >/dev/null 2>&1; then
-        ss -tlnp | grep LISTEN
+        ss -tlnp | grep LISTEN || log_info "No listening services found"
     elif command -v netstat >/dev/null 2>&1; then
-        netstat -tlnp | grep LISTEN
+        netstat -tlnp | grep LISTEN || log_info "No listening services found"
     fi
 }
 
@@ -241,27 +241,25 @@ troubleshoot_network() {
     
     # Check DNS resolution
     log_info "Checking DNS resolution..."
-    if nslookup google.com >/dev/null 2>&1; then
+    if getent hosts google.com >/dev/null 2>&1; then
         log_success "DNS resolution: WORKING"
     else
         log_error "DNS resolution: FAILED"
         log_info "Trying alternative DNS servers..."
-        echo "nameserver 8.8.8.8" > /tmp/resolv.conf.test
-        if nslookup google.com 8.8.8.8 >/dev/null 2>&1; then
-            log_success "Alternative DNS (8.8.8.8): WORKING"
+        if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+            log_success "Alternative DNS (8.8.8.8): REACHABLE"
         else
-            log_error "Alternative DNS (8.8.8.8): FAILED"
+            log_error "Alternative DNS (8.8.8.8): UNREACHABLE"
         fi
-        rm -f /tmp/resolv.conf.test
     fi
-    
+
     echo
-    
+
     # Check firewall
     log_info "Checking firewall status..."
-    if iptables -L INPUT | grep -q "DROP\|REJECT"; then
+    if command -v iptables >/dev/null 2>&1 && iptables -L INPUT 2>/dev/null | grep -q "DROP\|REJECT"; then
         log_warning "Firewall is active with restrictive rules"
-    elif ufw status | grep -q "Status: active"; then
+    elif command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
         log_warning "UFW firewall is active"
     else
         log_info "No active firewall detected"
