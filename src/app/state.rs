@@ -58,6 +58,10 @@ pub struct AppState {
     pub installer_output: Vec<String>,
     /// Installation progress percentage
     pub installation_progress: u8,
+    /// Scroll offset for installer output (lines from top)
+    pub installer_scroll_offset: usize,
+    /// Whether installer output auto-scrolls to bottom
+    pub installer_auto_scroll: bool,
     /// Main menu selection state
     pub main_menu_selection: usize,
     /// Tools menu selection state
@@ -134,6 +138,8 @@ impl Default for AppState {
             status_message: "Welcome to Arch Linux Toolkit".to_string(),
             installer_output: Vec::new(),
             installation_progress: 0,
+            installer_scroll_offset: 0,
+            installer_auto_scroll: true,
             main_menu_selection: 0,
             tools_menu_selection: 0,
             current_tool: None,

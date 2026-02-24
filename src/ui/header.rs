@@ -10,9 +10,9 @@ use crate::components::nav_bar::NavBar;
 use crate::theme::Colors;
 use ratatui::{
     layout::{Alignment, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, Paragraph, Wrap},
+    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
     Frame,
 };
 
@@ -118,18 +118,50 @@ pub fn render_progress_bar(f: &mut Frame, area: Rect, progress: u16) {
     f.render_widget(gauge, area);
 }
 
-/// Render installer output
-pub fn render_installer_output(f: &mut Frame, area: Rect, output: &[String]) {
-    let output_lines: Vec<Line> = output.iter().map(|line| Line::from(line.clone())).collect();
+/// Render installer output with auto-scroll and manual scroll support.
+/// Uses manual slicing (like FloatingOutput) to avoid wrap-offset mismatch.
+pub fn render_installer_output(
+    f: &mut Frame,
+    area: Rect,
+    output: &[String],
+    scroll_offset: usize,
+    auto_scroll: bool,
+) {
+    let content_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Installer Output (↑↓ scroll)");
+    let inner_area = content_block.inner(area);
+    let visible_height = inner_area.height as usize;
 
-    let output_widget = Paragraph::new(output_lines)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Installer Output"),
-        )
-        .wrap(Wrap { trim: true });
-    f.render_widget(output_widget, area);
+    let start = if auto_scroll {
+        output.len().saturating_sub(visible_height)
+    } else {
+        scroll_offset.min(output.len().saturating_sub(visible_height))
+    };
+    let end = (start + visible_height).min(output.len());
+
+    let visible_content: Vec<ListItem> = output[start..end]
+        .iter()
+        .map(|line| {
+            let style = if line.contains("ERROR") || line.contains("FATAL") {
+                Style::default().fg(Colors::ERROR)
+            } else if line.contains("WARNING") || line.contains("WARN:") {
+                Style::default().fg(Colors::WARNING)
+            } else if line.contains("SUCCESS:") {
+                Style::default().fg(Colors::SUCCESS)
+            } else if line.starts_with("==>") || line.starts_with("::") || line.contains("Phase ") {
+                Style::default()
+                    .fg(Colors::INFO)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Colors::FG_PRIMARY)
+            };
+            ListItem::new(line.as_str()).style(style)
+        })
+        .collect();
+
+    let list = List::new(visible_content).block(content_block);
+    f.render_widget(list, area);
 }
 
 /// Render the navigation bar

@@ -121,8 +121,8 @@ impl Installer {
                     let mut state = app_state.lock().unwrap();
                     state.installer_output.push(line.clone());
 
-                    // Keep only last 100 lines
-                    if state.installer_output.len() > 100 {
+                    // Keep only last 500 lines
+                    if state.installer_output.len() > 500 {
                         state.installer_output.remove(0);
                     }
 
@@ -192,13 +192,39 @@ impl Installer {
                     let mut state = app_state.lock().unwrap();
                     state.installer_output.push(format!("ERROR: {}", line));
 
-                    // Keep only last 100 lines
-                    if state.installer_output.len() > 100 {
+                    // Keep only last 500 lines
+                    if state.installer_output.len() > 500 {
                         state.installer_output.remove(0);
                     }
 
-                    // Update app state
-                    state.status_message = format!("Error: {}", line);
+                    // Check progress triggers on stderr too (in case wrapper doesn't merge)
+                    if line.contains("Phase 1:") {
+                        state.installation_progress = 8;
+                        state.status_message = "Validating configuration".to_string();
+                    } else if line.contains("Phase 2:") {
+                        state.installation_progress = 12;
+                        state.status_message = "Preparing system".to_string();
+                    } else if line.contains("Phase 3:") {
+                        state.installation_progress = 18;
+                        state.status_message = "Installing dependencies".to_string();
+                    } else if line.contains("Phase 4:") {
+                        state.installation_progress = 22;
+                        state.status_message = "Partitioning disk".to_string();
+                    } else if line.contains("Phase 5:") {
+                        state.installation_progress = 30;
+                        state.status_message = "Installing base system".to_string();
+                    } else if line.contains("Phase 6:") {
+                        state.installation_progress = 55;
+                        state.status_message = "Generating fstab".to_string();
+                    } else if line.contains("Phase 7:") {
+                        state.installation_progress = 60;
+                        state.status_message = "Configuring system in chroot".to_string();
+                    } else if line.contains("Phase 8:") {
+                        state.installation_progress = 90;
+                        state.status_message = "Finalizing installation".to_string();
+                    } else if line.contains("ERROR") || line.contains("FATAL") {
+                        state.status_message = format!("Error: {}", line);
+                    }
                 }
             });
         }
