@@ -40,7 +40,6 @@ use crate::types::Filesystem;
 /// | `Ext4`       | `"ext4"` |
 /// | `Xfs`        | `"xfs"`  |
 /// | `Btrfs`      | `"btrfs"`|
-/// | `F2fs`       | `"f2fs"` |
 /// | `Fat32`      | `"fat32"`|
 ///
 /// # Field to Flag Mapping

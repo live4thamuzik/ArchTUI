@@ -669,9 +669,6 @@ format_filesystem() {
         xfs)
             mkfs.xfs -f "$device"
             ;;
-        f2fs)
-            mkfs.f2fs -f "$device"
-            ;;
         vfat|fat32)
             mkfs.fat -F32 "$device"
             ;;

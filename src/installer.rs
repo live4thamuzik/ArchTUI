@@ -244,14 +244,16 @@ impl Installer {
                         .installer_output
                         .push("Installation completed successfully!".to_string());
                 } else {
+                    let exit_code = status.code().unwrap_or(-1);
                     state.status_message = format!(
                         "Installation failed with exit code: {}",
-                        status.code().unwrap_or(-1)
+                        exit_code
                     );
                     state.installer_output.push(format!(
                         "Installation failed with exit code: {}",
-                        status.code().unwrap_or(-1)
+                        exit_code
                     ));
+                    state.mode = crate::app::AppMode::Complete;
                 }
             }
             Err(e) => {

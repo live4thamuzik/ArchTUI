@@ -1272,8 +1272,12 @@ impl InputHandler {
             "Secure Boot" => Toggle::iter().rev().map(|v| v.to_string()).collect(), // No first
             "Partitioning Strategy" => PartitionScheme::iter().map(|v| v.to_string()).collect(),
             "Encryption" => AutoToggle::iter().map(|v| v.to_string()).collect(),
-            "Root Filesystem" => Filesystem::iter().map(|v| v.to_string()).collect(),
-            "Home Filesystem" => Filesystem::iter().map(|v| v.to_string()).collect(),
+            "Root Filesystem" => Filesystem::iter()
+                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs))
+                .map(|v| v.to_string()).collect(),
+            "Home Filesystem" => Filesystem::iter()
+                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs))
+                .map(|v| v.to_string()).collect(),
             "Separate Home Partition" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Swap" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Btrfs Snapshots" => Toggle::iter().map(|v| v.to_string()).collect(),

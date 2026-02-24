@@ -127,7 +127,7 @@ All automated strategies create an EFI System Partition and an XBOOTLDR partitio
 
 ## Supported options
 
-**Filesystems:** ext4, xfs, btrfs (with optional snapshots), f2fs, fat32
+**Filesystems:** ext4, xfs, btrfs (with optional snapshots)
 
 **Bootloaders:** GRUB (UEFI and BIOS), systemd-boot (UEFI only)
 

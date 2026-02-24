@@ -371,7 +371,7 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 // Parse filesystem string into typed enum
                 let fs: crate::types::Filesystem = filesystem.parse().unwrap_or_else(|_| {
                     eprintln!("❌ Invalid filesystem: {}", filesystem);
-                    eprintln!("   Valid types: ext4, xfs, btrfs, f2fs, fat32");
+                    eprintln!("   Valid types: ext4, xfs, btrfs, fat32");
                     std::process::exit(1);
                 });
                 let format_args = FormatPartitionArgs {

@@ -605,8 +605,15 @@ install_base_system() {
     log_info "Starting pacstrap - this will take several minutes..."
     log_info "Downloading and installing packages to /mnt..."
 
+    # Pre-flight: check available space on /mnt (need at least 2GB for base system)
+    local available_mb
+    available_mb=$(df -BM /mnt | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
+    if [[ -n "$available_mb" ]] && [[ "$available_mb" -lt 2048 ]]; then
+        error_exit "Insufficient disk space on /mnt: ${available_mb}MB available, need at least 2048MB"
+    fi
+
     # Run pacstrap with array expansion and show output
-    pacstrap -K /mnt "${all_packages[@]}" 2>&1 | while IFS= read -r line; do
+    pacstrap -K --noconfirm /mnt "${all_packages[@]}" 2>&1 | while IFS= read -r line; do
         # Filter and format pacstrap output for readability with colors
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*|*"failed"*)

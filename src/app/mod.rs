@@ -2863,7 +2863,7 @@ impl App {
                             "ext4".to_string(),
                             "xfs".to_string(),
                             "btrfs".to_string(),
-                            "f2fs".to_string(),
+                            "fat32".to_string(),
                             "ntfs".to_string(),
                         ],
                         0,
