@@ -2777,9 +2777,9 @@ impl App {
                     description: "Wipe method".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
-                            "zero".to_string(),
-                            "random".to_string(),
+                            "quick".to_string(),
                             "secure".to_string(),
+                            "auto".to_string(),
                         ],
                         0,
                     ),
@@ -3926,8 +3926,11 @@ impl App {
                     cli_args.push(params[1].clone());
                 }
                 if params.len() >= 3 && !params[2].is_empty() {
-                    cli_args.push("--config_type".to_string());
-                    cli_args.push(params[2].clone());
+                    match params[2].as_str() {
+                        "dhcp" => cli_args.push("--dhcp".to_string()),
+                        "static" => cli_args.push("--static".to_string()),
+                        _ => {}
+                    }
                 }
                 if params.len() >= 4 && !params[3].is_empty() {
                     cli_args.push("--ip".to_string());

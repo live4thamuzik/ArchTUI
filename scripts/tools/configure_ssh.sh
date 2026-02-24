@@ -89,6 +89,13 @@ if [[ -z "$ACTION" ]]; then
     error_exit "Action is required (--action install|configure|enable|disable|status)"
 fi
 
+# Validate port if specified
+if [[ -n "$PORT" ]]; then
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [[ "$PORT" -lt 1 ]] || [[ "$PORT" -gt 65535 ]]; then
+        error_exit "Invalid SSH port: $PORT (must be 1-65535)"
+    fi
+fi
+
 case "$ACTION" in
     install)
         log_info "Installing OpenSSH server..."
@@ -151,8 +158,8 @@ case "$ACTION" in
         # Configure port if specified
         if [[ -n "$PORT" ]]; then
             log_info "Setting SSH port to $PORT"
-            sed -i "s/^#Port 22/Port $PORT/" /etc/ssh/sshd_config
-            sed -i "s/^Port [0-9]*/Port $PORT/" /etc/ssh/sshd_config
+            sed -i "s|^#Port 22|Port $PORT|" /etc/ssh/sshd_config
+            sed -i "s|^Port [0-9]*|Port $PORT|" /etc/ssh/sshd_config
         fi
         
         # Configure root login

@@ -382,7 +382,7 @@ configure_mkinitcpio() {
 
     # Update mkinitcpio.conf
     if [[ -f /etc/mkinitcpio.conf ]]; then
-        sed -i "s/^HOOKS=.*/HOOKS=($hooks)/" /etc/mkinitcpio.conf
+        sed -i "s|^HOOKS=.*|HOOKS=($hooks)|" /etc/mkinitcpio.conf
         log_info "Updated HOOKS in mkinitcpio.conf: $hooks"
 
         # Add btrfs module if using Btrfs
@@ -649,7 +649,7 @@ configure_grub_settings() {
     fi
 
     # Update GRUB_CMDLINE_LINUX_DEFAULT
-    sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"/" "$grub_default"
+    sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"|" "$grub_default"
 
     # Enable os-prober if requested OR if other OS was detected during partitioning
     # This ensures dual-boot is properly configured even if user forgot to enable it
