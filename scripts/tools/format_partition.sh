@@ -91,7 +91,7 @@ if mountpoint -q "$DEVICE" 2>/dev/null; then
 fi
 
 # Check if device is in use
-if lsof "$DEVICE" >/dev/null 2>&1; then
+if command -v lsof >/dev/null 2>&1 && lsof "$DEVICE" >/dev/null 2>&1; then
     if [[ "$FORCE" != true ]]; then
         error_exit "Device $DEVICE is in use. Use --force to override."
     else

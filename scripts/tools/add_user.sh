@@ -144,6 +144,11 @@ if ! echo "$USERNAME" | grep -qE '^[a-z_][a-z0-9_-]*$'; then
     error_exit "Invalid username format. Use lowercase letters, numbers, underscore, and hyphen only"
 fi
 
+# Enforce manifest contract: destructive operation requires confirmation
+if [[ "${CONFIRM_ADD_USER:-}" != "yes" ]]; then
+    error_exit "CONFIRM_ADD_USER=yes is required to create a user"
+fi
+
 # Check if user already exists
 if id "$USERNAME" >/dev/null 2>&1; then
     error_exit "User '$USERNAME' already exists"
