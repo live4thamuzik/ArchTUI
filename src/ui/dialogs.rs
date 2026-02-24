@@ -51,7 +51,8 @@ pub fn render_floating_output(f: &mut Frame, state: &AppState) {
             height_percent: 70,
             ..Default::default()
         };
-        let window = FloatingWindow::new(config);
+        let mut window = FloatingWindow::new(config);
+        window.set_scroll_offset(output.scroll_offset);
 
         if let Some(progress) = output.progress {
             window.render_with_progress(

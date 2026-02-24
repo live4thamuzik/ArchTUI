@@ -112,9 +112,18 @@ fi
 log_info "Network connectivity OK"
 
 # --- Build Reflector Command ---
+# Per https://wiki.archlinux.org/title/Reflector:
+#   -a 48   = only mirrors synced within 48 hours
+#   -f 5    = pre-filter to 5 fastest by connection speed (avoids testing every mirror)
+#   -l N    = limit to N most recently synced mirrors before speed test
+#   --connection-timeout / --download-timeout = skip unresponsive mirrors after 5s
 REFLECTOR_ARGS=(
+    --age 48
+    --fastest 5
     --latest "$LIMIT"
     --sort "$SORT"
+    --connection-timeout 5
+    --download-timeout 5
 )
 
 if [[ -n "$COUNTRY" ]]; then

@@ -95,9 +95,10 @@ impl Installer {
         let env_vars = self.config.to_env_vars();
 
         // Determine script path - use wrapper for TUI-friendly output
-        let script_path = std::env::var("ARCHTUI_SCRIPTS_DIR")
-            .map(|dir| format!("{}/install_wrapper.sh", dir))
-            .unwrap_or_else(|_| "./scripts/install_wrapper.sh".to_string());
+        let script_path = crate::script_runner::scripts_base_dir()
+            .join("install_wrapper.sh")
+            .to_string_lossy()
+            .to_string();
 
         // Launch the installation script
         // stdin is null - scripts are non-interactive per lint rules

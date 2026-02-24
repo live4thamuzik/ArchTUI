@@ -27,8 +27,25 @@ use crate::process_guard::{ChildRegistry, CommandProcessGroup};
 use crate::script_traits::{is_dry_run, ScriptArgs};
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+/// Resolve the scripts base directory.
+/// Priority: ARCHTUI_SCRIPTS_DIR env > exe-adjacent scripts/ > cwd-relative scripts/
+pub fn scripts_base_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("ARCHTUI_SCRIPTS_DIR") {
+        return PathBuf::from(dir);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let candidate = parent.join("scripts");
+            if candidate.is_dir() {
+                return candidate;
+            }
+        }
+    }
+    PathBuf::from("./scripts")
+}
 
 /// Execute a tool script with type-safe arguments.
 ///
@@ -76,7 +93,8 @@ use std::process::{Command, Stdio};
 /// ```
 pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     let script_name = args.script_name();
-    let script_path = format!("scripts/tools/{}", script_name);
+    let script_path = scripts_base_dir().join("tools").join(script_name);
+    let script_path = script_path.to_string_lossy().to_string();
 
     // Validate script exists before attempting execution
     if !Path::new(&script_path).exists() {

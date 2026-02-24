@@ -694,14 +694,20 @@ impl App {
                     if let Some(ref mut output) = state.floating_output {
                         if output.scroll_offset > 0 {
                             output.scroll_offset -= 1;
+                            output.auto_scroll = false;
                         }
                     }
                 }
                 KeyCode::Down => {
                     let mut state = self.lock_state_mut()?;
                     if let Some(ref mut output) = state.floating_output {
-                        if output.scroll_offset < output.content.len().saturating_sub(1) {
+                        let max = output.content.len().saturating_sub(1);
+                        if output.scroll_offset < max {
                             output.scroll_offset += 1;
+                        }
+                        // Re-enable auto-scroll when user reaches the bottom
+                        if output.scroll_offset >= max {
+                            output.auto_scroll = true;
                         }
                     }
                 }
@@ -803,6 +809,18 @@ impl App {
                     }
                     _ => {}
                 }
+            }
+            return Ok(false);
+        }
+
+        // Handle Left/Right/Tab for button toggle in GuidedInstaller mode
+        if current_mode == AppMode::GuidedInstaller
+            && matches!(key_event.code, KeyCode::Left | KeyCode::Right | KeyCode::Tab)
+        {
+            let mut state = self.lock_state_mut()?;
+            if state.config_scroll.selected_index == state.config.options.len() {
+                state.installer_button_selection =
+                    if state.installer_button_selection == 0 { 1 } else { 0 };
             }
             return Ok(false);
         }
@@ -1548,19 +1566,24 @@ impl App {
 
     /// Handle guided installer enter (original logic)
     fn handle_guided_installer_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (should_open_input, should_start_installation) = {
+        let (should_open_input, should_start_installation, should_test_config) = {
             let state = self.lock_state()?;
-            // Check if we're on the green button (one step past the last config option)
             if state.config_scroll.selected_index == state.config.options.len() {
-                (false, true) // Start installation
+                match state.installer_button_selection {
+                    0 => (false, false, true),  // Test Config
+                    _ => (false, true, false),   // Start Install
+                }
             } else {
-                (true, false) // Open input dialog
+                (true, false, false) // Open input dialog
             }
         };
 
-        // Open input dialog if needed
         if should_open_input {
             self.open_input_dialog()?;
+        }
+
+        if should_test_config {
+            self.generate_test_config_summary()?;
         }
 
         // Start installation if needed - show confirmation dialog first
@@ -1573,7 +1596,6 @@ impl App {
                 state.mode = AppMode::ConfirmDialog;
             } else {
                 // Validation failed - status message already set in validate_configuration_for_installation
-                // User will see the error message
             }
         }
 
@@ -1885,6 +1907,75 @@ impl App {
             }
             false
         }
+    }
+
+    /// Generate a dry-run summary from the current configuration and transition to DryRunSummary mode.
+    /// No scripts are executed — this is purely in-memory config inspection.
+    fn generate_test_config_summary(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let (config, is_valid, errors) = {
+            let state = self.lock_state()?;
+            let cfg = state.config.clone();
+            let valid = self.validate_configuration(&cfg);
+            let errs = self.get_validation_errors(&cfg);
+            (cfg, valid, errs)
+        };
+
+        let env_vars = config.to_env_vars();
+        let mut summary = Vec::new();
+
+        // Header
+        summary.push("=== Configuration Test Summary ===".to_string());
+        summary.push(String::new());
+
+        // Validation status
+        if is_valid {
+            summary.push("[OK] Configuration is valid - ready to install".to_string());
+        } else {
+            summary.push("[FAIL] Configuration has errors:".to_string());
+            for err in &errors {
+                summary.push(format!("  -> {}", err));
+            }
+        }
+        summary.push(String::new());
+
+        // Config fields
+        summary.push("=== Configuration Values ===".to_string());
+        for option in &config.options {
+            let display_value = if option.name.contains("Password") {
+                if option.value.is_empty() { "(not set)".to_string() } else { "********".to_string() }
+            } else {
+                let val = option.get_value();
+                if val.is_empty() { "(not set)".to_string() } else { val }
+            };
+            let status = if option.required && option.value.trim().is_empty() {
+                "[REQUIRED - MISSING]"
+            } else if option.required {
+                "[OK]"
+            } else {
+                "[optional]"
+            };
+            summary.push(format!("  {} {}: {}", status, option.name, display_value));
+        }
+        summary.push(String::new());
+
+        // Environment variables that would be passed
+        summary.push("=== Environment Variables (passed to install scripts) ===".to_string());
+        let mut sorted_vars: Vec<_> = env_vars.iter().collect();
+        sorted_vars.sort_by_key(|(k, _)| k.as_str());
+        for (key, value) in &sorted_vars {
+            let display = if key.contains("PASSWORD") {
+                "********"
+            } else {
+                value.as_str()
+            };
+            summary.push(format!("  {}={}", key, display));
+        }
+
+        let mut state = self.lock_state_mut()?;
+        state.dry_run_summary = Some(summary);
+        state.mode = AppMode::DryRunSummary;
+        state.status_message = "Test Config - review your settings (B to go back)".to_string();
+        Ok(())
     }
 
     // =========================================================================
