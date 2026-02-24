@@ -21,7 +21,6 @@ fn filesystem_strategy() -> impl Strategy<Value = Filesystem> {
         Just(Filesystem::Ext4),
         Just(Filesystem::Btrfs),
         Just(Filesystem::Xfs),
-        Just(Filesystem::F2fs),
         Just(Filesystem::Fat32),
     ]
 }
@@ -233,7 +232,6 @@ proptest! {
         Just("ext4"),
         Just("btrfs"),
         Just("xfs"),
-        Just("f2fs"),
         Just("fat32"),
     ]) {
         let result = fs_str.parse::<Filesystem>();

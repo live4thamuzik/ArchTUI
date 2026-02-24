@@ -32,9 +32,7 @@ pub enum Filesystem {
     Xfs,
     #[strum(serialize = "btrfs")]
     Btrfs,
-    #[strum(serialize = "f2fs")]
-    F2fs,
-    /// FAT32 filesystem for EFI System Partition
+    /// FAT32 filesystem for EFI System Partition (internal use only, not user-selectable)
     #[strum(serialize = "fat32")]
     Fat32,
 }

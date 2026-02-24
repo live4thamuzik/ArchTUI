@@ -720,7 +720,7 @@ _grub_theme_git_clone() {
     fi
 
     mkdir -p "$tmp_dir"
-    if git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>/dev/null; then
+    if timeout 30 git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>/dev/null; then
         mkdir -p "/boot/grub/themes/${theme_name}"
         # Look for theme.txt to find the theme root (may be in a subdirectory)
         local theme_txt
@@ -1123,14 +1123,21 @@ install_aur_helper() {
     mkdir -p "$build_dir"
     chown "$MAIN_USERNAME:$MAIN_USERNAME" "$build_dir"
 
+    # Grant temporary passwordless sudo — makepkg -si calls sudo pacman internally,
+    # which would hang waiting for a password since stdin is not a terminal
+    local sudoers_drop="/etc/sudoers.d/temp-aur-build"
+    echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
+    chmod 440 "$sudoers_drop"
+
     case "$helper" in
         "paru")
             # Install paru dependencies
             pacman -S --noconfirm --needed base-devel git
 
-            sudo -u "$MAIN_USERNAME" bash << 'AUREOF'
+            runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
+set -e
 cd /tmp/aur_build
-git clone https://aur.archlinux.org/paru.git
+timeout 60 git clone https://aur.archlinux.org/paru.git
 cd paru
 makepkg -si --noconfirm
 AUREOF
@@ -1139,9 +1146,10 @@ AUREOF
             # Install yay dependencies
             pacman -S --noconfirm --needed base-devel git go
 
-            sudo -u "$MAIN_USERNAME" bash << 'AUREOF'
+            runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
+set -e
 cd /tmp/aur_build
-git clone https://aur.archlinux.org/yay.git
+timeout 60 git clone https://aur.archlinux.org/yay.git
 cd yay
 makepkg -si --noconfirm
 AUREOF
@@ -1149,9 +1157,10 @@ AUREOF
         "pikaur")
             pacman -S --noconfirm --needed base-devel git python
 
-            sudo -u "$MAIN_USERNAME" bash << 'AUREOF'
+            runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
+set -e
 cd /tmp/aur_build
-git clone https://aur.archlinux.org/pikaur.git
+timeout 60 git clone https://aur.archlinux.org/pikaur.git
 cd pikaur
 makepkg -si --noconfirm
 AUREOF
@@ -1161,7 +1170,10 @@ AUREOF
             ;;
     esac
 
-    # Cleanup
+    # Revoke temporary passwordless sudo
+    rm -f "$sudoers_drop"
+
+    # Cleanup build artifacts
     rm -rf "$build_dir"
 
     log_success "AUR helper installation complete"
@@ -1423,7 +1435,7 @@ deploy_dotfiles() {
 
     local user_home="/home/$MAIN_USERNAME"
 
-    sudo -u "$MAIN_USERNAME" git clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
+    timeout 60 sudo -u "$MAIN_USERNAME" git clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
         log_warn "Failed to clone dotfiles repository"
         return 0
     }
