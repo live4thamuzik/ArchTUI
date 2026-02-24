@@ -30,11 +30,12 @@ use strum::{Display, EnumIter, EnumString};
 /// Each profile includes a curated set of packages for that environment.
 /// The package lists are minimal but functional - users can add more via
 /// the `extra_packages` configuration option.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, EnumString, Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, EnumIter, EnumString, Display)]
 #[strum(serialize_all = "lowercase")]
 pub enum Profile {
     /// Minimal installation - no GUI, just base system.
     /// Good for servers or advanced users who build their own setup.
+    #[default]
     Minimal,
 
     /// GNOME desktop environment.
@@ -60,12 +61,6 @@ pub enum Profile {
     /// XFCE desktop environment.
     /// Lightweight, traditional desktop.
     Xfce,
-}
-
-impl Default for Profile {
-    fn default() -> Self {
-        Profile::Minimal
-    }
 }
 
 impl Profile {

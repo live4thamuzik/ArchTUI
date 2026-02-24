@@ -49,11 +49,12 @@ use crate::scripts::network::{
     UpdateMirrorsArgs,
 };
 use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
+use crate::scripts::config::{GenFstabArgs, UserAddArgs};
 use crate::scripts::system::{
-    BootloaderArgs, ChrootArgs, FstabArgs, ServicesArgs, SystemInfoArgs,
+    BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs,
 };
 use crate::scripts::user::{
-    AddUserArgs, GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs,
+    GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs,
 };
 use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
 use crate::types::AurHelper;
@@ -367,7 +368,7 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 let mount_args = MountPartitionsArgs {
                     action: action.clone(),
                     device: PathBuf::from(device),
-                    mountpoint: mountpoint.as_ref().map(|p| PathBuf::from(p)),
+                    mountpoint: mountpoint.as_ref().map(PathBuf::from),
                     filesystem: filesystem.clone(),
                 };
                 execute_tool(&mount_args)?;
@@ -446,12 +447,12 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     bootloader_type: r#type.clone(),
                     disk: PathBuf::from(disk),
                     mode: mode.clone(),
-                    efi_path: efi_path.as_ref().map(|p| PathBuf::from(p)),
+                    efi_path: efi_path.as_ref().map(PathBuf::from),
                 };
                 execute_tool(&bootloader_args)?;
             }
             crate::cli::SystemToolCommands::Fstab { root } => {
-                let fstab_args = FstabArgs {
+                let fstab_args = GenFstabArgs {
                     root: PathBuf::from(root),
                 };
                 execute_tool(&fstab_args)?;
@@ -509,11 +510,15 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 groups,
                 shell,
             } => {
-                let add_user_args = AddUserArgs {
+                let add_user_args = UserAddArgs {
                     username: username.clone(),
-                    shell: shell.clone(),
-                    full_name: full_name.clone(),
+                    password: None,
                     groups: groups.clone(),
+                    shell: Some(shell.clone()),
+                    full_name: full_name.clone(),
+                    home_dir: None,
+                    create_home: true,
+                    sudo: false,
                 };
                 execute_tool(&add_user_args)?;
             }

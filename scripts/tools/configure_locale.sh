@@ -115,7 +115,7 @@ log_info "Configuring locale: $LOCALE"
 
 # Uncomment the locale in locale.gen
 if [[ -f "$ROOT_PATH/etc/locale.gen" ]]; then
-    sed -i "s/^#${LOCALE}/${LOCALE}/" "$ROOT_PATH/etc/locale.gen"
+    sed -i "s|^#${LOCALE}|${LOCALE}|" "$ROOT_PATH/etc/locale.gen"
 else
     echo "$LOCALE UTF-8" > "$ROOT_PATH/etc/locale.gen"
 fi

@@ -125,10 +125,12 @@ pub enum AppMode {
 
 impl Default for AppState {
     fn default() -> Self {
+        let config = Configuration::default();
+        let total_rows = config.options.len() + 1; // +1 for "Start Installation" button
         Self {
             mode: AppMode::MainMenu,
-            config: Configuration::default(),
-            config_scroll: ScrollState::new(42, 30), // 42 config options, default 30 visible
+            config_scroll: ScrollState::new(total_rows, 30),
+            config,
             status_message: "Welcome to Arch Linux Toolkit".to_string(),
             installer_output: Vec::new(),
             installation_progress: 0,

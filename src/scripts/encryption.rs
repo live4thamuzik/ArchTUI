@@ -156,11 +156,13 @@ impl Drop for SecretFile {
 /// LUKS cipher configuration.
 ///
 /// Provides type-safe cipher selection with secure defaults.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[allow(dead_code)] // Library API: alternative ciphers available for future use
+#[allow(clippy::enum_variant_names)]
 pub enum LuksCipher {
     /// AES-256 in XTS mode (recommended for most uses).
     /// This is the default and most widely compatible option.
+    #[default]
     Aes256Xts,
     /// Serpent-256 in XTS mode (alternative cipher).
     Serpent256Xts,
@@ -185,12 +187,6 @@ impl LuksCipher {
             LuksCipher::Serpent256Xts => 512,
             LuksCipher::Twofish256Xts => 512,
         }
-    }
-}
-
-impl Default for LuksCipher {
-    fn default() -> Self {
-        LuksCipher::Aes256Xts
     }
 }
 

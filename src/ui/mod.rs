@@ -39,9 +39,10 @@ use std::path::PathBuf;
 /// - Cannot transition to `InstallProgress` without a valid disk selection
 /// - Cannot transition to `InstallProgress` without a valid username
 /// - Cannot go backwards from `InstallProgress` or `Done`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum WizardState {
     /// Welcome screen with safety warnings and introduction.
+    #[default]
     Welcome,
     /// Disk selection screen - lists available disks with size/model.
     /// **SAFETY**: User must explicitly select a disk before proceeding.
@@ -57,12 +58,6 @@ pub enum WizardState {
     InstallProgress,
     /// Installation complete - success or failure summary.
     Done,
-}
-
-impl Default for WizardState {
-    fn default() -> Self {
-        Self::Welcome
-    }
 }
 
 impl WizardState {

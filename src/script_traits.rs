@@ -55,6 +55,13 @@ pub fn is_dry_run() -> bool {
     DRY_RUN.load(Ordering::SeqCst)
 }
 
+/// Check if a string is safe to pass to a shell command.
+///
+/// Rejects characters that could enable shell injection attacks.
+pub fn shell_safe(s: &str) -> bool {
+    !s.contains([';', '|', '`', '$', '(', ')', '{', '}', '>', '<', '\n', '\r', '\0'])
+}
+
 /// Trait for typed script arguments.
 ///
 /// Implementors define the mapping between Rust struct fields and bash script
@@ -132,11 +139,43 @@ pub trait ScriptArgs {
     fn is_destructive(&self) -> bool {
         true // Conservative default: assume destructive
     }
+
+    /// Validate arguments before execution.
+    ///
+    /// Override this to add custom validation logic beyond shell_safe checks.
+    /// The default implementation checks all CLI args with `shell_safe()`.
+    fn validate(&self) -> Result<(), String> {
+        for arg in self.to_cli_args() {
+            if !shell_safe(&arg) {
+                return Err(format!("Unsafe characters in argument: {}", arg));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_shell_safe_allows_normal_input() {
+        assert!(shell_safe("hello"));
+        assert!(shell_safe("/dev/sda"));
+        assert!(shell_safe("my-hostname_123"));
+        assert!(shell_safe("ext4"));
+        assert!(shell_safe(""));
+    }
+
+    #[test]
+    fn test_shell_safe_rejects_injection() {
+        assert!(!shell_safe("foo;rm -rf /"));
+        assert!(!shell_safe("foo|bar"));
+        assert!(!shell_safe("$(whoami)"));
+        assert!(!shell_safe("`id`"));
+        assert!(!shell_safe("foo\nbar"));
+        assert!(!shell_safe("foo\0bar"));
+    }
 
     #[test]
     fn test_dry_run_flag() {

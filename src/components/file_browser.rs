@@ -321,8 +321,8 @@ impl FileBrowser {
         f.render_widget(list, chunks[1]);
 
         // Render help text
-        let help_text = if state.error.is_some() {
-            state.error.as_ref().unwrap().clone()
+        let help_text = if let Some(err) = &state.error {
+            err.clone()
         } else {
             "↑↓ Navigate | Enter Select | ~ Home | / Root | Esc Cancel".to_string()
         };
