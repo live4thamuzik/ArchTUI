@@ -62,10 +62,10 @@ load_config_from_json() {
     export PARTITIONING_STRATEGY="$(jq -r '.partitioning_strategy // "auto_simple"' "$config_file")"
     export ROOT_FILESYSTEM="$(jq -r '.root_filesystem // "ext4"' "$config_file")"
     export HOME_FILESYSTEM="$(jq -r '.home_filesystem // "ext4"' "$config_file")"
-    export SEPARATE_HOME="$(jq -r '.separate_home // "no"' "$config_file")"
-    export ENCRYPTION="$(jq -r '.encryption // "no"' "$config_file")"
+    export SEPARATE_HOME="$(jq -r '.separate_home // "No"' "$config_file")"
+    export ENCRYPTION="$(jq -r '.encryption // "No"' "$config_file")"
     export ENCRYPTION_PASSWORD="$(jq -r '.encryption_password // ""' "$config_file")"
-    export SWAP="$(jq -r '.swap // "yes"' "$config_file")"
+    export SWAP="$(jq -r '.swap // "Yes"' "$config_file")"
     export SWAP_SIZE="$(jq -r '.swap_size // "2GB"' "$config_file")"
     export TIMEZONE_REGION="$(jq -r '.timezone_region // "UTC"' "$config_file")"
     export TIMEZONE="$(jq -r '.timezone // "UTC"' "$config_file")"
@@ -78,26 +78,26 @@ load_config_from_json() {
 
     # Use MAIN_USERNAME for the primary user account
     export MAIN_USERNAME="$(jq -r '.username // ""' "$config_file")"
-    export USER_PASSWORD="$(jq -r '.user_password // ""' "$config_file")"
+    export MAIN_USER_PASSWORD="$(jq -r '.user_password // ""' "$config_file")"
     export ROOT_PASSWORD="$(jq -r '.root_password // ""' "$config_file")"
 
     export MIRROR_COUNTRY="$(jq -r '.mirror_country // ""' "$config_file")"
     export BOOTLOADER="$(jq -r '.bootloader // "systemd-boot"' "$config_file")"
-    export OS_PROBER="$(jq -r '.os_prober // "no"' "$config_file")"
+    export OS_PROBER="$(jq -r '.os_prober // "No"' "$config_file")"
     export DESKTOP_ENVIRONMENT="$(jq -r '.desktop_environment // "none"' "$config_file")"
     export DISPLAY_MANAGER="$(jq -r '.display_manager // "none"' "$config_file")"
     export ADDITIONAL_PACKAGES="$(jq -r '.additional_packages // ""' "$config_file")"
     export ADDITIONAL_AUR_PACKAGES="$(jq -r '.additional_aur_packages // ""' "$config_file")"
     export AUR_HELPER="$(jq -r '.aur_helper // "paru"' "$config_file")"
-    export PLYMOUTH="$(jq -r '.plymouth // "no"' "$config_file")"
+    export PLYMOUTH="$(jq -r '.plymouth // "No"' "$config_file")"
     export PLYMOUTH_THEME="$(jq -r '.plymouth_theme // ""' "$config_file")"
-    export GRUB_THEMES="$(jq -r '.grub_themes // "no"' "$config_file")"
+    export GRUB_THEME="$(jq -r '.grub_themes // "No"' "$config_file")"
     export GRUB_THEME_SELECTION="$(jq -r '.grub_theme_selection // ""' "$config_file")"
-    export TIME_SYNC="$(jq -r '.time_sync // "yes"' "$config_file")"
-    export GIT_REPOSITORY="$(jq -r '.git_repository // "no"' "$config_file")"
+    export TIME_SYNC="$(jq -r '.time_sync // "Yes"' "$config_file")"
+    export GIT_REPOSITORY="$(jq -r '.git_repository // "No"' "$config_file")"
     export GIT_REPOSITORY_URL="$(jq -r '.git_repository_url // ""' "$config_file")"
-    export NUMLOCK_ON_BOOT="$(jq -r '.numlock_on_boot // "no"' "$config_file")"
-    export SECURE_BOOT="$(jq -r '.secure_boot // "no"' "$config_file")"
+    export NUMLOCK_ON_BOOT="$(jq -r '.numlock_on_boot // "No"' "$config_file")"
+    export SECURE_BOOT="$(jq -r '.secure_boot // "No"' "$config_file")"
 
     # Convert TUI variables to internal Bash variables (as done in install.sh)
     export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
@@ -139,7 +139,7 @@ validate_configuration() {
         errors+=("Username must be specified")
     fi
 
-    if [[ -z "$USER_PASSWORD" ]]; then
+    if [[ -z "$MAIN_USER_PASSWORD" ]]; then
         errors+=("User password must be specified")
     fi
 
@@ -148,7 +148,7 @@ validate_configuration() {
     fi
 
     # Check encryption password if encryption is enabled
-    if [[ "$ENCRYPTION" == "yes" && -z "$ENCRYPTION_PASSWORD" ]]; then
+    if [[ "$ENCRYPTION" == "Yes" && -z "$ENCRYPTION_PASSWORD" ]]; then
         errors+=("Encryption password must be specified when encryption is enabled")
     fi
     

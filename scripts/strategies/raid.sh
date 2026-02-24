@@ -122,6 +122,9 @@ execute_raid_partitioning() {
         btrfs subvolume create /mnt/@home
         btrfs subvolume create /mnt/@var
         btrfs subvolume create /mnt/@tmp
+        btrfs subvolume create /mnt/@snapshots
+        btrfs subvolume create /mnt/@cache
+        btrfs subvolume create /mnt/@log
     fi
     
     # Separate home partition (if requested)

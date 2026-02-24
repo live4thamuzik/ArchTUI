@@ -21,7 +21,7 @@ use crate::app::AppState;
 use crate::config::Configuration;
 #[cfg(feature = "alpm")]
 use crate::package_manager::PackageManager;
-use crate::process_guard::CommandProcessGroup;
+use crate::process_guard::{ChildRegistry, CommandProcessGroup};
 use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
 use crate::scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
@@ -110,6 +110,16 @@ impl Installer {
             .stdin(Stdio::null())
             .in_new_process_group()
             .spawn()?;
+
+        // Register child PID for Death Pact compliance and cancellation
+        let child_pid = child.id();
+        {
+            let mut state = self.app_state.lock().unwrap();
+            state.installer_pid = Some(child_pid);
+        }
+        if let Ok(mut registry) = ChildRegistry::global().lock() {
+            registry.register(child_pid);
+        }
 
         // Handle stdout in separate thread
         if let Some(stdout) = child.stdout.take() {
@@ -232,9 +242,18 @@ impl Installer {
         // Wait for installation completion in separate thread
         let app_state = Arc::clone(&self.app_state);
 
-        thread::spawn(move || match child.wait() {
+        thread::spawn(move || {
+            let result = child.wait();
+
+            // Unregister child PID (process has exited)
+            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                registry.unregister(child_pid);
+            }
+
+            match result {
             Ok(status) => {
                 let mut state = app_state.lock().unwrap();
+                state.installer_pid = None;
 
                 if status.success() {
                     state.installation_progress = 100;
@@ -258,11 +277,13 @@ impl Installer {
             }
             Err(e) => {
                 let mut state = app_state.lock().unwrap();
+                state.installer_pid = None;
 
                 state
                     .installer_output
                     .push(format!("ERROR: Failed to wait for installer: {}", e));
                 state.status_message = format!("Installation error: {}", e);
+            }
             }
         });
 

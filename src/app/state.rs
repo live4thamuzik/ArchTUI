@@ -88,6 +88,8 @@ pub struct AppState {
     pub dry_run_summary: Option<Vec<String>>,
     /// Button selection in guided installer (0 = Test Config, 1 = Start Install)
     pub installer_button_selection: usize,
+    /// PID of the running installer process (for cancellation)
+    pub installer_pid: Option<u32>,
 }
 
 /// Application operating modes
@@ -153,6 +155,7 @@ impl Default for AppState {
             pre_dialog_mode: None,
             dry_run_summary: None,
             installer_button_selection: 1, // Default to "Start Install"
+            installer_pid: None,
         }
     }
 }

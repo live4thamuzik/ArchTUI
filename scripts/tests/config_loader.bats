@@ -159,7 +159,7 @@ teardown() {
         export PARTITIONING_STRATEGY="auto_simple"
         export SYSTEM_HOSTNAME="test"
         export MAIN_USERNAME="user"
-        export USER_PASSWORD="pass"
+        export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
 
         run validate_configuration
@@ -179,7 +179,7 @@ teardown() {
         export PARTITIONING_STRATEGY="auto_simple"
         export SYSTEM_HOSTNAME=""
         export MAIN_USERNAME="user"
-        export USER_PASSWORD="pass"
+        export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
 
         run validate_configuration
@@ -199,7 +199,7 @@ teardown() {
         export PARTITIONING_STRATEGY="auto_simple"
         export SYSTEM_HOSTNAME="test"
         export MAIN_USERNAME=""
-        export USER_PASSWORD="pass"
+        export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
 
         run validate_configuration
@@ -219,7 +219,7 @@ teardown() {
         export PARTITIONING_STRATEGY="invalid_strategy"
         export SYSTEM_HOSTNAME="test"
         export MAIN_USERNAME="user"
-        export USER_PASSWORD="pass"
+        export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
 
         run validate_configuration
@@ -242,7 +242,7 @@ teardown() {
             export PARTITIONING_STRATEGY="$strategy"
             export SYSTEM_HOSTNAME="test"
             export MAIN_USERNAME="user"
-            export USER_PASSWORD="pass"
+            export MAIN_USER_PASSWORD="pass"
             export ROOT_PASSWORD="root"
             export ENCRYPTION="no"
 
@@ -264,7 +264,7 @@ teardown() {
         export PARTITIONING_STRATEGY="auto_simple"
         export SYSTEM_HOSTNAME="test"
         export MAIN_USERNAME="user"
-        export USER_PASSWORD="pass"
+        export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
         export ENCRYPTION="yes"
         export ENCRYPTION_PASSWORD=""
@@ -286,7 +286,7 @@ teardown() {
         export PARTITIONING_STRATEGY="auto_simple"
         export SYSTEM_HOSTNAME="testhost"
         export MAIN_USERNAME="testuser"
-        export USER_PASSWORD="testpass"
+        export MAIN_USER_PASSWORD="testpass"
         export ROOT_PASSWORD="rootpass"
         export ENCRYPTION="no"
 
@@ -307,7 +307,7 @@ teardown() {
         export PARTITIONING_STRATEGY="auto_simple"
         export SYSTEM_HOSTNAME="test"
         export MAIN_USERNAME="user"
-        export USER_PASSWORD="pass"
+        export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
         export ENCRYPTION="no"
 
