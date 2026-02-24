@@ -188,6 +188,7 @@ pub fn render_disk_tools_menu_in_area(
         ("🗑️ ", "Wipe Disk", "secure erase"),
         ("🔍", "Check Disk Health", "SMART"),
         ("📁", "Mount/Unmount", "mount"),
+        ("🔐", "LUKS Encryption", "encrypt"),
         ("◀️ ", "Back to Tools Menu", ""),
     ];
 
@@ -278,6 +279,8 @@ pub fn render_system_tools_menu_in_area(
         ("🖥️ ", "Chroot into System"),
         ("⚙️ ", "Manage Services"),
         ("ℹ️ ", "System Info"),
+        ("✅", "Enable Services"),
+        ("📦", "Install AUR Helper"),
         ("◀️ ", "Back to Tools Menu"),
     ];
 
@@ -368,6 +371,8 @@ pub fn render_user_tools_menu_in_area(
         ("👥", "Manage Groups"),
         ("🔒", "Configure SSH"),
         ("🛡️ ", "Security Audit"),
+        ("📂", "Install Dotfiles"),
+        ("🏃", "Run As User"),
         ("◀️ ", "Back to Tools Menu"),
     ];
 
@@ -457,6 +462,7 @@ pub fn render_network_tools_menu_in_area(
         ("📡", "Test Connectivity"),
         ("🔥", "Firewall Rules"),
         ("📊", "Network Info"),
+        ("🔄", "Update Mirrors"),
         ("◀️ ", "Back to Tools Menu"),
     ];
 

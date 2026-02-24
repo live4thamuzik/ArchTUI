@@ -5,7 +5,6 @@
 //! - `EnableServicesArgs` for enabling systemd services
 //!
 
-#![allow(dead_code)]
 //! # Dotfiles Installation
 //!
 //! Dotfiles are cloned from a Git repository. The script ensures:

@@ -7,8 +7,6 @@
 //! All operations in this module use privilege dropping (`sudo -u <user>`)
 //! to run commands as the target user inside a chroot environment.
 
-#![allow(dead_code)]
-
 use std::path::PathBuf;
 
 use crate::script_traits::ScriptArgs;

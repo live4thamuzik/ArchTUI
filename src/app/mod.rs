@@ -12,7 +12,8 @@ mod state;
 pub use state::{AppMode, AppState, ToolDialogState, ToolParam, ToolParameter};
 
 use crate::components::confirm_dialog::{
-    format_partition_confirm, start_install_confirm, wipe_disk_confirm,
+    format_partition_confirm, start_install_confirm, wipe_disk_confirm, ConfirmDialogState,
+    ConfirmSeverity,
 };
 use crate::components::floating_window::FloatingOutputState;
 use crate::components::keybindings::KeybindingContext;
@@ -23,11 +24,23 @@ use crate::hardware::HardwareInfo;
 use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
+use crate::script_manifest::ManifestRegistry;
+use crate::script_traits::ScriptArgs;
+use crate::scripts::config::{GenFstabArgs, UserAddArgs};
+use crate::scripts::disk::{FormatPartitionArgs, WipeDiskArgs, WipeMethod};
+use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
+use crate::scripts::network::{MirrorSortMethod, UpdateMirrorsArgs};
+use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
+use crate::scripts::system::{BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs};
+use crate::scripts::user::{GroupsArgs, ResetPasswordArgs, SshArgs};
+use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
+use crate::types::AurHelper;
 use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use log::{debug, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -68,6 +81,10 @@ pub struct App {
     /// Detected hardware info (firmware mode, network state)
     /// Set once at startup via HardwareInfo::detect()
     hardware_info: HardwareInfo,
+    /// Script manifest registry for validating tool executions
+    manifest_registry: ManifestRegistry,
+    /// Active LUKS SecretFile kept alive during encryption operations
+    _active_secret_file: Option<SecretFile>,
 }
 
 // =============================================================================
@@ -128,6 +145,14 @@ impl App {
         let process_guard = ProcessGuard::new();
         debug!("ProcessGuard initialized for child process tracking");
 
+        // Load script manifests for runtime validation
+        let mut manifest_registry = ManifestRegistry::with_core_manifests();
+        if let Err(e) = manifest_registry.load_from_directory("scripts/manifests") {
+            log::warn!("Failed to load manifests from scripts/manifests: {}", e);
+        } else {
+            info!("Script manifests loaded successfully");
+        }
+
         Self {
             state: Arc::new(Mutex::new(AppState::default())),
             installer: None,
@@ -140,6 +165,8 @@ impl App {
             tool_rx,
             _process_guard: process_guard,
             hardware_info,
+            manifest_registry,
+            _active_secret_file: None,
         }
     }
 
@@ -852,20 +879,20 @@ impl App {
                     }
                 }
                 AppMode::DiskTools => {
-                    if state.tools_menu_selection < 5 {
-                        // 6 items total (0-5)
+                    if state.tools_menu_selection < 6 {
+                        // 7 items total (0-6)
                         state.tools_menu_selection += 1;
                     }
                 }
                 AppMode::SystemTools | AppMode::UserTools => {
-                    if state.tools_menu_selection < 5 {
-                        // 6 items total (0-5)
+                    if state.tools_menu_selection < 7 {
+                        // 8 items total (0-7)
                         state.tools_menu_selection += 1;
                     }
                 }
                 AppMode::NetworkTools => {
-                    if state.tools_menu_selection < 4 {
-                        // 5 items total (0-4)
+                    if state.tools_menu_selection < 5 {
+                        // 6 items total (0-5)
                         state.tools_menu_selection += 1;
                     }
                 }
@@ -1072,14 +1099,20 @@ impl App {
         Ok(())
     }
 
-    /// Execute wipe disk operation by spawning wipe_disk.sh script
+    /// Execute wipe disk operation via ScriptArgs
     fn execute_wipe_disk(&mut self, disk: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // Use quick wipe method by default (can be made configurable later)
-        // Methods: quick (random header/footer), zero (full zero write), random (full random write)
-        self.execute_tool_with_device(
-            "wipe_disk.sh",
-            disk,
-            &["--method", "quick", "--confirm", "yes"],
+        let args = WipeDiskArgs {
+            device: PathBuf::from(disk),
+            method: WipeMethod::Quick,
+            confirm: true,
+        };
+        self.execute_via_script_args(
+            args.script_name(),
+            args.to_cli_args(),
+            args.get_env_vars(),
+            &format!("wipe disk {}", disk),
+            args.is_destructive(),
+            true, // already confirmed via disk selection dialog
         )
     }
 
@@ -1116,6 +1149,51 @@ impl App {
             "start_installation" => {
                 // Start the installation process
                 self.start_installation()?;
+            }
+            "execute_tool" => {
+                // Deserialize PendingToolExecution from action_data
+                if let Some(data) = data {
+                    if let Ok(pending) = serde_json::from_str::<serde_json::Value>(&data) {
+                        let script_name = pending["script_name"].as_str().unwrap_or("").to_string();
+                        let cli_args: Vec<String> = pending["cli_args"]
+                            .as_array()
+                            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                            .unwrap_or_default();
+                        let env_vars: Vec<(String, String)> = pending["env_vars"]
+                            .as_array()
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| {
+                                        let arr = v.as_array()?;
+                                        Some((arr.first()?.as_str()?.to_string(), arr.get(1)?.as_str()?.to_string()))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        let display_name = pending["display_name"].as_str().unwrap_or("tool").to_string();
+
+                        let script_path = format!("scripts/tools/{}", script_name);
+                        // Set up floating output and spawn directly (already confirmed)
+                        {
+                            let mut state = self.lock_state_mut()?;
+                            state.floating_output = Some(FloatingOutputState {
+                                title: format!("Running: {}", display_name),
+                                content: vec![
+                                    format!("Executing: {} {}", script_path, cli_args.join(" ")),
+                                    String::new(),
+                                ],
+                                scroll_offset: 0,
+                                auto_scroll: true,
+                                complete: false,
+                                progress: None,
+                                status: "Running...".to_string(),
+                            });
+                            state.mode = AppMode::FloatingOutput;
+                            state.current_tool = Some(display_name);
+                        }
+                        self.spawn_tool_script_with_env(&script_path, cli_args, env_vars)?;
+                    }
+                }
             }
             _ => {
                 // Unknown action
@@ -1234,9 +1312,9 @@ impl App {
 
         // Check if user selected "Back" option (last item in each menu)
         let is_back_option = match current_mode {
-            AppMode::DiskTools => selection == 5, // 6 items (0-5), back is at index 5
-            AppMode::SystemTools | AppMode::UserTools => selection == 5, // 6 items (0-5), back is at index 5
-            AppMode::NetworkTools => selection == 4, // 5 items (0-4), back is at index 4
+            AppMode::DiskTools => selection == 6, // 7 items (0-6), back is at index 6
+            AppMode::SystemTools | AppMode::UserTools => selection == 7, // 8 items (0-7), back is at index 7
+            AppMode::NetworkTools => selection == 5, // 6 items (0-5), back is at index 5
             _ => false,
         };
 
@@ -1298,12 +1376,8 @@ impl App {
                         self.create_tool_dialog("mount")?;
                     }
                     5 => {
-                        // Back to Tools Menu
-                        let mut state = self.lock_state_mut()?;
-                        state.mode = AppMode::ToolsMenu;
-                        state.tools_menu_selection = 0;
-                        state.status_message =
-                            "Arch Linux Tools - System repair and administration".to_string();
+                        // LUKS Encryption - Create dialog
+                        self.create_tool_dialog("encrypt_device")?;
                     }
                     _ => {}
                 }
@@ -1341,6 +1415,14 @@ impl App {
                             let mut state = self.lock_state_mut()?;
                             state.status_message = "System info tool failed".to_string();
                         }
+                    }
+                    5 => {
+                        // Enable Services - Create dialog
+                        self.create_tool_dialog("enable_services")?;
+                    }
+                    6 => {
+                        // Install AUR Helper - Create dialog
+                        self.create_tool_dialog("install_aur_helper")?;
                     }
                     _ => {}
                 }
@@ -1380,6 +1462,14 @@ impl App {
                             state.status_message =
                                 "Security audit failed".to_string();
                         }
+                    }
+                    5 => {
+                        // Install Dotfiles - Create dialog
+                        self.create_tool_dialog("install_dotfiles")?;
+                    }
+                    6 => {
+                        // Run As User - Create dialog
+                        self.create_tool_dialog("run_as_user")?;
                     }
                     _ => {}
                 }
@@ -1432,6 +1522,10 @@ impl App {
                             state.status_message =
                                 "Network diagnostics failed".to_string();
                         }
+                    }
+                    4 => {
+                        // Update Mirrors - Create dialog
+                        self.create_tool_dialog("update_mirrors")?;
                     }
                     _ => {}
                 }
@@ -2986,6 +3080,158 @@ impl App {
                     required: true,
                 },
             ],
+            "encrypt_device" => vec![
+                ToolParam {
+                    name: "action".to_string(),
+                    description: "LUKS action to perform".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "format".to_string(),
+                            "open".to_string(),
+                            "close".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Device path (e.g., /dev/sda2)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "password".to_string(),
+                    description: "LUKS passphrase (for format/open)".to_string(),
+                    param_type: ToolParameter::Password("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "mapper_name".to_string(),
+                    description: "Mapper device name (default: cryptroot)".to_string(),
+                    param_type: ToolParameter::Text("cryptroot".to_string()),
+                    required: false,
+                },
+            ],
+            "enable_services" => vec![
+                ToolParam {
+                    name: "services".to_string(),
+                    description: "Service names (comma-separated, e.g., sddm,NetworkManager)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "root".to_string(),
+                    description: "Root mount path for chroot".to_string(),
+                    param_type: ToolParameter::Text("/mnt".to_string()),
+                    required: true,
+                },
+            ],
+            "install_aur_helper" => vec![
+                ToolParam {
+                    name: "helper".to_string(),
+                    description: "AUR helper to install".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec!["paru".to_string(), "yay".to_string()],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "user".to_string(),
+                    description: "Target user (must be non-root)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "root".to_string(),
+                    description: "Root mount path for chroot".to_string(),
+                    param_type: ToolParameter::Text("/mnt".to_string()),
+                    required: true,
+                },
+            ],
+            "install_dotfiles" => vec![
+                ToolParam {
+                    name: "repo_url".to_string(),
+                    description: "Git repository URL".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "target_user".to_string(),
+                    description: "Target user for dotfiles".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "branch".to_string(),
+                    description: "Branch to clone (optional, default: main)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "backup".to_string(),
+                    description: "Backup existing files before overwriting".to_string(),
+                    param_type: ToolParameter::Boolean(true),
+                    required: false,
+                },
+            ],
+            "run_as_user" => vec![
+                ToolParam {
+                    name: "user".to_string(),
+                    description: "Username to run command as".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "command".to_string(),
+                    description: "Command to execute".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "root".to_string(),
+                    description: "Chroot root path".to_string(),
+                    param_type: ToolParameter::Text("/mnt".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "workdir".to_string(),
+                    description: "Working directory inside chroot (optional)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+            ],
+            "update_mirrors" => vec![
+                ToolParam {
+                    name: "country".to_string(),
+                    description: "Country filter (ISO 3166-1 code, e.g., US, DE)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "limit".to_string(),
+                    description: "Number of mirrors to keep".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec!["10".to_string(), "20".to_string(), "50".to_string()],
+                        1,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "sort".to_string(),
+                    description: "Sort method for mirrors".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "rate".to_string(),
+                            "age".to_string(),
+                            "score".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+            ],
             _ => vec![],
         }
     }
@@ -3028,25 +3274,28 @@ impl App {
                 if let Some(ref tool_name) = current_tool {
                     match tool_name.as_str() {
                         "format_partition" | "wipe_disk" | "health" | "mount"
-                        | "manual_partition" => {
+                        | "manual_partition" | "encrypt_device" => {
                             state.mode = AppMode::DiskTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
                         }
                         "install_bootloader" | "generate_fstab" | "chroot" | "info"
-                        | "manage_services" | "system_info" => {
+                        | "manage_services" | "system_info" | "enable_services"
+                        | "install_aur_helper" => {
                             state.mode = AppMode::SystemTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
                         "add_user" | "reset_password" | "manage_groups"
-                        | "configure_ssh" | "security_audit" => {
+                        | "configure_ssh" | "security_audit" | "install_dotfiles"
+                        | "run_as_user" => {
                             state.mode = AppMode::UserTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
                         "configure_network" | "configure_firewall"
-                        | "test_network" | "network_diagnostics" => {
+                        | "test_network" | "network_diagnostics"
+                        | "update_mirrors" => {
                             state.mode = AppMode::NetworkTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Network Tools".to_string();
@@ -3277,132 +3526,33 @@ impl App {
         Ok(())
     }
 
-    /// Spawn a tool script in a background thread with real-time output streaming
-    ///
-    /// # Process Lifecycle Management
-    /// - Child runs in its own process group (allows clean termination of entire tree)
-    /// - Child PID is registered with global ChildRegistry
-    /// - On App drop or signal, all registered children receive SIGTERM
+    /// Spawn a tool script in a background thread with no environment variables.
+    /// Delegates to `spawn_tool_script_with_env` with empty env.
     fn spawn_tool_script(
         &self,
         script_path: &str,
         args: Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let tx = self.tool_tx.clone();
-        let script_path = script_path.to_string();
-
-        thread::spawn(move || {
-            // Spawn the child process in its own process group
-            // This allows us to kill the entire process tree if needed
-            let child_result = Command::new("bash")
-                .arg(&script_path)
-                .args(&args)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .stdin(Stdio::null())
-                .in_new_process_group()
-                .spawn();
-
-            let mut child = match child_result {
-                Ok(c) => c,
-                Err(e) => {
-                    let _ = tx.send(ToolMessage::Error(format!(
-                        "Failed to start script: {}",
-                        e
-                    )));
-                    return;
-                }
-            };
-
-            // Register child PID for lifecycle management
-            let child_pid = child.id();
-            if let Ok(mut registry) = ChildRegistry::global().lock() {
-                registry.register(child_pid);
-            }
-
-            // Stream stdout in a separate thread
-            let stdout_tx = tx.clone();
-            let stdout_handle = if let Some(stdout) = child.stdout.take() {
-                Some(thread::spawn(move || {
-                    let reader = BufReader::new(stdout);
-                    for line in reader.lines().map_while(Result::ok) {
-                        if stdout_tx.send(ToolMessage::Stdout(line)).is_err() {
-                            break; // Receiver dropped
-                        }
-                    }
-                }))
-            } else {
-                None
-            };
-
-            // Stream stderr in a separate thread
-            let stderr_tx = tx.clone();
-            let stderr_handle = if let Some(stderr) = child.stderr.take() {
-                Some(thread::spawn(move || {
-                    let reader = BufReader::new(stderr);
-                    for line in reader.lines().map_while(Result::ok) {
-                        if stderr_tx.send(ToolMessage::Stderr(line)).is_err() {
-                            break; // Receiver dropped
-                        }
-                    }
-                }))
-            } else {
-                None
-            };
-
-            // Wait for stdout/stderr threads to finish
-            if let Some(h) = stdout_handle {
-                let _ = h.join();
-            }
-            if let Some(h) = stderr_handle {
-                let _ = h.join();
-            }
-
-            // Wait for child process to complete
-            let result = child.wait();
-
-            // Unregister child PID (process has exited)
-            if let Ok(mut registry) = ChildRegistry::global().lock() {
-                registry.unregister(child_pid);
-            }
-
-            match result {
-                Ok(status) => {
-                    let _ = tx.send(ToolMessage::Complete {
-                        success: status.success(),
-                        exit_code: status.code(),
-                    });
-                }
-                Err(e) => {
-                    let _ = tx.send(ToolMessage::Error(format!(
-                        "Failed to wait for script: {}",
-                        e
-                    )));
-                }
-            }
-        });
-
-        Ok(())
+        self.spawn_tool_script_with_env(script_path, args, vec![])
     }
 
-    /// Spawn a tool script with optional password passed via environment variable
-    /// Password is passed via USER_PASSWORD env var (lint rules forbid stdin reading)
+    /// Spawn a tool script in a background thread with real-time output streaming
+    /// and optional environment variables.
     ///
     /// # Process Lifecycle Management
     /// - Child runs in its own process group (allows clean termination of entire tree)
     /// - Child PID is registered with global ChildRegistry
     /// - On App drop or signal, all registered children receive SIGTERM
-    fn spawn_tool_script_with_password(
+    fn spawn_tool_script_with_env(
         &self,
         script_path: &str,
         args: Vec<String>,
-        password: Option<String>,
+        env_vars: Vec<(String, String)>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let tx = self.tool_tx.clone();
         let script_path = script_path.to_string();
 
         thread::spawn(move || {
-            // Build command with optional password in environment
             let mut cmd = Command::new("bash");
             cmd.arg(&script_path)
                 .args(&args)
@@ -3410,9 +3560,9 @@ impl App {
                 .stderr(Stdio::piped())
                 .stdin(Stdio::null()); // Non-interactive per lint rules
 
-            // Pass password via environment variable if provided
-            if let Some(ref pw) = password {
-                cmd.env("USER_PASSWORD", pw);
+            // Pass environment variables
+            for (key, val) in &env_vars {
+                cmd.env(key, val);
             }
 
             // Spawn the child process in its own process group
@@ -3442,7 +3592,7 @@ impl App {
                     let reader = BufReader::new(stdout);
                     for line in reader.lines().map_while(Result::ok) {
                         if stdout_tx.send(ToolMessage::Stdout(line)).is_err() {
-                            break;
+                            break; // Receiver dropped
                         }
                     }
                 }))
@@ -3457,7 +3607,7 @@ impl App {
                     let reader = BufReader::new(stderr);
                     for line in reader.lines().map_while(Result::ok) {
                         if stderr_tx.send(ToolMessage::Stderr(line)).is_err() {
-                            break;
+                            break; // Receiver dropped
                         }
                     }
                 }))
@@ -3500,6 +3650,88 @@ impl App {
         Ok(())
     }
 
+    /// Execute a tool via ScriptArgs: set up floating output and spawn script.
+    ///
+    /// If `is_destructive` is true and `skip_confirm` is false, shows a confirmation
+    /// dialog instead of executing immediately.
+    fn execute_via_script_args(
+        &mut self,
+        script_name: &'static str,
+        cli_args: Vec<String>,
+        env_vars: Vec<(String, String)>,
+        display_name: &str,
+        is_destructive: bool,
+        skip_confirm: bool,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // If destructive and not already confirmed, show confirmation dialog
+        if is_destructive && !skip_confirm {
+            let severity = match script_name {
+                "wipe_disk.sh" | "encrypt_device.sh" => ConfirmSeverity::Danger,
+                "format_partition.sh" => ConfirmSeverity::Warning,
+                _ => ConfirmSeverity::Warning,
+            };
+
+            let pending = serde_json::json!({
+                "script_name": script_name,
+                "cli_args": cli_args,
+                "env_vars": env_vars,
+                "display_name": display_name,
+            });
+
+            let title = format!("Confirm: {}", display_name);
+            let message = format!("This will execute {} which modifies system state. Continue?", display_name);
+            let detail1 = format!("Script: scripts/tools/{}", script_name);
+            let detail2 = format!("Args: {}", cli_args.join(" "));
+            let action_data = pending.to_string();
+
+            let mut state = self.lock_state_mut()?;
+            state.tool_dialog = None;
+            state.confirm_dialog = Some(
+                ConfirmDialogState::new(&title, &message, severity, "execute_tool")
+                    .with_detail(&detail1)
+                    .with_detail(&detail2)
+                    .with_action_data(&action_data),
+            );
+            state.mode = AppMode::ConfirmDialog;
+            return Ok(());
+        }
+
+        let script_path = format!("scripts/tools/{}", script_name);
+
+        // Advisory manifest validation (log warnings, don't block)
+        let script_basename = script_name.trim_end_matches(".sh");
+        if let Some(manifest) = self.manifest_registry.get(script_basename) {
+            log::debug!("Manifest found for {}: v{}", script_name, manifest.version);
+        } else {
+            log::warn!("No manifest found for script: {}", script_name);
+        }
+
+        // Set up floating output window
+        {
+            let mut state = self.lock_state_mut()?;
+            state.tool_dialog = None;
+            state.floating_output = Some(FloatingOutputState {
+                title: format!("Running: {}", display_name),
+                content: vec![
+                    format!("Executing: {} {}", script_path, cli_args.join(" ")),
+                    String::new(),
+                ],
+                scroll_offset: 0,
+                auto_scroll: true,
+                complete: false,
+                progress: None,
+                status: "Running...".to_string(),
+            });
+            state.mode = AppMode::FloatingOutput;
+            state.current_tool = Some(display_name.to_string());
+        }
+
+        // Spawn the tool in a background thread
+        self.spawn_tool_script_with_env(&script_path, cli_args, env_vars)?;
+
+        Ok(())
+    }
+
     // =========================================================================
     // SECTION: Tool Execution
     // =========================================================================
@@ -3516,325 +3748,395 @@ impl App {
     //
     // =========================================================================
 
-    /// Execute a tool with the collected parameters
+    /// Execute a tool with the collected parameters using ScriptArgs for type safety.
     pub fn execute_tool_with_params(
         &mut self,
         tool_name: &str,
         params: Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut args = Vec::new();
-
-        // Map tool names to their script names and build arguments
+        // Interactive tools: launch in embedded terminal
         match tool_name {
-            "Format Partition" => {
-                if params.len() >= 2 {
-                    args.push("--device".to_string());
-                    args.push(params[0].clone());
-                    args.push("--filesystem".to_string());
-                    args.push(params[1].clone());
-                    if params.len() >= 3 && !params[2].is_empty() {
-                        args.push("--label".to_string());
-                        args.push(params[2].clone());
-                    }
+            "chroot" => {
+                let sa = ChrootArgs {
+                    root: PathBuf::from(if !params.is_empty() && !params[0].is_empty() { &params[0] } else { "/mnt" }),
+                    no_mount: params.len() >= 2 && params[1] == "true",
+                };
+                let script_path = format!("scripts/tools/{}", sa.script_name());
+                let cli_args = sa.to_cli_args();
+                if let Ok(mut state) = self.lock_state_mut() {
+                    state.tool_dialog = None;
+                    state.current_tool = None;
                 }
+                let full_cmd = format!("{} {}", script_path, cli_args.iter().map(|a| format!("'{}'", a)).collect::<Vec<_>>().join(" "));
+                let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, AppMode::SystemTools);
+                return Ok(());
             }
-            "Wipe Disk" => {
-                if params.len() >= 2 {
-                    args.push("--device".to_string());
-                    args.push(params[0].clone());
-                    args.push("--method".to_string());
-                    args.push(params[1].clone());
-                    if params.len() >= 3 && params[2] == "true" {
-                        args.push("--confirm".to_string());
-                    }
+            "manual_partition" => {
+                let script_path = "scripts/tools/manual_partition.sh";
+                if let Ok(mut state) = self.lock_state_mut() {
+                    state.tool_dialog = None;
+                    state.current_tool = None;
                 }
+                let full_cmd = if !params.is_empty() && !params[0].is_empty() {
+                    format!("{} --device '{}'", script_path, params[0])
+                } else {
+                    script_path.to_string()
+                };
+                let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, AppMode::DiskTools);
+                return Ok(());
             }
-            "Add New User" => {
-                if params.len() >= 2 {
-                    args.push("--username".to_string());
-                    args.push(params[0].clone());
-                    args.push("--password".to_string());
-                    args.push(params[1].clone());
-                    if params.len() >= 3 && params[2] == "true" {
-                        args.push("--sudo".to_string());
-                    }
-                }
+            _ => {}
+        }
+
+        // Non-interactive tools: construct ScriptArgs and execute via helper
+        match tool_name {
+            "format_partition" | "Format Partition" => {
+                let fs: crate::types::Filesystem = params.get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(crate::types::Filesystem::Ext4);
+                let sa = FormatPartitionArgs {
+                    device: PathBuf::from(params.first().cloned().unwrap_or_default()),
+                    filesystem: fs,
+                    label: params.get(2).filter(|s| !s.is_empty()).cloned(),
+                    force: false,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "format partition", sa.is_destructive(), false,
+                )
+            }
+            "wipe_disk" | "Wipe Disk" => {
+                let method: WipeMethod = params.get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(WipeMethod::Quick);
+                let confirm = params.get(2).map(|s| s == "true").unwrap_or(false);
+                let sa = WipeDiskArgs {
+                    device: PathBuf::from(params.first().cloned().unwrap_or_default()),
+                    method,
+                    confirm,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "wipe disk", sa.is_destructive(), false,
+                )
             }
             "health" => {
-                // Device is handled through disk selection dialog
-                if !params.is_empty() && params[0] == "detailed" {
-                    args.push("--detailed".to_string());
+                // Device is handled through disk selection dialog; params[0] is output_level
+                let detailed = !params.is_empty() && params[0] == "detailed";
+                let mut cli_args = vec![];
+                if detailed {
+                    cli_args.push("--detailed".to_string());
                 }
+                self.execute_via_script_args(
+                    "check_disk_health.sh", cli_args, vec![],
+                    "check disk health", false, true,
+                )
             }
             "mount" => {
-                if params.len() >= 2 {
-                    args.push("--action".to_string());
-                    args.push(params[0].clone());
-
-                    // Determine if target is device or mountpoint based on action
-                    let action = &params[0];
-                    let target = &params[1];
-
-                    if action == "mount" {
-                        // For mount: target is device, destination is mountpoint
-                        args.push("--device".to_string());
-                        args.push(target.clone());
-                        if params.len() >= 3 && !params[2].is_empty() {
-                            args.push("--mountpoint".to_string());
-                            args.push(params[2].clone());
-                        }
-                    } else if action == "umount" {
-                        // For umount: determine if target is device or mountpoint
-                        if target.starts_with("/dev/") {
-                            args.push("--device".to_string());
-                            args.push(target.clone());
-                        } else {
-                            args.push("--mountpoint".to_string());
-                            args.push(target.clone());
-                        }
+                let action = params.first().cloned().unwrap_or_default();
+                let target = params.get(1).cloned().unwrap_or_default();
+                let mut cli_args = vec!["--action".to_string(), action.clone()];
+                if action == "mount" {
+                    cli_args.push("--device".to_string());
+                    cli_args.push(target);
+                    if let Some(mp) = params.get(2).filter(|s| !s.is_empty()) {
+                        cli_args.push("--mountpoint".to_string());
+                        cli_args.push(mp.clone());
+                    }
+                } else if action == "umount" {
+                    if target.starts_with("/dev/") {
+                        cli_args.push("--device".to_string());
                     } else {
-                        // For info/list: target is device
-                        args.push("--device".to_string());
-                        args.push(target.clone());
+                        cli_args.push("--mountpoint".to_string());
                     }
-
-                    // Add flags
-                    if params.len() >= 4 && params[3] == "true" {
-                        args.push("--readonly".to_string());
-                    }
-                    if params.len() >= 5 && params[4] == "true" {
-                        args.push("--force".to_string());
-                    }
+                    cli_args.push(target);
+                } else {
+                    cli_args.push("--device".to_string());
+                    cli_args.push(target);
                 }
-            }
-            "chroot" => {
-                if !params.is_empty() {
-                    args.push("--root".to_string());
-                    args.push(params[0].clone());
-                    if params.len() >= 2 && params[1] == "true" {
-                        args.push("--no-mount".to_string());
-                    }
-                }
-            }
-            "info" => {
-                if !params.is_empty() && params[0] == "true" {
-                    args.push("--detailed".to_string());
-                }
-                if params.len() >= 2 && params[1] == "true" {
-                    args.push("--json".to_string());
-                }
-            }
-            "install_bootloader" => {
-                if !params.is_empty() {
-                    args.push("--type".to_string());
-                    args.push(params[0].clone());
-                }
-                if params.len() >= 2 {
-                    args.push("--disk".to_string());
-                    args.push(params[1].clone());
-                }
-                if params.len() >= 3 && !params[2].is_empty() {
-                    args.push("--efi-path".to_string());
-                    args.push(params[2].clone());
-                }
-                if params.len() >= 4 && !params[3].is_empty() {
-                    args.push("--mode".to_string());
-                    args.push(params[3].clone());
+                if params.len() >= 4 && params[3] == "true" {
+                    cli_args.push("--readonly".to_string());
                 }
                 if params.len() >= 5 && params[4] == "true" {
-                    args.push("--repair".to_string());
+                    cli_args.push("--force".to_string());
                 }
+                self.execute_via_script_args(
+                    "mount_partitions.sh", cli_args, vec![],
+                    "mount partitions", false, true,
+                )
             }
-            "add_user" => {
-                // Parameter order: username, password, full_name, groups, shell, system_user
-                // NOTE: Password (params[1]) is NOT passed as command-line arg for security
-                // It will be passed via stdin to prevent exposure in `ps aux`
-                if !params.is_empty() {
-                    args.push("--username".to_string());
-                    args.push(params[0].clone());
+            "info" => {
+                let sa = SystemInfoArgs {
+                    detailed: !params.is_empty() && params[0] == "true",
+                };
+                let mut cli_args = sa.to_cli_args();
+                if params.len() >= 2 && params[1] == "true" {
+                    cli_args.push("--json".to_string());
                 }
-                // params[1] is password - handled separately via stdin (security)
-                if params.len() >= 3 && !params[2].is_empty() {
-                    args.push("--full-name".to_string());
-                    args.push(params[2].clone());
+                self.execute_via_script_args(
+                    sa.script_name(), cli_args, sa.get_env_vars(),
+                    "system info", sa.is_destructive(), true,
+                )
+            }
+            "install_bootloader" => {
+                let sa = BootloaderArgs {
+                    bootloader_type: params.first().cloned().unwrap_or_default(),
+                    disk: PathBuf::from(params.get(1).cloned().unwrap_or_default()),
+                    efi_path: params.get(2).filter(|s| !s.is_empty()).map(PathBuf::from),
+                    mode: params.get(3).filter(|s| !s.is_empty()).cloned().unwrap_or_default(),
+                };
+                let mut cli_args = sa.to_cli_args();
+                if params.len() >= 5 && params[4] == "true" {
+                    cli_args.push("--repair".to_string());
                 }
-                if params.len() >= 4 && !params[3].is_empty() {
-                    args.push("--groups".to_string());
-                    args.push(params[3].clone());
-                }
-                if params.len() >= 5 && !params[4].is_empty() {
-                    args.push("--shell".to_string());
-                    args.push(params[4].clone());
-                }
-                if params.len() >= 6 && params[5] == "true" {
-                    args.push("--system".to_string());
-                }
+                self.execute_via_script_args(
+                    sa.script_name(), cli_args, sa.get_env_vars(),
+                    "install bootloader", sa.is_destructive(), false,
+                )
+            }
+            "generate_fstab" => {
+                let sa = GenFstabArgs {
+                    root: PathBuf::from(params.first().cloned().unwrap_or_default()),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "generate fstab", sa.is_destructive(), false,
+                )
+            }
+            "add_user" | "Add New User" => {
+                // params: username, password, full_name, groups, shell, system_user
+                let sa = UserAddArgs {
+                    username: params.first().cloned().unwrap_or_default(),
+                    password: params.get(1).filter(|s| !s.is_empty()).cloned(),
+                    full_name: params.get(2).filter(|s| !s.is_empty()).cloned(),
+                    groups: params.get(3).filter(|s| !s.is_empty()).cloned(),
+                    shell: params.get(4).filter(|s| !s.is_empty()).cloned(),
+                    home_dir: None,
+                    create_home: true,
+                    sudo: params.len() >= 6 && params[5] == "true",
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "add user", sa.is_destructive(), false,
+                )
             }
             "reset_password" => {
-                if !params.is_empty() {
-                    args.push("--username".to_string());
-                    args.push(params[0].clone());
-                }
+                let sa = ResetPasswordArgs {
+                    username: params.first().cloned().unwrap_or_default(),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "reset password", sa.is_destructive(), false,
+                )
             }
             "configure_network" => {
-                if !params.is_empty() {
-                    args.push("--interface".to_string());
-                    args.push(params[0].clone());
+                // params: interface, action, config_type, ip, netmask, gateway
+                let mut cli_args = vec![];
+                if !params.is_empty() && !params[0].is_empty() {
+                    cli_args.push("--interface".to_string());
+                    cli_args.push(params[0].clone());
                 }
                 if params.len() >= 2 {
-                    args.push("--action".to_string());
-                    args.push(params[1].clone());
+                    cli_args.push("--action".to_string());
+                    cli_args.push(params[1].clone());
                 }
                 if params.len() >= 3 && !params[2].is_empty() {
-                    args.push("--config_type".to_string());
-                    args.push(params[2].clone());
+                    cli_args.push("--config_type".to_string());
+                    cli_args.push(params[2].clone());
                 }
                 if params.len() >= 4 && !params[3].is_empty() {
-                    args.push("--ip".to_string());
-                    args.push(params[3].clone());
+                    cli_args.push("--ip".to_string());
+                    cli_args.push(params[3].clone());
                 }
                 if params.len() >= 5 && !params[4].is_empty() {
-                    args.push("--netmask".to_string());
-                    args.push(params[4].clone());
+                    cli_args.push("--netmask".to_string());
+                    cli_args.push(params[4].clone());
                 }
                 if params.len() >= 6 && !params[5].is_empty() {
-                    args.push("--gateway".to_string());
-                    args.push(params[5].clone());
+                    cli_args.push("--gateway".to_string());
+                    cli_args.push(params[5].clone());
                 }
+                self.execute_via_script_args(
+                    "configure_network.sh", cli_args, vec![],
+                    "configure network", true, false,
+                )
             }
             "manage_services" => {
-                if !params.is_empty() {
-                    args.push("--action".to_string());
-                    args.push(params[0].clone());
-                }
-                if params.len() >= 2 && !params[1].is_empty() {
-                    args.push("--service".to_string());
-                    args.push(params[1].clone());
-                }
+                let sa = ServicesArgs {
+                    action: params.first().cloned().unwrap_or_default(),
+                    service: params.get(1).filter(|s| !s.is_empty()).cloned(),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "manage services", sa.is_destructive(), false,
+                )
             }
             "manage_groups" => {
-                if !params.is_empty() {
-                    args.push("--action".to_string());
-                    args.push(params[0].clone());
-                }
-                if params.len() >= 2 && !params[1].is_empty() {
-                    args.push("--user".to_string());
-                    args.push(params[1].clone());
-                }
-                if params.len() >= 3 && !params[2].is_empty() {
-                    args.push("--group".to_string());
-                    args.push(params[2].clone());
-                }
+                let sa = GroupsArgs {
+                    action: params.first().cloned().unwrap_or_default(),
+                    user: params.get(1).filter(|s| !s.is_empty()).cloned(),
+                    group: params.get(2).filter(|s| !s.is_empty()).cloned(),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "manage groups", sa.is_destructive(), false,
+                )
             }
             "configure_ssh" => {
-                if !params.is_empty() {
-                    args.push("--action".to_string());
-                    args.push(params[0].clone());
-                }
+                let sa = SshArgs {
+                    action: params.first().cloned().unwrap_or_default(),
+                    port: None,
+                    enable_root_login: None,
+                    enable_password_auth: None,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "configure SSH", sa.is_destructive(), false,
+                )
             }
             "configure_firewall" => {
-                if !params.is_empty() {
-                    args.push("--action".to_string());
-                    args.push(params[0].clone());
-                }
+                let sa = crate::scripts::network::FirewallArgs {
+                    action: params.first().cloned().unwrap_or_default(),
+                    firewall_type: "iptables".to_string(),
+                    port: None,
+                    protocol: "tcp".to_string(),
+                    allow: false,
+                    deny: false,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "configure firewall", sa.is_destructive(), false,
+                )
             }
-            _ => {
-                // Generic parameter handling for other tools
-                for param in &params {
-                    if !param.is_empty() {
-                        args.push(param.clone());
+            // === New tools (Phase 3) ===
+            "encrypt_device" => {
+                // params: action, device, password, mapper_name
+                let action = params.first().cloned().unwrap_or_default();
+                let device = params.get(1).cloned().unwrap_or_default();
+                let password = params.get(2).cloned().unwrap_or_default();
+                let mapper_name = params.get(3).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "cryptroot".to_string());
+
+                match action.as_str() {
+                    "format" => {
+                        // Create SecretFile for the password
+                        let secret = SecretFile::new(&password)?;
+                        let key_file_path = secret.path().to_path_buf();
+                        // Store SecretFile on App to keep it alive during execution
+                        self._active_secret_file = Some(secret);
+
+                        let sa = LuksFormatArgs {
+                            device: PathBuf::from(&device),
+                            cipher: LuksCipher::default(),
+                            key_file: key_file_path,
+                            label: None,
+                            confirm: true,
+                        };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "LUKS format", sa.is_destructive(), false,
+                        )
                     }
+                    "open" => {
+                        let secret = SecretFile::new(&password)?;
+                        let key_file_path = secret.path().to_path_buf();
+                        self._active_secret_file = Some(secret);
+
+                        let sa = LuksOpenArgs {
+                            device: PathBuf::from(&device),
+                            mapper_name,
+                            key_file: key_file_path,
+                        };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "LUKS open", sa.is_destructive(), true,
+                        )
+                    }
+                    "close" => {
+                        let sa = LuksCloseArgs { mapper_name };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "LUKS close", sa.is_destructive(), true,
+                        )
+                    }
+                    _ => Err(format!("Unknown encrypt action: {}", action).into()),
                 }
             }
-        }
-
-        let script_name = match tool_name {
-            "format_partition" => "format_partition.sh",
-            "wipe_disk" => "wipe_disk.sh",
-            "install_bootloader" => "install_bootloader.sh",
-            "generate_fstab" => "generate_fstab.sh",
-            "add_user" => "add_user.sh",
-            "health" => "check_disk_health.sh",
-            "mount" => "mount_partitions.sh",
-            "chroot" => "chroot_system.sh",
-            "info" => "system_info.sh",
-            "reset_password" => "reset_password.sh",
-            "configure_network" => "configure_network.sh",
-            "manual_partition" => "manual_partition.sh",
-            "manage_services" => "manage_services.sh",
-            "manage_groups" => "manage_groups.sh",
-            "configure_ssh" => "configure_ssh.sh",
-            "configure_firewall" => "configure_firewall.sh",
+            "enable_services" => {
+                // params: root, services (comma-separated)
+                let sa = EnableServicesArgs {
+                    root: PathBuf::from(params.first().filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
+                    services: params.get(1).map(|s| s.split(',').map(|v| v.trim().to_string()).collect()).unwrap_or_default(),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "enable services", sa.is_destructive(), false,
+                )
+            }
+            "install_aur_helper" => {
+                // params: helper, user, root
+                let helper: AurHelper = params.first()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(AurHelper::Paru);
+                let sa = InstallAurHelperArgs {
+                    helper,
+                    target_user: params.get(1).cloned().unwrap_or_default(),
+                    chroot_path: PathBuf::from(params.get(2).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "install AUR helper", sa.is_destructive(), false,
+                )
+            }
+            "install_dotfiles" => {
+                // params: repo_url, target_user, branch, backup
+                let sa = InstallDotfilesArgs {
+                    repo_url: params.first().cloned().unwrap_or_default(),
+                    target_user: params.get(1).cloned().unwrap_or_default(),
+                    target_dir: None,
+                    branch: params.get(2).filter(|s| !s.is_empty()).cloned(),
+                    backup: params.get(3).map(|s| s == "true").unwrap_or(true),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "install dotfiles", sa.is_destructive(), false,
+                )
+            }
+            "run_as_user" => {
+                // params: user, command, root, workdir
+                let sa = UserRunArgs {
+                    user: params.first().cloned().unwrap_or_default(),
+                    command: params.get(1).cloned().unwrap_or_default(),
+                    chroot_path: PathBuf::from(params.get(2).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
+                    workdir: params.get(3).filter(|s| !s.is_empty()).map(PathBuf::from),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "run as user", sa.is_destructive(), false,
+                )
+            }
+            "update_mirrors" => {
+                // params: country, limit, sort
+                let limit: u32 = params.get(1).and_then(|s| s.parse().ok()).unwrap_or(20);
+                let sort = match params.get(2).map(|s| s.as_str()) {
+                    Some("age") => MirrorSortMethod::Age,
+                    Some("score") => MirrorSortMethod::Score,
+                    _ => MirrorSortMethod::Rate,
+                };
+                let sa = UpdateMirrorsArgs {
+                    country: params.first().filter(|s| !s.is_empty()).cloned(),
+                    limit,
+                    sort,
+                    protocol: Some("https".to_string()),
+                    save: true,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "update mirrors", sa.is_destructive(), false,
+                )
+            }
             _ => {
-                return Err(format!("Unknown tool: {}", tool_name).into());
+                Err(format!("Unknown tool: {}", tool_name).into())
             }
-        };
-
-        // Interactive tools should use embedded terminal
-        let interactive_tools = ["chroot", "manual_partition"];
-        if interactive_tools.contains(&tool_name) {
-            let script_path = format!("scripts/tools/{}", script_name);
-
-            // Determine return mode based on tool
-            let return_mode = match tool_name {
-                "chroot" => AppMode::SystemTools,
-                "manual_partition" => AppMode::DiskTools,
-                _ => AppMode::ToolsMenu,
-            };
-
-            // Clear tool dialog state before launching
-            if let Ok(mut state) = self.lock_state_mut() {
-                state.tool_dialog = None;
-                state.current_tool = None;
-            }
-
-            // Build argument list for bash: ["-c", "script_path arg1 arg2 ..."]
-            let full_cmd = if args.is_empty() {
-                script_path.clone()
-            } else {
-                format!("{} {}", script_path, args.iter().map(|a| format!("'{}'", a)).collect::<Vec<_>>().join(" "))
-            };
-            let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, return_mode);
-            return Ok(());
         }
-
-        let script_path = format!("scripts/tools/{}", script_name);
-        let tool_display = tool_name.replace('_', " ");
-
-        // Non-interactive tools use floating output window with async execution
-        {
-            let mut state = self.lock_state_mut()?;
-            state.tool_dialog = None;
-            state.floating_output = Some(FloatingOutputState {
-                title: format!("Running: {}", tool_display),
-                content: vec![
-                    format!("Executing: {} {}", script_path, args.join(" ")),
-                    String::new(),
-                ],
-                scroll_offset: 0,
-                auto_scroll: true,
-                complete: false,
-                progress: None,
-                status: "Running...".to_string(),
-            });
-            state.mode = AppMode::FloatingOutput;
-            state.current_tool = Some(tool_display);
-        }
-
-        // Spawn the tool in a background thread
-        // For add_user, pass password via USER_PASSWORD environment variable
-        if tool_name == "add_user" {
-            // Extract password from params[1] if present and non-empty
-            let password = if params.len() >= 2 && !params[1].is_empty() {
-                Some(params[1].clone())
-            } else {
-                None
-            };
-            self.spawn_tool_script_with_password(&script_path, args, password)?;
-        } else {
-            self.spawn_tool_script(&script_path, args)?;
-        }
-
-        Ok(())
     }
 }

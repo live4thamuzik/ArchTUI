@@ -50,6 +50,10 @@ pub fn get_tools_category_description(selection: usize) -> Vec<Line<'static>> {
                 "  • Mount/Unmount     - Manage mount points",
                 Styles::text_secondary(),
             )]),
+            Line::from(vec![Span::styled(
+                "  • LUKS Encryption   - Disk encryption",
+                Styles::text_secondary(),
+            )]),
         ],
         1 => vec![
             Line::from(""),
@@ -87,6 +91,14 @@ pub fn get_tools_category_description(selection: usize) -> Vec<Line<'static>> {
             )]),
             Line::from(vec![Span::styled(
                 "  • System Info       - Hardware details",
+                Styles::text_secondary(),
+            )]),
+            Line::from(vec![Span::styled(
+                "  • Enable Services   - Batch service enable",
+                Styles::text_secondary(),
+            )]),
+            Line::from(vec![Span::styled(
+                "  • Install AUR Helper - paru/yay setup",
                 Styles::text_secondary(),
             )]),
         ],
@@ -128,6 +140,14 @@ pub fn get_tools_category_description(selection: usize) -> Vec<Line<'static>> {
                 "  • Security Audit  - Check vulnerabilities",
                 Styles::text_secondary(),
             )]),
+            Line::from(vec![Span::styled(
+                "  • Install Dotfiles - Deploy user configs",
+                Styles::text_secondary(),
+            )]),
+            Line::from(vec![Span::styled(
+                "  • Run As User     - Execute as non-root",
+                Styles::text_secondary(),
+            )]),
         ],
         3 => vec![
             Line::from(""),
@@ -163,6 +183,10 @@ pub fn get_tools_category_description(selection: usize) -> Vec<Line<'static>> {
                 "  • Network Info     - Current settings",
                 Styles::text_secondary(),
             )]),
+            Line::from(vec![Span::styled(
+                "  • Update Mirrors   - Pacman mirrorlist",
+                Styles::text_secondary(),
+            )]),
         ],
         _ => vec![
             Line::from(""),
@@ -191,6 +215,7 @@ pub fn get_disk_tool_description(selection: usize) -> Vec<Line<'static>> {
         2 => wipe_disk_description(),
         3 => check_disk_health_description(),
         4 => mount_unmount_description(),
+        5 => luks_encryption_description(),
         _ => back_to_menu_description("Tools Menu"),
     }
 }
@@ -203,6 +228,8 @@ pub fn get_system_tool_description(selection: usize) -> Vec<Line<'static>> {
         2 => chroot_description(),
         3 => manage_services_description(),
         4 => system_info_description(),
+        5 => enable_services_description(),
+        6 => install_aur_helper_description(),
         _ => back_to_menu_description("Tools Menu"),
     }
 }
@@ -215,6 +242,8 @@ pub fn get_user_tool_description(selection: usize) -> Vec<Line<'static>> {
         2 => manage_groups_description(),
         3 => configure_ssh_description(),
         4 => security_audit_description(),
+        5 => install_dotfiles_description(),
+        6 => run_as_user_description(),
         _ => back_to_menu_description("Tools Menu"),
     }
 }
@@ -226,6 +255,7 @@ pub fn get_network_tool_description(selection: usize) -> Vec<Line<'static>> {
         1 => test_connectivity_description(),
         2 => firewall_rules_description(),
         3 => network_info_description(),
+        4 => update_mirrors_description(),
         _ => back_to_menu_description("Tools Menu"),
     }
 }
@@ -1061,6 +1091,250 @@ fn network_info_description() -> Vec<Line<'static>> {
             Span::styled(
                 "Read-only - no changes made",
                 Styles::info(),
+            ),
+        ]),
+    ]
+}
+
+fn luks_encryption_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  LUKS Encryption",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Encrypt partitions with LUKS2 for full-disk encryption.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Actions:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Format   - Create new encrypted volume",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Open     - Unlock an encrypted volume",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Close    - Lock an encrypted volume",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  🚨 ", Styles::error()),
+            Span::styled(
+                "Format DESTROYS all data on partition!",
+                Style::default()
+                    .fg(Colors::ERROR)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+    ]
+}
+
+fn enable_services_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Enable Services",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Enable systemd services in a chroot environment.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Common services:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • sddm, gdm        - Display managers",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • NetworkManager    - Network management",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • bluetooth         - Bluetooth support",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Enter comma-separated service names.",
+            Styles::info(),
+        )]),
+    ]
+}
+
+fn install_aur_helper_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Install AUR Helper",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Install paru or yay for AUR package access.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Available helpers:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • paru  - Feature-rich, Rust-based (recommended)",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • yay   - Go-based, widely used",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ⚠️  ", Styles::warning()),
+            Span::styled(
+                "Requires a non-root user to build packages",
+                Styles::warning(),
+            ),
+        ]),
+    ]
+}
+
+fn install_dotfiles_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Install Dotfiles",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Clone a dotfiles repository for a user.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Features:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Clone from any Git repository URL",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Set correct file ownership",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Optional backup of existing files",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ⚠️  ", Styles::warning()),
+            Span::styled(
+                "May overwrite existing configuration files",
+                Styles::warning(),
+            ),
+        ]),
+    ]
+}
+
+fn run_as_user_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Run As User",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Execute a command as a non-root user in chroot.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Use cases:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Run makepkg for package building",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Test user environment setup",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Execute user-specific configuration",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Uses arch-chroot + sudo -u for privilege dropping.",
+            Styles::info(),
+        )]),
+    ]
+}
+
+fn update_mirrors_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Update Mirrors",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Update pacman mirrorlist using reflector.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Options:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Filter by country",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Sort by speed, age, or score",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Limit number of mirrors",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ⚠️  ", Styles::warning()),
+            Span::styled(
+                "Overwrites /etc/pacman.d/mirrorlist",
+                Styles::warning(),
             ),
         ]),
     ]

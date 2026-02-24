@@ -30,9 +30,6 @@
 //! }
 //! ```
 
-// Library API - these types are exported for external use but not yet consumed by the binary
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -40,6 +37,7 @@ use thiserror::Error;
 
 /// Errors that can occur during manifest operations
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)] // Library API: error variants used in manifest validation
 pub enum ManifestError {
     /// Manifest file not found
     #[error("Manifest not found for script: {script}")]
@@ -110,6 +108,7 @@ pub struct EnvRequirement {
     pub allow_empty: bool,
 }
 
+#[allow(dead_code)] // Library API: used in manifest validation
 impl EnvRequirement {
     /// Create a new required environment variable
     pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
@@ -189,6 +188,7 @@ pub struct OptionalEnv {
     pub default: String,
 }
 
+#[allow(dead_code)] // Library API: used in manifest validation
 impl OptionalEnv {
     /// Create a new optional environment variable
     pub fn new(
@@ -258,6 +258,7 @@ fn default_version() -> String {
     "1.0".to_string()
 }
 
+#[allow(dead_code)] // Library API: manifest building and validation
 impl ScriptManifest {
     /// Create a new manifest builder
     pub fn builder(script: impl Into<String>, description: impl Into<String>) -> ManifestBuilder {
@@ -427,6 +428,7 @@ impl ScriptManifest {
 
 /// Result of successful validation, ready for execution
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Library API: returned by validate_execution()
 pub struct ValidatedExecution {
     /// Path to the script
     pub script_path: PathBuf,
@@ -441,6 +443,7 @@ pub struct ValidatedExecution {
     pub valid_exit_codes: Vec<i32>,
 }
 
+#[allow(dead_code)] // Library API
 impl ValidatedExecution {
     /// Check if an exit code is valid for this script
     pub fn is_valid_exit_code(&self, code: i32) -> bool {
@@ -462,6 +465,7 @@ pub struct ManifestBuilder {
     version: String,
 }
 
+#[allow(dead_code)] // Library API: manifest builder
 impl ManifestBuilder {
     /// Create a new builder
     pub fn new(script: impl Into<String>, description: impl Into<String>) -> Self {
@@ -579,6 +583,7 @@ impl ManifestRegistry {
     }
 
     /// Validate and prepare execution for a script
+    #[allow(dead_code)] // Library API: full validation for future use
     pub fn validate_execution(
         &self,
         script: &str,
@@ -593,6 +598,7 @@ impl ManifestRegistry {
     }
 
     /// Get all registered manifests
+    #[allow(dead_code)] // Library API
     pub fn all(&self) -> impl Iterator<Item = &ScriptManifest> {
         self.manifests.values()
     }
