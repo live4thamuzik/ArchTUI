@@ -2,6 +2,7 @@
   "script": "scripts/tools/configure_locale.sh",
   "description": "Configure system hostname, locale, timezone, and console keymap for an installed system.",
   "destructive": true,
+  "required_confirmation": "CONFIRM_CONFIGURE_LOCALE",
   "version": "1.0",
   "needs_stdin": false,
   "valid_exit_codes": [0],

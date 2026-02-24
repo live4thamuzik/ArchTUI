@@ -59,8 +59,8 @@ use crate::scripts::user::{
 use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
 use crate::types::AurHelper;
 
-/// Initialize the logger with appropriate settings
-fn init_logger() {
+/// Initialize the logger for CLI mode (writes to stderr)
+fn init_logger_cli() {
     use env_logger::Builder;
     use std::io::Write;
 
@@ -76,14 +76,59 @@ fn init_logger() {
             )
         })
         .filter_level(log::LevelFilter::Info)
-        .parse_default_env() // Allows RUST_LOG env var to override
+        .parse_default_env()
+        .init();
+}
+
+/// Initialize the logger for TUI mode (writes to file to avoid corrupting the terminal)
+fn init_logger_tui() {
+    use env_logger::Builder;
+    use std::io::Write;
+
+    let target: Box<dyn std::io::Write + Send> =
+        match std::fs::File::create("/tmp/archtui.log") {
+            Ok(file) => Box::new(file),
+            Err(_) => {
+                // Fall back to silencing logs if we can't open the file
+                Box::new(std::io::sink())
+            }
+        };
+
+    Builder::from_default_env()
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "[{} {}:{}] {}",
+                record.level(),
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                record.args()
+            )
+        })
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
+        .target(env_logger::Target::Pipe(target))
         .init();
 }
 
 /// Main application entry point
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging first
-    init_logger();
+    // Parse CLI first to determine if we're in TUI or CLI mode
+    let cli = Cli::parse_args();
+
+    // Determine if we're entering TUI mode (logs go to file instead of stderr)
+    let is_tui_mode = match &cli.command {
+        Some(crate::cli::Commands::Validate { .. }) => false,
+        Some(crate::cli::Commands::Tools { .. }) => false,
+        Some(crate::cli::Commands::Install { config, .. }) => config.is_none(),
+        None => true,
+    };
+
+    if is_tui_mode {
+        init_logger_tui();
+    } else {
+        init_logger_cli();
+    }
     info!("ArchTUI starting up");
 
     // Initialize signal handlers for graceful child process cleanup
@@ -93,8 +138,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Continue anyway - cleanup will still work via Drop
     }
     debug!("Signal handlers initialized");
-
-    let cli = Cli::parse_args();
     debug!("CLI arguments parsed");
 
     // Enable dry-run mode if requested
