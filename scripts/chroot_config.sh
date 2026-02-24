@@ -171,7 +171,7 @@ configure_localization() {
     if [[ -n "${LOCALE:-}" ]]; then
         log_info "Setting locale to: ${LOCALE}"
         echo "${LOCALE} UTF-8" >> /etc/locale.gen
-        locale-gen
+        locale-gen || { log_error "locale-gen failed"; return 1; }
         echo "LANG=${LOCALE}" > /etc/locale.conf
     fi
 
@@ -193,7 +193,7 @@ configure_localization() {
     fi
 
     # Set hardware clock
-    hwclock --systohc
+    hwclock --systohc || log_warn "hwclock --systohc failed — system time may be incorrect after reboot"
 
     # Set keymap
     if [[ -n "${KEYMAP:-}" ]]; then
@@ -323,7 +323,7 @@ configure_mkinitcpio() {
     # We use keyboard before autodetect for maximum hardware compatibility
     local hooks=""
 
-    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         # Encrypted: keyboard before autodetect for hardware compatibility
         # This ensures keyboard works even if booting on different hardware than image was built on
         hooks="base udev keyboard keymap consolefont autodetect microcode modconf kms block"
@@ -352,7 +352,7 @@ configure_mkinitcpio() {
     fi
 
     # Add encryption hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
-    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         hooks="$hooks encrypt"
         log_info "Added encrypt hook for LUKS"
     fi
@@ -405,10 +405,14 @@ configure_mkinitcpio() {
         fi
 
         # Regenerate initramfs
-        mkinitcpio -P
+        if ! mkinitcpio -P; then
+            log_error "mkinitcpio failed — system may not boot"
+            return 1
+        fi
         log_success "Initramfs regenerated"
     else
         log_error "mkinitcpio.conf not found"
+        return 1
     fi
 }
 
@@ -528,11 +532,15 @@ install_systemd_boot() {
     local options=""
 
     # Handle encryption
-    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if [[ -n "${LUKS_UUID:-}" ]]; then
             local mapper_name="cryptroot"
             [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
-            options="cryptdevice=UUID=${LUKS_UUID}:${mapper_name} root=/dev/mapper/${mapper_name}"
+            if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
+                options="cryptdevice=UUID=${LUKS_UUID}:${mapper_name} root=/dev/archvg/root"
+            else
+                options="cryptdevice=UUID=${LUKS_UUID}:${mapper_name} root=/dev/mapper/${mapper_name}"
+            fi
         else
             options="root=UUID=${root_uuid}"
             log_warn "LUKS_UUID not set for encrypted system"
@@ -621,7 +629,7 @@ configure_grub_settings() {
     local cmdline="quiet"
 
     # Add encryption parameters if needed
-    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if [[ -n "${LUKS_UUID:-}" ]]; then
             # Determine mapper name based on strategy
             local mapper_name="cryptroot"
@@ -629,6 +637,12 @@ configure_grub_settings() {
                 mapper_name="cryptlvm"
             fi
             cmdline="$cmdline cryptdevice=UUID=${LUKS_UUID}:${mapper_name}"
+            # Add root= for the decrypted mapper device
+            if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
+                cmdline="$cmdline root=/dev/archvg/root"
+            else
+                cmdline="$cmdline root=/dev/mapper/${mapper_name}"
+            fi
         fi
     fi
 
@@ -653,7 +667,7 @@ configure_grub_settings() {
 
     # Enable os-prober if requested OR if other OS was detected during partitioning
     # This ensures dual-boot is properly configured even if user forgot to enable it
-    if [[ "${OS_PROBER:-no}" == "yes" ]] || [[ "${OTHER_OS_DETECTED:-}" == "yes" ]] || [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+    if [[ "${OS_PROBER:-No}" == "Yes" ]] || [[ "${OTHER_OS_DETECTED:-}" == "yes" ]] || [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
         log_info "Enabling os-prober for dual-boot detection"
         if ! grep -q "^GRUB_DISABLE_OS_PROBER=false" "$grub_default"; then
             echo "GRUB_DISABLE_OS_PROBER=false" >> "$grub_default"
@@ -669,24 +683,46 @@ configure_grub_settings() {
     # This provides a fallback if os-prober doesn't detect it
     if [[ "${WINDOWS_DETECTED:-}" == "yes" && -n "${WINDOWS_EFI_PATH:-}" ]]; then
         log_info "Adding Windows Boot Manager chainload entry"
-        # The entry will be in /etc/grub.d/40_custom
         if [[ ! -f /etc/grub.d/40_custom ]] || ! grep -q "Windows Boot Manager" /etc/grub.d/40_custom; then
-            cat >> /etc/grub.d/40_custom << 'WINEOF'
+            # Detect the EFI partition UUID for the search command
+            local efi_part_uuid=""
+            local esp_mount=""
+            # Find the ESP mount point
+            for mp in /boot/efi /boot /efi; do
+                if mountpoint -q "$mp" 2>/dev/null; then
+                    esp_mount="$mp"
+                    break
+                fi
+            done
+            if [[ -n "$esp_mount" ]]; then
+                local esp_dev
+                esp_dev=$(findmnt -n -o SOURCE "$esp_mount" 2>/dev/null || true)
+                if [[ -n "$esp_dev" ]]; then
+                    efi_part_uuid=$(blkid -s UUID -o value "$esp_dev" 2>/dev/null || true)
+                fi
+            fi
+
+            if [[ -n "$efi_part_uuid" ]]; then
+                cat >> /etc/grub.d/40_custom << WINEOF
 
 menuentry "Windows Boot Manager" {
     insmod part_gpt
     insmod fat
     insmod chain
-    search --no-floppy --fs-uuid --set=root $hints_string $fs_uuid
+    search --no-floppy --fs-uuid --set=root ${efi_part_uuid}
     chainloader /EFI/Microsoft/Boot/bootmgfw.efi
 }
 WINEOF
-            log_info "Added Windows chainload entry to 40_custom"
+                log_info "Added Windows chainload entry with EFI UUID: $efi_part_uuid"
+            else
+                log_warn "Could not detect EFI partition UUID — skipping Windows chainload entry"
+                log_warn "os-prober should still detect Windows automatically"
+            fi
         fi
     fi
 
     # Enable GRUB_ENABLE_CRYPTODISK for encrypted /boot
-    if [[ "${ENCRYPTION:-no}" == "yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
             echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
         fi
@@ -696,9 +732,9 @@ WINEOF
     configure_grub_theme
 
     # Generate GRUB config
+    mkdir -p /boot/grub
     grub-mkconfig -o /boot/grub/grub.cfg || {
-        log_warn "grub-mkconfig failed, trying alternate path"
-        grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || true
+        log_error "grub-mkconfig failed — system may not boot correctly"
     }
 
     log_success "GRUB configured"
@@ -1023,27 +1059,27 @@ install_display_manager() {
         "sddm")
             install_packages "SDDM" sddm
             log_info "Enabling SDDM service..."
-            systemctl enable sddm.service
+            systemctl enable sddm.service || log_warn "Failed to enable sddm.service"
             ;;
         "gdm")
             install_packages "GDM" gdm
             log_info "Enabling GDM service..."
-            systemctl enable gdm.service
+            systemctl enable gdm.service || log_warn "Failed to enable gdm.service"
             ;;
         "lightdm")
             install_packages "LightDM" lightdm lightdm-gtk-greeter
             log_info "Enabling LightDM service..."
-            systemctl enable lightdm.service
+            systemctl enable lightdm.service || log_warn "Failed to enable lightdm.service"
             ;;
         "lxdm")
             install_packages "LXDM" lxdm
             log_info "Enabling LXDM service..."
-            systemctl enable lxdm.service
+            systemctl enable lxdm.service || log_warn "Failed to enable lxdm.service"
             ;;
         "ly")
             install_packages "Ly" ly
             log_info "Enabling Ly service..."
-            systemctl enable ly.service
+            systemctl enable ly.service || log_warn "Failed to enable ly.service"
             ;;
         "none"|"")
             log_info "No display manager selected - skipping"
@@ -1078,19 +1114,19 @@ install_gpu_drivers() {
             fi
             ;;
         "nvidia"|"NVIDIA")
-            pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings
+            pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings || log_warn "Failed to install NVIDIA drivers"
             ;;
         "nvidia-open")
-            pacman -S --noconfirm --needed nvidia-open nvidia-utils nvidia-settings
+            pacman -S --noconfirm --needed nvidia-open nvidia-utils nvidia-settings || log_warn "Failed to install NVIDIA-open drivers"
             ;;
         "amd"|"AMD")
-            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-amdgpu vulkan-radeon
+            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-amdgpu vulkan-radeon || log_warn "Failed to install AMD drivers"
             ;;
         "intel"|"Intel")
-            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-intel vulkan-intel
+            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-intel vulkan-intel || log_warn "Failed to install Intel drivers"
             ;;
         "nouveau")
-            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-nouveau
+            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-nouveau || log_warn "Failed to install Nouveau drivers"
             ;;
         "none"|"None")
             log_info "No GPU drivers selected"
