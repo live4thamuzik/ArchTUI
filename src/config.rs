@@ -159,6 +159,8 @@ impl Default for Configuration {
                 ),
                 ConfigOption::new("Swap", false, "Enable swap partition", "Yes"),
                 ConfigOption::new("Swap Size", false, "Swap partition size", "2GB"),
+                ConfigOption::new("Root Size", false, "Root partition size", "50GB"),
+                ConfigOption::new("Home Size", false, "Home partition size", "Remaining"),
                 ConfigOption::new("Btrfs Snapshots", false, "Enable Btrfs snapshots", "No"),
                 ConfigOption::new(
                     "Btrfs Frequency",
@@ -212,10 +214,10 @@ impl Default for Configuration {
                 ConfigOption::new("Bootloader", true, "Boot loader", "grub"),
                 ConfigOption::new("OS Prober", false, "Enable OS detection", "Yes"),
                 ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
-                ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "arch"),
+                ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "PolyDark"),
                 // Desktop Environment (33-34)
-                ConfigOption::new("Desktop Environment", false, "Desktop environment", "KDE"),
-                ConfigOption::new("Display Manager", false, "Display manager", "sddm"),
+                ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
+                ConfigOption::new("Display Manager", false, "Display manager", "none"),
                 // Boot Splash and Final Setup (35-38)
                 ConfigOption::new("Plymouth", false, "Boot splash screen", "Yes"),
                 ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "arch-glow"),
@@ -257,6 +259,8 @@ impl Configuration {
                 "Home Filesystem" => "HOME_FILESYSTEM",
                 "Swap" => "SWAP",
                 "Swap Size" => "SWAP_SIZE",
+                "Root Size" => "ROOT_SIZE",
+                "Home Size" => "HOME_SIZE",
                 "Btrfs Snapshots" => "BTRFS_SNAPSHOTS",
                 "Btrfs Frequency" => "BTRFS_FREQUENCY",
                 "Btrfs Keep Count" => "BTRFS_KEEP_COUNT",

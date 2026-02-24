@@ -244,7 +244,7 @@ EOF
         
         # Get root partition UUID - find the largest ext4/xfs/btrfs partition
         ROOT_PARTITION=""
-        ROOT_SIZE=0
+        _ROOT_PART_SIZE=0
         
         for part in "${TARGET_DISK}"{1..9}; do
             if [[ -b "$part" ]]; then
@@ -252,8 +252,8 @@ EOF
                 if [[ "$PART_TYPE" == "ext4" || "$PART_TYPE" == "xfs" || "$PART_TYPE" == "btrfs" ]]; then
                     # Get partition size
                     PART_SIZE=$(blockdev --getsize64 "$part" 2>/dev/null || echo "0")
-                    if [[ "$PART_SIZE" -gt "$ROOT_SIZE" ]]; then
-                        ROOT_SIZE="$PART_SIZE"
+                    if [[ "$PART_SIZE" -gt "$_ROOT_PART_SIZE" ]]; then
+                        _ROOT_PART_SIZE="$PART_SIZE"
                         ROOT_PARTITION="$part"
                     fi
                 fi

@@ -121,8 +121,16 @@ execute_simple_partitioning() {
     # Root partition - takes remaining space (or split with home)
     root_part_num=$part_num
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
-        # If separate home, root gets fixed size (let user configure or use sensible default)
-        local root_size_mib="${ROOT_SIZE_MIB:-51200}"  # Default 50GB
+        # Root gets user-configured size; home gets remainder or fixed size
+        local root_size_mib
+        root_size_mib=$(get_root_size_mib)
+
+        if [[ "$root_size_mib" == "REMAINING" ]]; then
+            # Can't both take remaining — fall back to default
+            log_warn "Root=Remaining with separate home: falling back to ${DEFAULT_ROOT_SIZE_MIB}MiB root"
+            root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
+        fi
+
         sgdisk -n "${part_num}:0:+${root_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$INSTALL_DISK"
         sleep 1
         local root_device
@@ -130,9 +138,22 @@ execute_simple_partitioning() {
         format_filesystem "$root_device" "$ROOT_FILESYSTEM_TYPE"
         part_num=$((part_num + 1))
 
-        # Home partition - remainder of disk
+        # Home partition
         home_part_num=$part_num
-        create_home_partition "$INSTALL_DISK" "$part_num" "$HOME_FILESYSTEM_TYPE"
+        local home_size_mib
+        home_size_mib=$(get_home_size_mib)
+
+        if [[ "$home_size_mib" == "REMAINING" ]]; then
+            # Use all remaining space
+            create_home_partition "$INSTALL_DISK" "$part_num" "$HOME_FILESYSTEM_TYPE"
+        else
+            # Fixed size home
+            local home_device
+            sgdisk -n "${part_num}:0:+${home_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$INSTALL_DISK"
+            sleep 1
+            home_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
+            format_filesystem "$home_device" "$HOME_FILESYSTEM_TYPE"
+        fi
     else
         # No separate home - root takes all remaining space
         create_root_partition "$INSTALL_DISK" "$part_num" "$ROOT_FILESYSTEM_TYPE"
@@ -154,20 +175,24 @@ execute_simple_partitioning() {
         btrfs subvolume create /mnt/@var
         btrfs subvolume create /mnt/@tmp
         btrfs subvolume create /mnt/@snapshots
+        btrfs subvolume create /mnt/@cache
+        btrfs subvolume create /mnt/@log
         if [ "$WANT_HOME_PARTITION" != "yes" ]; then
             btrfs subvolume create /mnt/@home
         fi
         umount /mnt
 
         # Remount with subvolume
-        mount -o compress=zstd,noatime,subvol=@ "$root_device" /mnt
-        mkdir -p /mnt/{var,tmp,.snapshots,boot,efi}
-        mount -o compress=zstd,noatime,subvol=@var "$root_device" /mnt/var
-        mount -o compress=zstd,noatime,subvol=@tmp "$root_device" /mnt/tmp
-        mount -o compress=zstd,noatime,subvol=@snapshots "$root_device" /mnt/.snapshots
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@ "$root_device" /mnt
+        mkdir -p /mnt/{var,tmp,.snapshots,boot,efi,var/cache,var/log}
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@var "$root_device" /mnt/var
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp "$root_device" /mnt/tmp
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots "$root_device" /mnt/.snapshots
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache "$root_device" /mnt/var/cache
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@log "$root_device" /mnt/var/log
         if [ "$WANT_HOME_PARTITION" != "yes" ]; then
             mkdir -p /mnt/home
-            mount -o compress=zstd,noatime,subvol=@home "$root_device" /mnt/home
+            mount -o compress=zstd,noatime,space_cache=v2,subvol=@home "$root_device" /mnt/home
         fi
     else
         # Standard mount for ext4/xfs

@@ -8,7 +8,10 @@ set -euo pipefail
 cleanup_on_exit() {
     local exit_code=$?
 
-    # Only cleanup on error
+    # SECURITY: Always clean up sensitive files (passwords in install_config.sh)
+    rm -f /mnt/root/install_config.sh 2>/dev/null || true
+
+    # Only cleanup mounts/devices on error
     if [[ $exit_code -eq 0 ]]; then
         return 0
     fi
@@ -19,7 +22,7 @@ cleanup_on_exit() {
     for mount_point in /mnt/home /mnt/boot /mnt/efi /mnt; do
         if mountpoint -q "$mount_point" 2>/dev/null; then
             echo "Unmounting $mount_point..."
-            umount -R "$mount_point" 2>/dev/null || true
+            umount -R "$mount_point" 2>/dev/null || umount -l "$mount_point" 2>/dev/null || true
         fi
     done
 
@@ -51,7 +54,9 @@ cleanup_on_exit() {
 
 # Set up exit and signal traps (process-safety.md: death pact compliance)
 trap cleanup_on_exit EXIT
-trap 'cleanup_on_exit' SIGTERM SIGINT
+# Signal traps: exit with 128+signal to trigger EXIT trap (avoids double cleanup)
+trap 'exit 143' SIGTERM
+trap 'exit 130' SIGINT
 
 # Debug: Show script startup
 echo "=== INSTALLATION ENGINE STARTED ==="
@@ -174,6 +179,8 @@ SEPARATE_HOME="${SEPARATE_HOME:-No}"
 HOME_FILESYSTEM="${HOME_FILESYSTEM:-ext4}"
 SWAP="${SWAP:-Yes}"
 SWAP_SIZE="${SWAP_SIZE:-2GB}"
+ROOT_SIZE="${ROOT_SIZE:-50GB}"
+HOME_SIZE="${HOME_SIZE:-Remaining}"
 
 # Convert TUI variables to internal format
 ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
@@ -184,7 +191,8 @@ WANT_SWAP="$(echo "${SWAP:-Yes}" | tr '[:upper:]' '[:lower:]')"
 [[ "$WANT_SWAP" == "yes" ]] || WANT_SWAP="no"
 
 # Export for strategy scripts
-export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP
+export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP SWAP_SIZE
+export ROOT_SIZE HOME_SIZE
 export ENCRYPTION ENCRYPTION_PASSWORD
 
 # Btrfs options
@@ -220,7 +228,7 @@ FLATPAK="${FLATPAK:-No}"
 BOOTLOADER="${BOOTLOADER:-grub}"
 OS_PROBER="${OS_PROBER:-Yes}"
 GRUB_THEME="${GRUB_THEME:-No}"
-GRUB_THEME_SELECTION="${GRUB_THEME_SELECTION:-arch}"
+GRUB_THEME_SELECTION="${GRUB_THEME_SELECTION:-PolyDark}"
 
 # Desktop Environment
 DESKTOP_ENVIRONMENT="${DESKTOP_ENVIRONMENT:-none}"
@@ -332,6 +340,15 @@ validate_configuration() {
     if ! echo "$MAIN_USERNAME" | grep -qE '^[a-z_][a-z0-9_-]*$'; then
         log_error "Invalid username format: $MAIN_USERNAME (must start with lowercase letter)"
         return 1
+    fi
+
+    # systemd-boot requires kernels on FAT32 (ESP at /boot)
+    # Our auto_* strategies create ESP at /efi + ext4 /boot — incompatible
+    if [[ "$BOOTLOADER" == "systemd-boot" && "$PARTITIONING_STRATEGY" == auto_* ]]; then
+        log_warn "systemd-boot is incompatible with auto partitioning (ESP at /efi, ext4 /boot)"
+        log_warn "systemd-boot requires kernels on FAT32 — switching to GRUB"
+        BOOTLOADER="grub"
+        export BOOTLOADER
     fi
 
     log_success "Configuration validated successfully"
@@ -541,17 +558,22 @@ install_base_system() {
 
     # Add filesystem tools based on selected filesystems
     local -a fs_packages=()
-    case "$ROOT_FILESYSTEM" in
-        "btrfs")
-            fs_packages+=("btrfs-progs")
-            ;;
-        "xfs")
-            fs_packages+=("xfsprogs")
-            ;;
-        "ext4")
-            fs_packages+=("e2fsprogs")
-            ;;
-    esac
+    local _fs
+    for _fs in "$ROOT_FILESYSTEM" "$HOME_FILESYSTEM"; do
+        case "$_fs" in
+            "btrfs")
+                fs_packages+=("btrfs-progs")
+                ;;
+            "xfs")
+                fs_packages+=("xfsprogs")
+                ;;
+            "ext4")
+                fs_packages+=("e2fsprogs")
+                ;;
+        esac
+    done
+    # Deduplicate
+    mapfile -t fs_packages < <(printf '%s\n' "${fs_packages[@]}" | sort -u)
 
     # Add LUKS/LVM packages if needed
     if [[ "$ENCRYPTION" == "Yes" ]] || [[ "$PARTITIONING_STRATEGY" == *"luks"* ]]; then
@@ -604,6 +626,11 @@ install_base_system() {
     log_info "Package list: ${all_packages[*]}"
     log_info "Starting pacstrap - this will take several minutes..."
     log_info "Downloading and installing packages to /mnt..."
+
+    # Pre-flight: verify /mnt is actually mounted
+    if ! mountpoint -q /mnt 2>/dev/null; then
+        error_exit "/mnt is not mounted — disk partitioning may have failed"
+    fi
 
     # Pre-flight: check available space on /mnt (need at least 2GB for base system)
     local available_mb
@@ -689,56 +716,76 @@ configure_chroot() {
     chmod +x /mnt/root/chroot_config.sh
     chmod +x /mnt/root/utils.sh
 
+    # Validate UUIDs for encrypted installs
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] && [[ -z "${LUKS_UUID:-}" ]]; then
+        log_warn "LUKS_UUID is empty — encrypted boot configuration may fail"
+        log_warn "Attempting to extract from disk..."
+        # Try to extract from the LUKS device if available
+        if [[ -n "${INSTALL_DISK:-}" ]]; then
+            for part in "${INSTALL_DISK}"*; do
+                if cryptsetup isLuks "$part" 2>/dev/null; then
+                    LUKS_UUID=$(blkid -s UUID -o value "$part" 2>/dev/null || true)
+                    [[ -n "$LUKS_UUID" ]] && log_info "Recovered LUKS_UUID: $LUKS_UUID" && break
+                fi
+            done
+        fi
+    fi
+
     # Export all configuration variables for chroot
     # Use a config file to pass variables (more reliable than env)
-    cat > /mnt/root/install_config.sh << CONFIGEOF
-#!/bin/bash
-# Auto-generated configuration for chroot
-export MAIN_USERNAME="$MAIN_USERNAME"
-export MAIN_USER_PASSWORD="$MAIN_USER_PASSWORD"
-export ROOT_PASSWORD="$ROOT_PASSWORD"
-export SYSTEM_HOSTNAME="$SYSTEM_HOSTNAME"
-export TIMEZONE_REGION="$TIMEZONE_REGION"
-export TIMEZONE="$TIMEZONE"
-export LOCALE="$LOCALE"
-export KEYMAP="$KEYMAP"
-export DESKTOP_ENVIRONMENT="$DESKTOP_ENVIRONMENT"
-export DISPLAY_MANAGER="$DISPLAY_MANAGER"
-export GPU_DRIVERS="$GPU_DRIVERS"
-export AUR_HELPER="$AUR_HELPER"
-export ADDITIONAL_PACKAGES="$ADDITIONAL_PACKAGES"
-export ADDITIONAL_AUR_PACKAGES="$ADDITIONAL_AUR_PACKAGES"
-export FLATPAK="$FLATPAK"
-export PLYMOUTH="$PLYMOUTH"
-export PLYMOUTH_THEME="$PLYMOUTH_THEME"
-export NUMLOCK_ON_BOOT="$NUMLOCK_ON_BOOT"
-export GIT_REPOSITORY="$GIT_REPOSITORY"
-export GIT_REPOSITORY_URL="$GIT_REPOSITORY_URL"
-export BOOT_MODE="$BOOT_MODE"
-export BOOTLOADER="$BOOTLOADER"
-export OS_PROBER="$OS_PROBER"
-export GRUB_THEME="$GRUB_THEME"
-export GRUB_THEME_SELECTION="$GRUB_THEME_SELECTION"
-export SECURE_BOOT="$SECURE_BOOT"
-export KERNEL="$KERNEL"
-export MULTILIB="$MULTILIB"
-export TIME_SYNC="$TIME_SYNC"
-export INSTALL_DISK="$INSTALL_DISK"
-export PARTITIONING_STRATEGY="$PARTITIONING_STRATEGY"
-export ENCRYPTION="$ENCRYPTION"
-export ROOT_FILESYSTEM="$ROOT_FILESYSTEM"
-export HOME_FILESYSTEM="$HOME_FILESYSTEM"
-export BTRFS_SNAPSHOTS="$BTRFS_SNAPSHOTS"
-export BTRFS_FREQUENCY="$BTRFS_FREQUENCY"
-export BTRFS_KEEP_COUNT="$BTRFS_KEEP_COUNT"
-export BTRFS_ASSISTANT="$BTRFS_ASSISTANT"
-export SWAP="$SWAP"
-export WANT_SWAP="$WANT_SWAP"
-export SWAP_UUID="${SWAP_UUID:-}"
-export ROOT_UUID="${ROOT_UUID:-}"
-export LUKS_UUID="${LUKS_UUID:-}"
-export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM_TYPE"
-CONFIGEOF
+    # Use printf with %s to safely write values (prevents expansion of $, `, etc. in passwords)
+    {
+        printf '#!/bin/bash\n'
+        printf '# Auto-generated configuration for chroot\n'
+        printf 'export MAIN_USERNAME=%q\n' "$MAIN_USERNAME"
+        printf 'export MAIN_USER_PASSWORD=%q\n' "$MAIN_USER_PASSWORD"
+        printf 'export ROOT_PASSWORD=%q\n' "$ROOT_PASSWORD"
+        printf 'export SYSTEM_HOSTNAME=%q\n' "$SYSTEM_HOSTNAME"
+        printf 'export TIMEZONE_REGION=%q\n' "$TIMEZONE_REGION"
+        printf 'export TIMEZONE=%q\n' "$TIMEZONE"
+        printf 'export LOCALE=%q\n' "$LOCALE"
+        printf 'export KEYMAP=%q\n' "$KEYMAP"
+        printf 'export DESKTOP_ENVIRONMENT=%q\n' "$DESKTOP_ENVIRONMENT"
+        printf 'export DISPLAY_MANAGER=%q\n' "$DISPLAY_MANAGER"
+        printf 'export GPU_DRIVERS=%q\n' "$GPU_DRIVERS"
+        printf 'export AUR_HELPER=%q\n' "$AUR_HELPER"
+        printf 'export ADDITIONAL_PACKAGES=%q\n' "$ADDITIONAL_PACKAGES"
+        printf 'export ADDITIONAL_AUR_PACKAGES=%q\n' "$ADDITIONAL_AUR_PACKAGES"
+        printf 'export FLATPAK=%q\n' "$FLATPAK"
+        printf 'export PLYMOUTH=%q\n' "$PLYMOUTH"
+        printf 'export PLYMOUTH_THEME=%q\n' "$PLYMOUTH_THEME"
+        printf 'export NUMLOCK_ON_BOOT=%q\n' "$NUMLOCK_ON_BOOT"
+        printf 'export GIT_REPOSITORY=%q\n' "$GIT_REPOSITORY"
+        printf 'export GIT_REPOSITORY_URL=%q\n' "$GIT_REPOSITORY_URL"
+        printf 'export BOOT_MODE=%q\n' "$BOOT_MODE"
+        printf 'export BOOTLOADER=%q\n' "$BOOTLOADER"
+        printf 'export OS_PROBER=%q\n' "$OS_PROBER"
+        printf 'export GRUB_THEME=%q\n' "$GRUB_THEME"
+        printf 'export GRUB_THEME_SELECTION=%q\n' "$GRUB_THEME_SELECTION"
+        printf 'export SECURE_BOOT=%q\n' "$SECURE_BOOT"
+        printf 'export KERNEL=%q\n' "$KERNEL"
+        printf 'export MULTILIB=%q\n' "$MULTILIB"
+        printf 'export TIME_SYNC=%q\n' "$TIME_SYNC"
+        printf 'export INSTALL_DISK=%q\n' "$INSTALL_DISK"
+        printf 'export PARTITIONING_STRATEGY=%q\n' "$PARTITIONING_STRATEGY"
+        printf 'export ENCRYPTION=%q\n' "$ENCRYPTION"
+        printf 'export ENCRYPTION_PASSWORD=%q\n' "$ENCRYPTION_PASSWORD"
+        printf 'export ROOT_FILESYSTEM=%q\n' "$ROOT_FILESYSTEM"
+        printf 'export HOME_FILESYSTEM=%q\n' "$HOME_FILESYSTEM"
+        printf 'export BTRFS_SNAPSHOTS=%q\n' "$BTRFS_SNAPSHOTS"
+        printf 'export BTRFS_FREQUENCY=%q\n' "$BTRFS_FREQUENCY"
+        printf 'export BTRFS_KEEP_COUNT=%q\n' "$BTRFS_KEEP_COUNT"
+        printf 'export BTRFS_ASSISTANT=%q\n' "$BTRFS_ASSISTANT"
+        printf 'export SWAP=%q\n' "$SWAP"
+        printf 'export WANT_SWAP=%q\n' "$WANT_SWAP"
+        printf 'export SWAP_UUID=%q\n' "${SWAP_UUID:-}"
+        printf 'export ROOT_UUID=%q\n' "${ROOT_UUID:-}"
+        printf 'export LUKS_UUID=%q\n' "${LUKS_UUID:-}"
+        printf 'export ROOT_FILESYSTEM_TYPE=%q\n' "$ROOT_FILESYSTEM_TYPE"
+        printf 'export WINDOWS_DETECTED=%q\n' "${WINDOWS_DETECTED:-}"
+        printf 'export WINDOWS_EFI_PATH=%q\n' "${WINDOWS_EFI_PATH:-}"
+        printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
+    } > /mnt/root/install_config.sh
 
     chmod +x /mnt/root/install_config.sh
 

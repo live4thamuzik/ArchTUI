@@ -27,8 +27,13 @@ pub struct InstallationConfig {
     pub home_filesystem: Filesystem,
     pub separate_home: Toggle,
     pub encryption: AutoToggle,
+    pub encryption_password: String, // LUKS passphrase (if encryption enabled)
     pub swap: Toggle,
     pub swap_size: String, // Size like "2GB" - flexible format
+    #[serde(default = "default_root_size")]
+    pub root_size: String, // Size like "50GB" or "Remaining"
+    #[serde(default = "default_home_size")]
+    pub home_size: String, // Size like "100GB" or "Remaining"
 
     // Btrfs options
     pub btrfs_snapshots: Toggle,
@@ -77,6 +82,14 @@ pub struct InstallationConfig {
     pub numlock_on_boot: Toggle,
     pub git_repository: Toggle,
     pub git_repository_url: String, // User-defined URL
+}
+
+fn default_root_size() -> String {
+    "50GB".to_string()
+}
+
+fn default_home_size() -> String {
+    "Remaining".to_string()
 }
 
 impl InstallationConfig {
@@ -171,6 +184,11 @@ impl InstallationConfig {
             anyhow::bail!("Root password cannot contain whitespace");
         }
 
+        // Validate encryption password if encryption is enabled
+        if self.encryption == AutoToggle::Yes && self.encryption_password.trim().is_empty() {
+            anyhow::bail!("Encryption password must be specified when encryption is enabled");
+        }
+
         // Validate Git repository URL format if enabled
         if self.git_repository == Toggle::Yes && !self.git_repository_url.trim().is_empty() {
             let url = self.git_repository_url.trim();
@@ -214,8 +232,14 @@ impl InstallationConfig {
             ),
             ("SEPARATE_HOME".to_string(), self.separate_home.to_string()),
             ("ENCRYPTION".to_string(), self.encryption.to_string()),
+            (
+                "ENCRYPTION_PASSWORD".to_string(),
+                self.encryption_password.clone(),
+            ),
             ("SWAP".to_string(), self.swap.to_string()),
             ("SWAP_SIZE".to_string(), self.swap_size.clone()),
+            ("ROOT_SIZE".to_string(), self.root_size.clone()),
+            ("HOME_SIZE".to_string(), self.home_size.clone()),
             (
                 "BTRFS_SNAPSHOTS".to_string(),
                 self.btrfs_snapshots.to_string(),
@@ -302,8 +326,11 @@ impl Default for InstallationConfig {
             home_filesystem: Filesystem::Ext4,
             separate_home: Toggle::No,
             encryption: AutoToggle::Auto,
+            encryption_password: String::new(),
             swap: Toggle::Yes,
             swap_size: "2GB".to_string(),
+            root_size: "50GB".to_string(),
+            home_size: "Remaining".to_string(),
             btrfs_snapshots: Toggle::No,
             btrfs_frequency: SnapshotFrequency::Weekly,
             btrfs_keep_count: 3,
@@ -369,8 +396,11 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             home_filesystem: parse_or_default(&get_value("Home Filesystem")),
             separate_home: parse_or_default(&get_value("Separate Home Partition")),
             encryption: parse_or_default(&get_value("Encryption")),
+            encryption_password: get_value("Encryption Password"),
             swap: parse_or_default(&get_value("Swap")),
             swap_size: get_value("Swap Size"),
+            root_size: get_value("Root Size"),
+            home_size: get_value("Home Size"),
             btrfs_snapshots: parse_or_default(&get_value("Btrfs Snapshots")),
             btrfs_frequency: parse_or_default(&get_value("Btrfs Frequency")),
             btrfs_keep_count: get_value("Btrfs Keep Count").parse().unwrap_or(3),
