@@ -899,6 +899,17 @@ impl App {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_up();
                 }
+                AppMode::Installation => {
+                    // Snapshot current position when switching from auto to manual
+                    if state.installer_auto_scroll {
+                        let visible_height = 30_usize; // approximate viewport
+                        state.installer_scroll_offset =
+                            state.installer_output.len().saturating_sub(visible_height);
+                    }
+                    state.installer_auto_scroll = false;
+                    state.installer_scroll_offset =
+                        state.installer_scroll_offset.saturating_sub(1);
+                }
                 _ => {}
             }
         }
@@ -947,6 +958,16 @@ impl App {
                 }
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_down();
+                }
+                AppMode::Installation => {
+                    state.installer_scroll_offset += 1;
+                    // Re-enable auto-scroll when scrolled near bottom
+                    let visible_height = 30_usize; // approximate viewport
+                    if state.installer_scroll_offset
+                        >= state.installer_output.len().saturating_sub(visible_height)
+                    {
+                        state.installer_auto_scroll = true;
+                    }
                 }
                 _ => {}
             }

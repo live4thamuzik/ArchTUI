@@ -235,6 +235,7 @@ pub fn render_installation_ui_in_area(
             Constraint::Length(7), // Header
             Constraint::Length(3), // Title
             Constraint::Length(3), // Progress bar
+            Constraint::Length(1), // Status message
             Constraint::Min(0),    // Installer output
         ])
         .split(area);
@@ -242,7 +243,26 @@ pub fn render_installation_ui_in_area(
     header.render_header(f, chunks[0]);
     header.render_title(f, chunks[1], "Arch Linux Installation Progress");
     render_progress_bar(f, chunks[2], state.installation_progress as u16);
-    render_installer_output(f, chunks[3], &state.installer_output);
+
+    // Status line showing current phase
+    let status_style = if state.installation_progress >= 100 {
+        Style::default().fg(Colors::SUCCESS)
+    } else {
+        Style::default().fg(Colors::SECONDARY)
+    };
+    let status_line = Paragraph::new(Line::from(vec![
+        Span::styled(" Status: ", Style::default().fg(Colors::FG_MUTED)),
+        Span::styled(&state.status_message, status_style),
+    ]));
+    f.render_widget(status_line, chunks[3]);
+
+    render_installer_output(
+        f,
+        chunks[4],
+        &state.installer_output,
+        state.installer_scroll_offset,
+        state.installer_auto_scroll,
+    );
 }
 
 /// Render completion UI in specified area
