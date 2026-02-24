@@ -4,7 +4,7 @@
 # Usage: run_as_user.sh --user <user> --cmd <command> --root <chroot_path> [--workdir <dir>]
 #
 # CONSTRAINT: makepkg forbids running as root. This script drops
-# privileges via `sudo -u <user>` inside arch-chroot.
+# privileges via `runuser -u <user>` inside arch-chroot.
 
 set -euo pipefail
 
@@ -72,9 +72,9 @@ fi
 log_info "Running as user '$USER' in chroot '$ROOT': $CMD"
 
 if [[ -n "$WORKDIR" ]]; then
-    arch-chroot "$ROOT" sudo -u "$USER" bash -c "cd '$WORKDIR' && $CMD"
+    arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd '$WORKDIR' && $CMD"
 else
-    arch-chroot "$ROOT" sudo -u "$USER" bash -c "$CMD"
+    arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "$CMD"
 fi
 
 exit_code=$?
