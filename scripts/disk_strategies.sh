@@ -13,7 +13,7 @@ trap 'cleanup_disk_strategies SIGTERM' SIGTERM
 trap 'cleanup_disk_strategies SIGINT' SIGINT
 
 # Source utility functions using source_or_die pattern
-SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+_STRAT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 # Inline source_or_die before utils.sh is loaded
 _source_or_die() {
@@ -29,8 +29,8 @@ _source_or_die() {
     fi
 }
 
-_source_or_die "$SCRIPT_DIR/utils.sh"
-_source_or_die "$SCRIPT_DIR/disk_utils.sh"
+_source_or_die "$_STRAT_DIR/utils.sh"
+_source_or_die "$_STRAT_DIR/disk_utils.sh"
 
 # Constants are defined in disk_utils.sh
 
@@ -68,55 +68,55 @@ execute_disk_strategy() {
 
 # Simple partitioning
 do_auto_simple_partitioning_efi_xbootldr() {
-    source_or_die "$SCRIPT_DIR/strategies/simple.sh"
+    source_or_die "$_STRAT_DIR/strategies/simple.sh"
     execute_simple_partitioning
 }
 
 # Simple LUKS partitioning
 do_auto_simple_luks_partitioning() {
-    source_or_die "$SCRIPT_DIR/strategies/simple_luks.sh"
+    source_or_die "$_STRAT_DIR/strategies/simple_luks.sh"
     execute_simple_luks_partitioning
 }
 
 # LVM partitioning
 do_auto_lvm_partitioning_efi_xbootldr() {
-    source_or_die "$SCRIPT_DIR/strategies/lvm.sh"
+    source_or_die "$_STRAT_DIR/strategies/lvm.sh"
     execute_lvm_partitioning
 }
 
 # LVM + LUKS partitioning
 do_auto_luks_lvm_partitioning() {
-    source_or_die "$SCRIPT_DIR/strategies/lvm_luks.sh"
+    source_or_die "$_STRAT_DIR/strategies/lvm_luks.sh"
     execute_lvm_luks_partitioning
 }
 
 # RAID partitioning
 do_auto_raid_partitioning() {
-    source_or_die "$SCRIPT_DIR/strategies/raid.sh"
+    source_or_die "$_STRAT_DIR/strategies/raid.sh"
     execute_raid_partitioning
 }
 
 # RAID + LUKS partitioning
 do_auto_raid_luks_partitioning() {
-    source_or_die "$SCRIPT_DIR/strategies/raid_luks.sh"
+    source_or_die "$_STRAT_DIR/strategies/raid_luks.sh"
     execute_raid_luks_partitioning
 }
 
 # RAID + LVM partitioning
 do_auto_raid_lvm_partitioning() {
-    source_or_die "$SCRIPT_DIR/strategies/raid_lvm.sh"
+    source_or_die "$_STRAT_DIR/strategies/raid_lvm.sh"
     execute_raid_lvm_partitioning
 }
 
 # RAID + LVM + LUKS partitioning
 do_auto_raid_lvm_luks_partitioning() {
-    source_or_die "$SCRIPT_DIR/strategies/raid_lvm_luks.sh"
+    source_or_die "$_STRAT_DIR/strategies/raid_lvm_luks.sh"
     execute_raid_lvm_luks_partitioning
 }
 
 # Manual partitioning
 do_manual_partitioning_guided() {
-    source_or_die "$SCRIPT_DIR/strategies/manual.sh"
+    source_or_die "$_STRAT_DIR/strategies/manual.sh"
     execute_manual_partitioning
 }
 

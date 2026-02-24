@@ -666,6 +666,18 @@ configure_chroot() {
     mkdir -p /mnt/root/desktops
     cp -r "$SCRIPT_DIR/desktops/"* /mnt/root/desktops/ 2>/dev/null || true
 
+    # Copy Plymouth themes to target system BEFORE chroot (so configure_plymouth can find them)
+    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        local themes_source="$SCRIPT_DIR/../Source"
+        if [[ -d "$themes_source" ]]; then
+            log_info "Copying Plymouth themes to target system..."
+            mkdir -p /mnt/usr/share/plymouth/themes
+            cp -r "$themes_source/"* /mnt/usr/share/plymouth/themes/ || log_warn "Failed to copy some Plymouth themes"
+        else
+            log_warn "Plymouth themes source directory not found: $themes_source"
+        fi
+    fi
+
     # Make scripts executable
     chmod +x /mnt/root/chroot_config.sh
     chmod +x /mnt/root/utils.sh
@@ -783,15 +795,6 @@ CONFIGEOF
 # --- Finalization ---
 finalize_installation() {
     log_info "Finalizing installation..."
-
-    # Copy Plymouth themes if they exist and Plymouth is enabled
-    if [[ "$PLYMOUTH" == "Yes" ]]; then
-        local themes_source="$SCRIPT_DIR/../Source"
-        if [[ -d "$themes_source" ]]; then
-            log_info "Copying Plymouth themes..."
-            cp -r "$themes_source/"* /mnt/usr/share/plymouth/themes/ 2>/dev/null || true
-        fi
-    fi
 
     # Ensure all services are properly enabled
     log_info "Verifying service configuration..."
