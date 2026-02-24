@@ -4,7 +4,7 @@
 # Usage: install_aur_helper.sh --helper <paru|yay> --user <user> --root <chroot_path>
 #
 # CONSTRAINT: makepkg forbids running as root.
-# This script drops privileges via `sudo -u <user>` inside arch-chroot.
+# This script drops privileges via `runuser -u <user>` inside arch-chroot.
 #
 # FAILURE POLICY: Non-fatal. Caller should log warning and continue
 # if this script exits non-zero.
@@ -20,6 +20,8 @@ cleanup() {
         rm -rf "${ROOT:?}/${BUILD_DIR}"
         log_info "Cleaned up partial build directory"
     fi
+    # Revoke temporary passwordless sudo if it was created
+    rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
     exit 130
 }
 trap cleanup SIGTERM SIGINT SIGHUP
@@ -106,20 +108,24 @@ if [[ -d "$ROOT/$BUILD_DIR" ]]; then
     rm -rf "${ROOT:?}/${BUILD_DIR}"
 fi
 
-arch-chroot "$ROOT" sudo -u "$USER" git clone "$AUR_URL" "$BUILD_DIR"
+arch-chroot "$ROOT" runuser -u "$USER" -- timeout 60 git clone "$AUR_URL" "$BUILD_DIR"
 
-if [[ ! -d "$ROOT/$BUILD_DIR/PKGBUILD" ]] && [[ ! -f "$ROOT/$BUILD_DIR/PKGBUILD" ]]; then
-    # Check if PKGBUILD exists (file, not dir)
-    if [[ ! -f "$ROOT/$BUILD_DIR/PKGBUILD" ]]; then
-        log_error "PKGBUILD not found in $BUILD_DIR — clone may have failed"
-        exit 1
-    fi
+if [[ ! -f "$ROOT/$BUILD_DIR/PKGBUILD" ]]; then
+    log_error "PKGBUILD not found in $BUILD_DIR — clone may have failed"
+    exit 1
 fi
 
 # --- Step 2: Build and install ---
 log_info "Step 2/3: Building and installing $HELPER (makepkg -si --noconfirm)..."
 
-arch-chroot "$ROOT" sudo -u "$USER" bash -c "cd '$BUILD_DIR' && makepkg -si --noconfirm"
+# Grant temporary passwordless sudo — makepkg -si calls sudo pacman internally
+echo "$USER ALL=(ALL) NOPASSWD: ALL" > "$ROOT/etc/sudoers.d/temp-aur-build"
+chmod 440 "$ROOT/etc/sudoers.d/temp-aur-build"
+
+arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd '$BUILD_DIR' && makepkg -si --noconfirm"
+
+# Revoke temporary passwordless sudo
+rm -f "$ROOT/etc/sudoers.d/temp-aur-build"
 
 # --- Step 3: Verify installation ---
 log_info "Step 3/3: Verifying $HELPER installation..."

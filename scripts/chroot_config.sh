@@ -1189,8 +1189,8 @@ install_flatpak() {
 
     pacman -S --noconfirm --needed flatpak
 
-    # Add Flathub repository for the user
-    sudo -u "$MAIN_USERNAME" flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo || true
+    # Add Flathub repository for the user (--user flag, no sudo needed)
+    runuser -u "$MAIN_USERNAME" -- flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo || true
 
     log_success "Flatpak installed"
 }
@@ -1221,7 +1221,14 @@ install_additional_packages() {
             read -ra aur_packages <<< "$ADDITIONAL_AUR_PACKAGES"
 
             if [[ ${#aur_packages[@]} -gt 0 ]]; then
-                sudo -u "$MAIN_USERNAME" "$helper" -S --noconfirm "${aur_packages[@]}" || log_warn "Some AUR packages may have failed to install"
+                # NOPASSWD needed — AUR helpers call sudo pacman internally
+                local sudoers_drop="/etc/sudoers.d/temp-aur-packages"
+                echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
+                chmod 440 "$sudoers_drop"
+
+                runuser -u "$MAIN_USERNAME" -- "$helper" -S --noconfirm "${aur_packages[@]}" || log_warn "Some AUR packages may have failed to install"
+
+                rm -f "$sudoers_drop"
             fi
         else
             log_warn "AUR packages requested but no AUR helper available"
@@ -1435,14 +1442,14 @@ deploy_dotfiles() {
 
     local user_home="/home/$MAIN_USERNAME"
 
-    timeout 60 sudo -u "$MAIN_USERNAME" git clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
+    timeout 60 runuser -u "$MAIN_USERNAME" -- git clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
         log_warn "Failed to clone dotfiles repository"
         return 0
     }
 
     # Run install script if it exists
     if [[ -x "$user_home/dotfiles/install.sh" ]]; then
-        sudo -u "$MAIN_USERNAME" bash -c "cd \"$user_home/dotfiles\" && ./install.sh" || log_warn "Dotfiles install script failed"
+        runuser -u "$MAIN_USERNAME" -- bash -c "cd \"$user_home/dotfiles\" && ./install.sh" || log_warn "Dotfiles install script failed"
     fi
 
     log_success "Dotfiles deployed"
