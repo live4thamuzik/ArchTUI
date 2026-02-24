@@ -1732,7 +1732,13 @@ impl App {
             }
             // ToolExecution removed — tool execution uses FloatingOutput mode
             AppMode::Installation => {
-                // During installation, go back to guided installer
+                // Kill the running installer process group before switching modes
+                if let Some(pid) = state.installer_pid.take() {
+                    if let Ok(mut registry) = ChildRegistry::global().lock() {
+                        registry.terminate_current(std::time::Duration::from_secs(3));
+                        registry.unregister(pid);
+                    }
+                }
                 state.mode = AppMode::GuidedInstaller;
                 state.status_message =
                     "Installation cancelled - configure your settings".to_string();
@@ -2161,6 +2167,64 @@ impl App {
                 } else if let Ok(mut state) = self.lock_state_mut() {
                     state.status_message =
                         "Swap size can only be configured when swap is enabled.".to_string();
+                }
+            }
+            "Root Size" => {
+                // Allow when Separate Home = Yes OR strategy contains "lvm"
+                let (home_enabled, strategy) = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    let home = state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Separate Home Partition")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
+                        .unwrap_or(false);
+                    let strat = state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Partitioning Strategy")
+                        .map(|opt| opt.get_value())
+                        .unwrap_or_default();
+                    (home, strat)
+                };
+
+                if home_enabled || strategy.contains("lvm") {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "Root size is configurable when using a separate home partition or LVM strategy.".to_string();
+                }
+            }
+            "Home Size" => {
+                // Only allow when Separate Home = Yes
+                let home_enabled = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Separate Home Partition")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
+                        .unwrap_or(false)
+                };
+
+                if home_enabled {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "Home size is only configurable when separate home partition is enabled.".to_string();
                 }
             }
             "Btrfs Frequency" | "Btrfs Keep Count" | "Btrfs Assistant" => {
@@ -2652,6 +2716,71 @@ impl App {
                             .find(|opt| opt.name == "Swap Size")
                         {
                             swap_size_option.value = "2GB".to_string();
+                        }
+                    }
+                }
+                "Separate Home Partition" => {
+                    if value.to_lowercase() == "no" {
+                        // No home: root takes remaining, home size not applicable
+                        if let Some(root_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Root Size")
+                        {
+                            root_opt.value = "Remaining".to_string();
+                        }
+                        if let Some(home_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Home Size")
+                        {
+                            home_opt.value = "N/A".to_string();
+                        }
+                    } else if value.to_lowercase() == "yes" {
+                        // With home: root gets fixed default, home takes remaining
+                        if let Some(root_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Root Size")
+                        {
+                            root_opt.value = "50GB".to_string();
+                        }
+                        if let Some(home_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Home Size")
+                        {
+                            home_opt.value = "Remaining".to_string();
+                        }
+                    }
+                }
+                "Partitioning Strategy" => {
+                    // When switching to LVM without home, ensure root size is usable
+                    if value.contains("lvm") {
+                        let home_enabled = state
+                            .config
+                            .options
+                            .iter()
+                            .find(|opt| opt.name == "Separate Home Partition")
+                            .map(|opt| opt.get_value().to_lowercase() == "yes")
+                            .unwrap_or(false);
+
+                        if !home_enabled {
+                            // LVM without home: root should take remaining space
+                            if let Some(root_opt) = state
+                                .config
+                                .options
+                                .iter_mut()
+                                .find(|opt| opt.name == "Root Size")
+                            {
+                                if root_opt.value == "N/A" {
+                                    root_opt.value = "Remaining".to_string();
+                                }
+                            }
                         }
                     }
                 }

@@ -68,6 +68,40 @@ get_partition_path() {
 
 get_swap_size_mib() {
     # shellcheck disable=SC2120
+
+    # Priority 1: User-specified SWAP_SIZE from TUI (e.g., "2GB", "4096MB", "8G", "512M")
+    local user_swap="${SWAP_SIZE:-}"
+    if [[ -n "$user_swap" ]]; then
+        local size_val size_unit
+        # Extract numeric part and unit
+        size_val="${user_swap//[^0-9]/}"
+        size_unit="${user_swap//[0-9]/}"
+        size_unit="${size_unit^^}" # Uppercase for comparison
+
+        if [[ -n "$size_val" && "$size_val" =~ ^[0-9]+$ ]]; then
+            case "$size_unit" in
+                "GB"|"G")
+                    echo $(( size_val * 1024 ))
+                    return
+                    ;;
+                "MB"|"M"|"MIB")
+                    echo "$size_val"
+                    return
+                    ;;
+                "")
+                    # No unit — assume MB if > 64, else GB
+                    if (( size_val > 64 )); then
+                        echo "$size_val"
+                    else
+                        echo $(( size_val * 1024 ))
+                    fi
+                    return
+                    ;;
+            esac
+        fi
+    fi
+
+    # Priority 2: RAM-based calculation (if parameter or RAM_GB env var set)
     local ram_gb="${1:-${RAM_GB:-}}"
 
     # Handle both "16" and "16G" formats
@@ -79,7 +113,7 @@ get_swap_size_mib() {
         return
     fi
 
-    # Calculate swap size: Ram <= 4GB ? 2x RAM : 1x RAM (Capped at 8GB usually, but simplified here)
+    # Calculate swap size: Ram <= 4GB ? 2x RAM : 1x RAM (Capped at 16GB)
     if (( ram_val <= 4 )); then
         echo $(( ram_val * 1024 * 2 ))
     elif (( ram_val <= 16 )); then
@@ -87,6 +121,92 @@ get_swap_size_mib() {
     else
         echo "16384" # Cap at 16GB swap for large RAM
     fi
+}
+
+get_root_size_mib() {
+    local user_root="${ROOT_SIZE:-}"
+
+    # Empty or "Remaining" → sentinel
+    if [[ -z "$user_root" || "${user_root,,}" == "remaining" ]]; then
+        echo "REMAINING"
+        return
+    fi
+
+    local size_val size_unit
+    size_val="${user_root//[^0-9]/}"
+    size_unit="${user_root//[0-9]/}"
+    size_unit="${size_unit^^}"
+
+    if [[ -n "$size_val" && "$size_val" =~ ^[0-9]+$ ]]; then
+        case "$size_unit" in
+            "TB"|"T")
+                echo $(( size_val * 1024 * 1024 ))
+                return
+                ;;
+            "GB"|"G")
+                echo $(( size_val * 1024 ))
+                return
+                ;;
+            "MB"|"M"|"MIB")
+                echo "$size_val"
+                return
+                ;;
+            "")
+                # No unit — assume GB
+                echo $(( size_val * 1024 ))
+                return
+                ;;
+        esac
+    fi
+
+    # Fallback: 100GB
+    echo "$DEFAULT_ROOT_SIZE_MIB"
+}
+
+get_home_size_mib() {
+    local user_home="${HOME_SIZE:-}"
+
+    # Empty or "Remaining" → sentinel
+    if [[ -z "$user_home" || "${user_home,,}" == "remaining" ]]; then
+        echo "REMAINING"
+        return
+    fi
+
+    # "N/A" → no home partition (shouldn't reach here, but guard)
+    if [[ "${user_home,,}" == "n/a" ]]; then
+        echo "REMAINING"
+        return
+    fi
+
+    local size_val size_unit
+    size_val="${user_home//[^0-9]/}"
+    size_unit="${user_home//[0-9]/}"
+    size_unit="${size_unit^^}"
+
+    if [[ -n "$size_val" && "$size_val" =~ ^[0-9]+$ ]]; then
+        case "$size_unit" in
+            "TB"|"T")
+                echo $(( size_val * 1024 * 1024 ))
+                return
+                ;;
+            "GB"|"G")
+                echo $(( size_val * 1024 ))
+                return
+                ;;
+            "MB"|"M"|"MIB")
+                echo "$size_val"
+                return
+                ;;
+            "")
+                # No unit — assume GB
+                echo $(( size_val * 1024 ))
+                return
+                ;;
+        esac
+    fi
+
+    # Fallback: remaining space
+    echo "REMAINING"
 }
 
 # --- Disk Type Detection ---
@@ -269,6 +389,7 @@ create_bios_boot_partition() {
     
     log_info "Creating BIOS Boot partition: partition $part_num"
     sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" -c "${part_num}:BIOSBOOT" "$disk"
+    sleep 1
 }
 
 create_swap_partition() {
@@ -419,8 +540,11 @@ capture_device_info() {
     
     case "$type" in
         root) export ROOT_DEVICE="$device" ;;
+        boot) export BOOT_DEVICE="$device" ;;
         efi)  export EFI_DEVICE="$device" ;;
+        home) export HOME_DEVICE="$device" ;;
         swap) export SWAP_DEVICE="$device" ;;
+        luks) export LUKS_DEVICE="$device" ;;
     esac
     
     log_info "Captured $type device: $device"

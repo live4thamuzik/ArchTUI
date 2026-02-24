@@ -47,7 +47,11 @@ execute_lvm_partitioning() {
         current_start_mib=$((current_start_mib + 1024))
         part_num=$((part_num + 1))
     else
-        # BIOS: Boot partition at /boot
+        # BIOS with GPT: Need BIOS boot partition for GRUB (no filesystem, just raw)
+        create_bios_boot_partition "$INSTALL_DISK" "$part_num"
+        part_num=$((part_num + 1))
+
+        # Boot partition - 1GB ext4 at /boot
         boot_part_num=$part_num
         create_boot_partition "$INSTALL_DISK" "$part_num" "1024"
         current_start_mib=$((current_start_mib + 1024))
@@ -62,13 +66,9 @@ execute_lvm_partitioning() {
         part_num=$((part_num + 1))
     fi
     
-    # LVM partition
+    # LVM partition (uses remaining space)
     log_info "Creating LVM partition..."
-    if [ "$BOOT_MODE" = "UEFI" ]; then
-        sgdisk -n "$part_num:0:0" -t "$part_num:$LVM_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LVM partition."
-    else
-        printf "n\np\n$part_num\n\n\nw\n" | fdisk "$INSTALL_DISK" || error_exit "Failed to create LVM partition."
-    fi
+    sgdisk -n "$part_num:0:0" -t "$part_num:$LVM_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LVM partition."
     sync_partitions "$INSTALL_DISK"
     local lvm_part
     lvm_part=$(get_partition_path "$INSTALL_DISK" "$part_num")
@@ -76,28 +76,56 @@ execute_lvm_partitioning() {
     # Create LVM setup
     log_info "Setting up LVM..."
     pvcreate "$lvm_part" || error_exit "Failed to create physical volume."
-    vgcreate arch "$lvm_part" || error_exit "Failed to create volume group."
+    vgcreate archvg "$lvm_part" || error_exit "Failed to create volume group."
     
     # Create logical volumes
     log_info "Creating logical volumes..."
-    local root_size_gb=50
-    lvcreate -L "${root_size_gb}G" -n root arch || error_exit "Failed to create root logical volume."
-    
+    local root_size_mib
+    root_size_mib=$(get_root_size_mib)
+
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
-        lvcreate -l 100%FREE -n home arch || error_exit "Failed to create home logical volume."
+        if [[ "$root_size_mib" == "REMAINING" ]]; then
+            # Can't both take remaining — fall back to default
+            log_warn "Root=Remaining with separate home: falling back to ${DEFAULT_ROOT_SIZE_MIB}MiB root"
+            root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
+        fi
+        lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
+
+        local home_size_mib
+        home_size_mib=$(get_home_size_mib)
+        if [[ "$home_size_mib" == "REMAINING" ]]; then
+            lvcreate -l 100%FREE -n home archvg || error_exit "Failed to create home logical volume."
+        else
+            lvcreate -L "${home_size_mib}M" -n home archvg || error_exit "Failed to create home logical volume."
+        fi
+    else
+        # No home: root takes all or user-specified size
+        if [[ "$root_size_mib" == "REMAINING" ]]; then
+            lvcreate -l 100%FREE -n root archvg || error_exit "Failed to create root logical volume."
+        else
+            lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
+        fi
     fi
     
     # Format logical volumes
     log_info "Formatting logical volumes..."
-    format_filesystem "/dev/arch/root" "$ROOT_FILESYSTEM_TYPE"
-    capture_device_info "root" "/dev/arch/root"
-    safe_mount "/dev/arch/root" "/mnt"
+    format_filesystem "/dev/archvg/root" "$ROOT_FILESYSTEM_TYPE"
+    capture_device_info "root" "/dev/archvg/root"
+
+    # Handle Btrfs subvolumes if needed
+    if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
+        local include_home="yes"
+        [ "$WANT_HOME_PARTITION" = "yes" ] && include_home="no"
+        setup_btrfs_subvolumes "/dev/archvg/root" "$include_home"
+    else
+        safe_mount "/dev/archvg/root" "/mnt"
+    fi
 
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
-        format_filesystem "/dev/arch/home" "$HOME_FILESYSTEM_TYPE"
-        capture_device_info "home" "/dev/arch/home"
+        format_filesystem "/dev/archvg/home" "$HOME_FILESYSTEM_TYPE"
+        capture_device_info "home" "/dev/archvg/home"
         mkdir -p /mnt/home
-        safe_mount "/dev/arch/home" "/mnt/home"
+        safe_mount "/dev/archvg/home" "/mnt/home"
     fi
 
     # Mount boot and ESP partitions
@@ -115,7 +143,7 @@ execute_lvm_partitioning() {
     fi
 
     # Capture root UUID
-    ROOT_UUID=$(get_device_uuid "/dev/arch/root")
+    ROOT_UUID=$(get_device_uuid "/dev/archvg/root")
     export ROOT_UUID
 
     log_partitioning_complete "LVM (ESP + boot + LVM)"

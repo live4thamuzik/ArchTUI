@@ -72,11 +72,27 @@ execute_simple_luks_partitioning() {
     luks_part_num=$part_num
     log_info "Creating LUKS partition..."
 
-    # Use sgdisk for both UEFI and BIOS (GPT works with both)
-    sgdisk -n "${part_num}:0:0" \
-           -t "${part_num}:${LUKS_PARTITION_TYPE}" \
-           -c "${part_num}:LUKS" \
-           "$INSTALL_DISK" || error_exit "Failed to create LUKS partition"
+    if [ "$WANT_HOME_PARTITION" = "yes" ]; then
+        # Root gets fixed size when home is separate
+        local root_size_mib
+        root_size_mib=$(get_root_size_mib)
+
+        if [[ "$root_size_mib" == "REMAINING" ]]; then
+            log_warn "Root=Remaining with separate home: falling back to ${DEFAULT_ROOT_SIZE_MIB}MiB root"
+            root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
+        fi
+
+        sgdisk -n "${part_num}:0:+${root_size_mib}M" \
+               -t "${part_num}:${LUKS_PARTITION_TYPE}" \
+               -c "${part_num}:LUKS" \
+               "$INSTALL_DISK" || error_exit "Failed to create LUKS partition"
+    else
+        # No home: root LUKS takes all remaining space
+        sgdisk -n "${part_num}:0:0" \
+               -t "${part_num}:${LUKS_PARTITION_TYPE}" \
+               -c "${part_num}:LUKS" \
+               "$INSTALL_DISK" || error_exit "Failed to create LUKS partition"
+    fi
 
     sync_partitions "$INSTALL_DISK"
 
@@ -87,7 +103,7 @@ execute_simple_luks_partitioning() {
     if [[ ! -b "$luks_dev" ]]; then
         error_exit "LUKS partition $luks_dev not found after creation"
     fi
-    
+
     # Set up LUKS encryption using helper function (non-interactive)
     local encrypted_dev
     encrypted_dev=$(setup_luks_encryption "$luks_dev" "cryptroot")
@@ -99,8 +115,6 @@ execute_simple_luks_partitioning() {
 
     # Handle Btrfs subvolumes if needed, otherwise simple mount
     if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
-        # Use helper function for proper Btrfs subvolume setup
-        # Include @home subvolume only if not using separate home partition
         local include_home="no"
         if [ "$WANT_HOME_PARTITION" != "yes" ]; then
             include_home="yes"
@@ -115,11 +129,22 @@ execute_simple_luks_partitioning() {
         part_num=$((part_num + 1))
         log_info "Creating separate LUKS home partition..."
 
-        # Use sgdisk for both UEFI and BIOS (GPT works with both)
-        sgdisk -n "${part_num}:0:0" \
-               -t "${part_num}:${LUKS_PARTITION_TYPE}" \
-               -c "${part_num}:LUKS_HOME" \
-               "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition"
+        local home_size_mib
+        home_size_mib=$(get_home_size_mib)
+
+        if [[ "$home_size_mib" == "REMAINING" ]]; then
+            # Home takes all remaining space
+            sgdisk -n "${part_num}:0:0" \
+                   -t "${part_num}:${LUKS_PARTITION_TYPE}" \
+                   -c "${part_num}:LUKS_HOME" \
+                   "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition"
+        else
+            # Fixed size home
+            sgdisk -n "${part_num}:0:+${home_size_mib}M" \
+                   -t "${part_num}:${LUKS_PARTITION_TYPE}" \
+                   -c "${part_num}:LUKS_HOME" \
+                   "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition"
+        fi
 
         sync_partitions "$INSTALL_DISK"
 
@@ -130,7 +155,7 @@ execute_simple_luks_partitioning() {
         if [[ ! -b "$luks_home_dev" ]]; then
             error_exit "LUKS home partition $luks_home_dev not found after creation"
         fi
-        
+
         # Set up LUKS encryption for home using helper function (non-interactive)
         local encrypted_home_dev
         encrypted_home_dev=$(setup_luks_encryption "$luks_home_dev" "crypthome")

@@ -1334,6 +1334,23 @@ impl InputHandler {
                 "Equal to RAM".to_string(),
                 "Double RAM".to_string(),
             ],
+            "Root Size" => vec![
+                "30GB".to_string(),
+                "50GB".to_string(),
+                "80GB".to_string(),
+                "100GB".to_string(),
+                "150GB".to_string(),
+                "200GB".to_string(),
+                "Remaining".to_string(),
+            ],
+            "Home Size" => vec![
+                "50GB".to_string(),
+                "100GB".to_string(),
+                "200GB".to_string(),
+                "500GB".to_string(),
+                "1TB".to_string(),
+                "Remaining".to_string(),
+            ],
             "Btrfs Keep Count" => vec![
                 "3".to_string(),
                 "5".to_string(),
