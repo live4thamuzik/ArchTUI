@@ -25,7 +25,7 @@ use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 use crate::script_manifest::ManifestRegistry;
-use crate::script_traits::{is_dry_run, ScriptArgs};
+use crate::script_traits::{is_dry_run, shell_safe, ScriptArgs};
 use crate::scripts::config::{GenFstabArgs, UserAddArgs};
 use crate::scripts::disk::{CheckDiskHealthArgs, FormatPartitionArgs, WipeDiskArgs, WipeMethod};
 use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
@@ -435,7 +435,7 @@ impl App {
                     let status_msg = if success {
                         "Tool completed successfully".to_string()
                     } else {
-                        format!("Tool failed with exit code: {}", exit_code.unwrap_or(-1))
+                        format!("Tool failed with exit code: {}", exit_code.map(|c| c.to_string()).unwrap_or_else(|| "killed by signal".to_string()))
                     };
                     state.status_message = status_msg.clone();
                     state.current_tool = None;
@@ -449,7 +449,7 @@ impl App {
                         } else {
                             floating.append_line(format!(
                                 "❌ Tool failed with exit code: {}",
-                                exit_code.unwrap_or(-1)
+                                exit_code.map(|c| c.to_string()).unwrap_or_else(|| "killed by signal".to_string())
                             ));
                         }
                         floating.append_line(String::new());
@@ -544,13 +544,13 @@ impl App {
             }
 
             // Render UI
+            let mut render_poisoned = false;
             terminal.draw(|f| {
                 let mut state = match self.state.lock() {
                     Ok(state) => state,
-                    Err(_) => {
-                        // If mutex is poisoned, we can't continue safely
-                        eprintln!("Fatal error: Mutex poisoned, cannot continue");
-                        std::process::exit(1);
+                    Err(poisoned) => {
+                        render_poisoned = true;
+                        poisoned.into_inner()
                     }
                 };
                 // Update scroll state with actual available space for config options
@@ -565,6 +565,9 @@ impl App {
                 self.ui_renderer
                     .render_with_context(f, &state, &mut self.input_handler, &self.keybinding_context, self.pty_terminal.as_mut());
             })?;
+            if render_poisoned {
+                return Err("Fatal error: Mutex poisoned, cannot continue".into());
+            }
         }
 
         Ok(())
@@ -919,7 +922,7 @@ impl App {
                 }
                 AppMode::ToolDialog => {
                     if let Some(ref mut dialog) = state.tool_dialog {
-                        if dialog.current_param < dialog.parameters.len() - 1 {
+                        if dialog.current_param < dialog.parameters.len().saturating_sub(1) {
                             dialog.current_param += 1;
                         }
                     }
@@ -1948,6 +1951,9 @@ impl App {
         let option = {
             let state = self.lock_state()?;
             let current_step = state.config_scroll.selected_index;
+            if current_step >= state.config.options.len() {
+                return Ok(()); // On button row, not a config option
+            }
             state.config.options[current_step].clone()
         };
 
@@ -2456,9 +2462,8 @@ impl App {
 
             {
                 if let Ok(mut state) = self.lock_state_mut() {
-                    // Find encryption option (index 6)
-                    if state.config.options.len() > 6 {
-                        state.config.options[6].value = encryption_value.to_string();
+                    if let Some(enc_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption") {
+                        enc_opt.value = encryption_value.to_string();
                         state.status_message = format!(
                             "Auto-set Encryption to: {} (based on partitioning strategy)",
                             encryption_value
@@ -3215,7 +3220,7 @@ impl App {
                 // Move to next parameter (if not at last)
                 let mut state = self.lock_state_mut()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
-                    if dialog.current_param < dialog.parameters.len() - 1 {
+                    if dialog.current_param < dialog.parameters.len().saturating_sub(1) {
                         dialog.current_param += 1;
                     }
                 }
@@ -3279,7 +3284,7 @@ impl App {
                 let mut state = self.lock_state_mut()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
-                    if idx < dialog.parameters.len() {
+                    if idx < dialog.parameters.len() && idx < dialog.param_values.len() {
                         if let ToolParameter::Selection(ref options, _) = dialog.parameters[idx].param_type {
                             if !options.is_empty() {
                                 // Find current selection index
@@ -3301,10 +3306,10 @@ impl App {
                 let mut state = self.lock_state_mut()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
-                    if idx < dialog.param_values.len() {
-                        if !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _)) {
-                            dialog.param_values[idx].push(c);
-                        }
+                    if idx < dialog.parameters.len() && idx < dialog.param_values.len()
+                        && !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _))
+                    {
+                        dialog.param_values[idx].push(c);
                     }
                 }
             }
@@ -3313,10 +3318,10 @@ impl App {
                 let mut state = self.lock_state_mut()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
-                    if idx < dialog.param_values.len() {
-                        if !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _)) {
-                            dialog.param_values[idx].pop();
-                        }
+                    if idx < dialog.parameters.len() && idx < dialog.param_values.len()
+                        && !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _))
+                    {
+                        dialog.param_values[idx].pop();
                     }
                 }
             }
@@ -3345,7 +3350,7 @@ impl App {
             if let Some(ref mut dialog) = state.tool_dialog {
                 if current_param < dialog.parameters.len() {
                     // Move to next parameter or execute tool
-                    if current_param == dialog.parameters.len() - 1 {
+                    if current_param == dialog.parameters.len().saturating_sub(1) {
                         // All parameters collected — mode will be set by execute_tool_with_params
                     } else {
                         // Move to next parameter
@@ -3361,7 +3366,7 @@ impl App {
                 .lock_state()?
                 .tool_dialog
                 .as_ref()
-                .map(|d| d.parameters.len() - 1)
+                .map(|d| d.parameters.len().saturating_sub(1))
                 .unwrap_or(0)
         {
             self.execute_tool_with_params(&tool_name, param_values)?;
@@ -3466,33 +3471,29 @@ impl App {
 
             // Stream stdout in a separate thread
             let stdout_tx = tx.clone();
-            let stdout_handle = if let Some(stdout) = child.stdout.take() {
-                Some(thread::spawn(move || {
+            let stdout_handle = child.stdout.take().map(|stdout| {
+                thread::spawn(move || {
                     let reader = BufReader::new(stdout);
                     for line in reader.lines().map_while(Result::ok) {
                         if stdout_tx.send(ToolMessage::Stdout(line)).is_err() {
                             break; // Receiver dropped
                         }
                     }
-                }))
-            } else {
-                None
-            };
+                })
+            });
 
             // Stream stderr in a separate thread
             let stderr_tx = tx.clone();
-            let stderr_handle = if let Some(stderr) = child.stderr.take() {
-                Some(thread::spawn(move || {
+            let stderr_handle = child.stderr.take().map(|stderr| {
+                thread::spawn(move || {
                     let reader = BufReader::new(stderr);
                     for line in reader.lines().map_while(Result::ok) {
                         if stderr_tx.send(ToolMessage::Stderr(line)).is_err() {
                             break; // Receiver dropped
                         }
                     }
-                }))
-            } else {
-                None
-            };
+                })
+            });
 
             // Wait for stdout/stderr threads to finish
             if let Some(h) = stdout_handle {
@@ -3542,6 +3543,15 @@ impl App {
         is_destructive: bool,
         skip_confirm: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Shell-safety check: reject args with dangerous characters
+        for arg in &cli_args {
+            if !shell_safe(arg) {
+                let mut state = self.lock_state_mut()?;
+                state.status_message = "Error: unsafe characters in argument".to_string();
+                return Ok(());
+            }
+        }
+
         // Dry-run check: show what WOULD execute without actually running
         if is_dry_run() {
             let script_path = format!("scripts/tools/{}", script_name);

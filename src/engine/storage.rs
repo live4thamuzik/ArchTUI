@@ -29,7 +29,7 @@ use crate::config_file::InstallationConfig;
 use crate::types::{Filesystem, PartitionScheme, Toggle};
 use anyhow::{bail, Result};
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ============================================================================
 // Storage Operation Types
@@ -264,7 +264,7 @@ pub fn calculate_storage_plan(config: &InstallationConfig) -> Result<StoragePlan
 /// /dev/sdX3 - Swap partition [if enabled]
 /// ```
 fn plan_simple(
-    disk: &PathBuf,
+    disk: &Path,
     root_fs: Filesystem,
     is_uefi: bool,
     wants_swap: bool,
@@ -273,11 +273,11 @@ fn plan_simple(
     let mut ops = Vec::new();
 
     // Step 1: Wipe disk
-    ops.push(StorageOp::WipeDisk { disk: disk.clone() });
+    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
 
     // Step 2: Create partitions
     ops.push(StorageOp::Partition {
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         create_efi: is_uefi,
         create_swap: wants_swap,
     });
@@ -332,7 +332,7 @@ fn plan_simple(
     Ok(StoragePlan {
         ops,
         strategy: PartitionScheme::AutoSimple,
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         encrypted: false,
         lvm: false,
     })
@@ -346,7 +346,7 @@ fn plan_simple(
 /// /dev/sdX2 - LUKS-encrypted root → /dev/mapper/cryptroot
 /// ```
 fn plan_simple_luks(
-    disk: &PathBuf,
+    disk: &Path,
     root_fs: Filesystem,
     is_uefi: bool,
     wants_swap: bool,
@@ -354,10 +354,10 @@ fn plan_simple_luks(
 ) -> Result<StoragePlan> {
     let mut ops = Vec::new();
 
-    ops.push(StorageOp::WipeDisk { disk: disk.clone() });
+    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
 
     ops.push(StorageOp::Partition {
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         create_efi: is_uefi,
         create_swap: false, // Swap goes inside LUKS or as swapfile
     });
@@ -416,7 +416,7 @@ fn plan_simple_luks(
     Ok(StoragePlan {
         ops,
         strategy: PartitionScheme::AutoSimpleLuks,
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         encrypted: true,
         lvm: false,
     })
@@ -430,7 +430,7 @@ fn plan_simple_luks(
 /// /dev/sdX2 - LVM PV → VG "archvg" → LV "root" + LV "swap"
 /// ```
 fn plan_lvm(
-    disk: &PathBuf,
+    disk: &Path,
     root_fs: Filesystem,
     is_uefi: bool,
     wants_swap: bool,
@@ -439,10 +439,10 @@ fn plan_lvm(
     let mut ops = Vec::new();
     let vg_name = "archvg";
 
-    ops.push(StorageOp::WipeDisk { disk: disk.clone() });
+    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
 
     ops.push(StorageOp::Partition {
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         create_efi: is_uefi,
         create_swap: false, // LVM manages swap
     });
@@ -521,7 +521,7 @@ fn plan_lvm(
     Ok(StoragePlan {
         ops,
         strategy: PartitionScheme::AutoLvm,
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         encrypted: false,
         lvm: true,
     })
@@ -535,7 +535,7 @@ fn plan_lvm(
 /// /dev/sdX2 - LUKS → /dev/mapper/cryptlvm → PV → VG "archvg" → LV "root" + LV "swap"
 /// ```
 fn plan_luks_lvm(
-    disk: &PathBuf,
+    disk: &Path,
     root_fs: Filesystem,
     is_uefi: bool,
     wants_swap: bool,
@@ -544,10 +544,10 @@ fn plan_luks_lvm(
     let mut ops = Vec::new();
     let vg_name = "archvg";
 
-    ops.push(StorageOp::WipeDisk { disk: disk.clone() });
+    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
 
     ops.push(StorageOp::Partition {
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         create_efi: is_uefi,
         create_swap: false,
     });
@@ -632,7 +632,7 @@ fn plan_luks_lvm(
     Ok(StoragePlan {
         ops,
         strategy: PartitionScheme::AutoLuksLvm,
-        disk: disk.clone(),
+        disk: disk.to_path_buf(),
         encrypted: true,
         lvm: true,
     })
@@ -645,7 +645,7 @@ fn plan_luks_lvm(
 /// Generate a partition device path from a disk path and partition number.
 ///
 /// Handles both `/dev/sdX` → `/dev/sdX1` and `/dev/nvme0n1` → `/dev/nvme0n1p1` patterns.
-fn partition_path(disk: &PathBuf, partition_num: u32) -> PathBuf {
+fn partition_path(disk: &Path, partition_num: u32) -> PathBuf {
     let disk_str = disk.display().to_string();
 
     // NVMe and loop devices use 'p' separator (e.g., /dev/nvme0n1p1, /dev/loop0p1)

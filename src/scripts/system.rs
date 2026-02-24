@@ -2,10 +2,11 @@
 //!
 //! This module provides typed argument structs for system-related scripts:
 //! - `BootloaderArgs` for `install_bootloader.sh`
-//! - `FstabArgs` for `generate_fstab.sh`
 //! - `ChrootArgs` for `chroot_system.sh`
 //! - `SystemInfoArgs` for `system_info.sh`
 //! - `ServicesArgs` for `manage_services.sh`
+//!
+//! Note: `generate_fstab.sh` uses `GenFstabArgs` from `scripts::config`.
 
 use std::path::PathBuf;
 
@@ -54,36 +55,6 @@ impl ScriptArgs for BootloaderArgs {
     }
 
     /// Bootloader installation is DESTRUCTIVE - modifies boot sector.
-    fn is_destructive(&self) -> bool {
-        true
-    }
-}
-
-// ============================================================================
-// Generate Fstab
-// ============================================================================
-
-/// Type-safe arguments for `scripts/tools/generate_fstab.sh`.
-#[derive(Debug, Clone)]
-pub struct FstabArgs {
-    /// Root mount path for fstab generation.
-    pub root: PathBuf,
-}
-
-impl ScriptArgs for FstabArgs {
-    fn to_cli_args(&self) -> Vec<String> {
-        vec!["--root".to_string(), self.root.display().to_string()]
-    }
-
-    fn get_env_vars(&self) -> Vec<(String, String)> {
-        vec![]
-    }
-
-    fn script_name(&self) -> &'static str {
-        "generate_fstab.sh"
-    }
-
-    /// Fstab generation is DESTRUCTIVE - writes to /etc/fstab.
     fn is_destructive(&self) -> bool {
         true
     }

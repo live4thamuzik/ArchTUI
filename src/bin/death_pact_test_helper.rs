@@ -94,6 +94,7 @@ fn spawn_and_panic(pid_file: &str, count: usize) {
 
 /// Spawn bash that spawns grandchildren (nested tree)
 /// Uses proper signal handling as required by lint_rules.md
+#[allow(clippy::zombie_processes)]
 fn spawn_nested(pid_file: &str) {
     // Spawn bash that creates a process tree WITH proper signal handling
     // This simulates our real scripts that must trap SIGTERM/SIGINT
@@ -156,7 +157,7 @@ fn spawn_nested(pid_file: &str) {
     // Read grandchild PIDs from the temp file
     let mut grandchild_pids = Vec::new();
     if let Ok(content) = std::fs::read_to_string(&nested_pid_file) {
-        for word in content.trim().split_whitespace() {
+        for word in content.split_whitespace() {
             if let Ok(pid) = word.parse::<u32>() {
                 grandchild_pids.push(pid);
             }
@@ -181,6 +182,7 @@ fn spawn_nested(pid_file: &str) {
 }
 
 /// Simulate a destructive operation (like disk wiping)
+#[allow(clippy::zombie_processes)]
 fn spawn_destructive_simulation(pid_file: &str) {
     // Spawn a bash script that simulates a long-running destructive operation
     // This is what sgdisk or cryptsetup would look like
@@ -216,6 +218,7 @@ fn spawn_destructive_simulation(pid_file: &str) {
 }
 
 /// Spawn simple sleep children with death pact
+#[allow(clippy::zombie_processes)]
 fn spawn_children(count: usize) -> Vec<u32> {
     let mut pids = Vec::new();
 

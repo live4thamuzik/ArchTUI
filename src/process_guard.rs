@@ -177,20 +177,26 @@ impl ChildRegistry {
 
 /// Send a signal to a process
 fn send_signal(pid: u32, signal: Signal) -> Result<(), nix::Error> {
-    signal::kill(Pid::from_raw(pid as i32), signal)
+    let pid_i32 = i32::try_from(pid).map_err(|_| nix::errno::Errno::EINVAL)?;
+    signal::kill(Pid::from_raw(pid_i32), signal)
 }
 
 /// Send a signal to an entire process group
 /// Uses negative PID to signal all processes in the group, ensuring children
 /// of bash (like sgdisk, cryptsetup, etc.) also receive the signal
 fn send_signal_to_group(pgid: u32, signal: Signal) -> Result<(), nix::Error> {
-    signal::kill(Pid::from_raw(-(pgid as i32)), signal)
+    let pgid_i32 = i32::try_from(pgid).map_err(|_| nix::errno::Errno::EINVAL)?;
+    signal::kill(Pid::from_raw(-pgid_i32), signal)
 }
 
 /// Check if a process is still alive (not dead or zombie)
 fn is_process_alive(pid: u32) -> bool {
     // First check if process exists at all
-    if signal::kill(Pid::from_raw(pid as i32), None).is_err() {
+    let pid_i32 = match i32::try_from(pid) {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    if signal::kill(Pid::from_raw(pid_i32), None).is_err() {
         return false;
     }
 
@@ -281,7 +287,7 @@ pub fn init_signal_handlers() -> Result<(), std::io::Error> {
     let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP])?;
 
     thread::spawn(move || {
-        for sig in signals.forever() {
+        if let Some(sig) = signals.forever().next() {
             let signal_name = match sig {
                 SIGINT => "SIGINT",
                 SIGTERM => "SIGTERM",
@@ -320,7 +326,7 @@ impl CommandProcessGroup for std::process::Command {
                 // Set process group ID to this process's PID
                 // This makes this process the leader of a new process group
                 nix::unistd::setpgid(Pid::from_raw(0), Pid::from_raw(0))
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(std::io::Error::other)?;
 
                 // CRITICAL: Set death signal so child dies if parent dies
                 // This prevents orphaned processes from continuing destructive operations

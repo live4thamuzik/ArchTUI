@@ -1,63 +1,14 @@
 //! Type-safe arguments for user tool scripts.
 //!
 //! This module provides typed argument structs for user-related scripts:
-//! - `AddUserArgs` for `add_user.sh`
 //! - `ResetPasswordArgs` for `reset_password.sh`
 //! - `GroupsArgs` for `manage_groups.sh`
 //! - `SshArgs` for `configure_ssh.sh`
 //! - `SecurityAuditArgs` for `security_audit.sh`
+//!
+//! Note: `add_user.sh` uses `UserAddArgs` from `scripts::config` (secure password via env var).
 
 use crate::script_traits::ScriptArgs;
-
-// ============================================================================
-// Add User
-// ============================================================================
-
-/// Type-safe arguments for `scripts/tools/add_user.sh`.
-#[derive(Debug, Clone)]
-pub struct AddUserArgs {
-    /// Username to create.
-    pub username: String,
-    /// Shell for the user.
-    pub shell: String,
-    /// Optional full name.
-    pub full_name: Option<String>,
-    /// Optional comma-separated groups.
-    pub groups: Option<String>,
-}
-
-impl ScriptArgs for AddUserArgs {
-    fn to_cli_args(&self) -> Vec<String> {
-        let mut args = vec![
-            "--username".to_string(),
-            self.username.clone(),
-            "--shell".to_string(),
-            self.shell.clone(),
-        ];
-        if let Some(ref name) = self.full_name {
-            args.push("--full-name".to_string());
-            args.push(name.clone());
-        }
-        if let Some(ref grps) = self.groups {
-            args.push("--groups".to_string());
-            args.push(grps.clone());
-        }
-        args
-    }
-
-    fn get_env_vars(&self) -> Vec<(String, String)> {
-        vec![]
-    }
-
-    fn script_name(&self) -> &'static str {
-        "add_user.sh"
-    }
-
-    /// User creation is DESTRUCTIVE - modifies /etc/passwd, etc.
-    fn is_destructive(&self) -> bool {
-        true
-    }
-}
 
 // ============================================================================
 // Reset Password

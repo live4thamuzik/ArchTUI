@@ -24,7 +24,7 @@ use crate::scripts::user_ops::{CloneDotfilesArgs, InstallAurHelperArgs};
 use crate::types::AurHelper;
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ============================================================================
 // Post-install Result
@@ -108,7 +108,7 @@ impl Default for PostInstallConfig {
 pub fn install_aur_helper_safe(
     helper: AurHelper,
     user: &str,
-    chroot_path: &PathBuf,
+    chroot_path: &Path,
 ) -> Result<(), String> {
     if helper == AurHelper::None {
         log::info!("No AUR helper selected — skipping");
@@ -120,7 +120,7 @@ pub fn install_aur_helper_safe(
     let args = InstallAurHelperArgs {
         helper,
         target_user: user.to_string(),
-        chroot_path: chroot_path.clone(),
+        chroot_path: chroot_path.to_path_buf(),
     };
 
     match run_script_safe(&args) {

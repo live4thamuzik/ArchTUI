@@ -151,9 +151,9 @@ impl EnvRequirement {
                 // Exact match (minus anchors)
                 let inner = &pattern[1..pattern.len() - 1];
                 value == inner
-            } else if pattern.starts_with('^') {
+            } else if let Some(prefix) = pattern.strip_prefix('^') {
                 // Prefix match
-                value.starts_with(&pattern[1..])
+                value.starts_with(prefix)
             } else if pattern.ends_with('$') {
                 // Suffix match
                 value.ends_with(&pattern[..pattern.len() - 1])

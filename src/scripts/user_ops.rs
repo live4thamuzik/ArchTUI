@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use crate::script_traits::ScriptArgs;
+use crate::script_traits::{shell_safe, ScriptArgs};
 use crate::types::AurHelper;
 
 // ============================================================================
@@ -75,6 +75,13 @@ impl ScriptArgs for UserRunArgs {
     /// User commands may modify the system, treat as destructive.
     fn is_destructive(&self) -> bool {
         true
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if !shell_safe(&self.user) {
+            return Err(format!("Unsafe characters in user field: {}", self.user));
+        }
+        Ok(())
     }
 }
 

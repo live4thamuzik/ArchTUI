@@ -186,10 +186,11 @@ impl ScriptArgs for NetworkDiagnosticsArgs {
 // ============================================================================
 
 /// Mirror sort method for reflector.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[allow(dead_code)] // Library API - all variants used by consumer code
 pub enum MirrorSortMethod {
     /// Sort by download rate (fastest first).
+    #[default]
     Rate,
     /// Sort by last synchronization time.
     Age,
@@ -208,12 +209,6 @@ impl MirrorSortMethod {
             MirrorSortMethod::Country => "country",
             MirrorSortMethod::Score => "score",
         }
-    }
-}
-
-impl Default for MirrorSortMethod {
-    fn default() -> Self {
-        MirrorSortMethod::Rate
     }
 }
 

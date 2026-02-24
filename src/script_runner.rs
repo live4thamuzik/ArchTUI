@@ -87,6 +87,8 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     let cli_args = args.to_cli_args();
     let env_vars = args.get_env_vars();
 
+    args.validate().map_err(|e| anyhow::anyhow!("Argument validation failed: {}", e))?;
+
     // Log exact command and environment for transparency
     info!(
         "run_script_safe: {} args={:?} env={:?}",
