@@ -704,6 +704,41 @@ WINEOF
     log_success "GRUB configured"
 }
 
+# Clone a GRUB theme from git and install to /boot/grub/themes/
+_grub_theme_git_clone() {
+    local repo_url="$1"
+    local clone_dir="$2"
+    local theme_name="$3"
+    local tmp_dir="/tmp/grub-theme-$$"
+
+    if ! command -v git &>/dev/null; then
+        log_warn "git not installed, cannot clone GRUB theme"
+        pacman -S --noconfirm --needed git || {
+            log_error "Failed to install git for GRUB theme"
+            return 1
+        }
+    fi
+
+    mkdir -p "$tmp_dir"
+    if git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>/dev/null; then
+        mkdir -p "/boot/grub/themes/${theme_name}"
+        # Look for theme.txt to find the theme root (may be in a subdirectory)
+        local theme_txt
+        theme_txt="$(find "$tmp_dir/$clone_dir" -name "theme.txt" -print -quit 2>/dev/null)"
+        if [[ -n "$theme_txt" ]]; then
+            local theme_root
+            theme_root="$(dirname "$theme_txt")"
+            cp -r "$theme_root/"* "/boot/grub/themes/${theme_name}/"
+            log_info "GRUB theme cloned and installed: $theme_name"
+        else
+            log_warn "theme.txt not found in cloned repo: $repo_url"
+        fi
+    else
+        log_warn "Failed to clone GRUB theme: $repo_url"
+    fi
+    rm -rf "$tmp_dir"
+}
+
 configure_grub_theme() {
     if [[ "${GRUB_THEME:-No}" != "Yes" ]]; then
         log_info "GRUB theme not requested"
@@ -745,43 +780,24 @@ configure_grub_theme() {
         # Try to install from AUR/community packages
         log_info "Theme not found locally, attempting package installation..."
 
-        # Common GRUB theme packages
-        case "${theme_name,,}" in
-            "poly-dark"|"polydark")
-                pacman -S --noconfirm --needed grub-theme-poly-dark 2>/dev/null || {
-                    log_warn "Package grub-theme-poly-dark not available"
-                }
+        # Clone GRUB theme from git
+        case "${theme_name}" in
+            "PolyDark"|"poly-dark"|"polydark")
+                _grub_theme_git_clone "https://github.com/shvchk/poly-dark.git" "poly-dark" "$theme_name"
                 ;;
-            "vimix")
-                pacman -S --noconfirm --needed grub-theme-vimix 2>/dev/null || {
-                    log_warn "Package grub-theme-vimix not available"
-                }
+            "CyberEXS"|"cyberexs")
+                _grub_theme_git_clone "https://github.com/HenriqueLopes42/themeGrub.CyberEXS.git" "themeGrub.CyberEXS" "$theme_name"
                 ;;
-            "stylish")
-                pacman -S --noconfirm --needed grub-theme-stylish 2>/dev/null || {
-                    log_warn "Package grub-theme-stylish not available"
-                }
+            "CyberPunk"|"cyberpunk")
+                _grub_theme_git_clone "https://github.com/NayamAmarshe/Cyberpunk-GRUB-Theme.git" "Cyberpunk-GRUB-Theme" "$theme_name"
+                ;;
+            "HyperFluent"|"hyperfluent")
+                _grub_theme_git_clone "https://github.com/Coopydood/HyperFluent-GRUB-Theme.git" "HyperFluent-GRUB-Theme" "$theme_name"
                 ;;
             *)
-                log_warn "Unknown theme package for: $theme_name"
+                log_warn "Unknown GRUB theme: $theme_name"
                 ;;
         esac
-
-        # Check if theme was installed by package
-        local pkg_theme_dirs=(
-            "/usr/share/grub/themes/${theme_name}"
-            "/boot/grub/themes/${theme_name}"
-        )
-        for pkg_dir in "${pkg_theme_dirs[@]}"; do
-            if [[ -d "$pkg_dir" ]]; then
-                if [[ "$pkg_dir" != "$theme_dir" ]]; then
-                    mkdir -p /boot/grub/themes
-                    cp -r "$pkg_dir" "$theme_dir"
-                fi
-                source_found="$pkg_dir"
-                break
-            fi
-        done
     fi
 
     # Verify theme was installed and has theme.txt

@@ -257,7 +257,7 @@ impl InstallationConfig {
             ("FLATPAK".to_string(), self.flatpak.to_string()),
             ("BOOTLOADER".to_string(), self.bootloader.to_string()),
             ("OS_PROBER".to_string(), self.os_prober.to_string()),
-            ("GRUB_THEMES".to_string(), self.grub_themes.to_string()),
+            ("GRUB_THEME".to_string(), self.grub_themes.to_string()),
             (
                 "GRUB_THEME_SELECTION".to_string(),
                 self.grub_theme_selection.to_string(),
