@@ -43,15 +43,20 @@ use crate::scripts::disk::{
     CheckDiskHealthArgs, FormatPartitionArgs, ManualPartitionArgs, MountPartitionsArgs,
     WipeDiskArgs, WipeMethod,
 };
+use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
 use crate::scripts::network::{
-    ConfigureNetworkArgs, FirewallArgs, NetworkDiagnosticsArgs, TestNetworkArgs,
+    ConfigureNetworkArgs, FirewallArgs, MirrorSortMethod, NetworkDiagnosticsArgs, TestNetworkArgs,
+    UpdateMirrorsArgs,
 };
+use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
 use crate::scripts::system::{
     BootloaderArgs, ChrootArgs, FstabArgs, ServicesArgs, SystemInfoArgs,
 };
 use crate::scripts::user::{
     AddUserArgs, GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs,
 };
+use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
+use crate::types::AurHelper;
 
 /// Initialize the logger with appropriate settings
 fn init_logger() {
@@ -373,6 +378,62 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&manual_args)?;
             }
+            crate::cli::DiskToolCommands::Encrypt {
+                action,
+                device,
+                mapper,
+            } => {
+                match action.as_str() {
+                    "format" => {
+                        let dev = device.as_ref().unwrap_or_else(|| {
+                            eprintln!("❌ --device is required for format action");
+                            std::process::exit(1);
+                        });
+                        // Password is read from stdin for CLI
+                        eprintln!("Enter LUKS passphrase:");
+                        let mut password = String::new();
+                        std::io::stdin().read_line(&mut password)?;
+                        let password = password.trim().to_string();
+                        let secret_file = SecretFile::new(&password)?;
+                        let format_args = LuksFormatArgs {
+                            device: PathBuf::from(dev),
+                            key_file: secret_file.path().to_path_buf(),
+                            cipher: LuksCipher::default(),
+                            label: None,
+                            confirm: true,
+                        };
+                        execute_tool(&format_args)?;
+                        // SecretFile dropped here, cleaned up
+                    }
+                    "open" => {
+                        let dev = device.as_ref().unwrap_or_else(|| {
+                            eprintln!("❌ --device is required for open action");
+                            std::process::exit(1);
+                        });
+                        eprintln!("Enter LUKS passphrase:");
+                        let mut password = String::new();
+                        std::io::stdin().read_line(&mut password)?;
+                        let password = password.trim().to_string();
+                        let secret_file = SecretFile::new(&password)?;
+                        let open_args = LuksOpenArgs {
+                            device: PathBuf::from(dev),
+                            key_file: secret_file.path().to_path_buf(),
+                            mapper_name: mapper.clone(),
+                        };
+                        execute_tool(&open_args)?;
+                    }
+                    "close" => {
+                        let close_args = LuksCloseArgs {
+                            mapper_name: mapper.clone(),
+                        };
+                        execute_tool(&close_args)?;
+                    }
+                    _ => {
+                        eprintln!("❌ Invalid action: {}. Valid: format, open, close", action);
+                        std::process::exit(1);
+                    }
+                }
+            }
         },
         crate::cli::ToolCommands::System { system_tool } => match system_tool {
             crate::cli::SystemToolCommands::Bootloader {
@@ -414,6 +475,31 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     service: service.clone(),
                 };
                 execute_tool(&services_args)?;
+            }
+            crate::cli::SystemToolCommands::EnableServices { services, root } => {
+                let service_list: Vec<String> =
+                    services.split(',').map(|s| s.trim().to_string()).collect();
+                let enable_args = EnableServicesArgs {
+                    services: service_list,
+                    root: PathBuf::from(root),
+                };
+                execute_tool(&enable_args)?;
+            }
+            crate::cli::SystemToolCommands::AurHelper { helper, user, root } => {
+                let aur_helper: AurHelper = match helper.to_lowercase().as_str() {
+                    "paru" => AurHelper::Paru,
+                    "yay" => AurHelper::Yay,
+                    _ => {
+                        eprintln!("❌ Invalid AUR helper: {}. Valid: paru, yay", helper);
+                        std::process::exit(1);
+                    }
+                };
+                let aur_args = InstallAurHelperArgs {
+                    helper: aur_helper,
+                    target_user: user.clone(),
+                    chroot_path: PathBuf::from(root),
+                };
+                execute_tool(&aur_args)?;
             }
         },
         crate::cli::ToolCommands::User { user_tool } => match user_tool {
@@ -469,6 +555,30 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&security_args)?;
             }
+            crate::cli::UserToolCommands::Dotfiles {
+                repo,
+                user,
+                branch,
+                backup,
+            } => {
+                let dotfiles_args = InstallDotfilesArgs {
+                    repo_url: repo.clone(),
+                    target_user: user.clone(),
+                    target_dir: None,
+                    branch: branch.clone(),
+                    backup: *backup,
+                };
+                execute_tool(&dotfiles_args)?;
+            }
+            crate::cli::UserToolCommands::RunAs { user, cmd, root } => {
+                let run_args = UserRunArgs {
+                    user: user.clone(),
+                    command: cmd.clone(),
+                    chroot_path: PathBuf::from(root),
+                    workdir: None,
+                };
+                execute_tool(&run_args)?;
+            }
         },
         crate::cli::ToolCommands::Network { network_tool } => match network_tool {
             crate::cli::NetworkToolCommands::Configure {
@@ -518,6 +628,30 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     action: action.clone(),
                 };
                 execute_tool(&diagnostics_args)?;
+            }
+            crate::cli::NetworkToolCommands::Mirrors {
+                country,
+                limit,
+                sort,
+            } => {
+                let sort_method = match sort.to_lowercase().as_str() {
+                    "rate" => MirrorSortMethod::Rate,
+                    "age" => MirrorSortMethod::Age,
+                    "score" => MirrorSortMethod::Score,
+                    "country" => MirrorSortMethod::Country,
+                    _ => {
+                        eprintln!("❌ Invalid sort method: {}. Valid: rate, age, score, country", sort);
+                        std::process::exit(1);
+                    }
+                };
+                let mirrors_args = UpdateMirrorsArgs {
+                    country: country.clone(),
+                    limit: *limit,
+                    sort: sort_method,
+                    protocol: Some("https".to_string()),
+                    save: true,
+                };
+                execute_tool(&mirrors_args)?;
             }
         },
     }

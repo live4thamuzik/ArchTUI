@@ -5,7 +5,6 @@
 //! - `LuksOpenArgs` for `encrypt_device.sh --action open`
 //! - `LuksCloseArgs` for `encrypt_device.sh --action close`
 
-#![allow(dead_code)]
 //!
 //! # Security Model
 //!
@@ -158,6 +157,7 @@ impl Drop for SecretFile {
 ///
 /// Provides type-safe cipher selection with secure defaults.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Library API: alternative ciphers available for future use
 pub enum LuksCipher {
     /// AES-256 in XTS mode (recommended for most uses).
     /// This is the default and most widely compatible option.

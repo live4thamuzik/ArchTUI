@@ -120,6 +120,18 @@ pub enum DiskToolCommands {
         #[arg(short, long)]
         device: String,
     },
+    /// Encrypt a device with LUKS
+    Encrypt {
+        /// Action (format, open, close)
+        #[arg(short, long)]
+        action: String,
+        /// Device path (e.g., /dev/sda2)
+        #[arg(short, long)]
+        device: Option<String>,
+        /// Mapper name for open/close
+        #[arg(short, long, default_value = "cryptroot")]
+        mapper: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -168,6 +180,27 @@ pub enum SystemToolCommands {
         /// Service name
         #[arg(short, long)]
         service: Option<String>,
+    },
+    /// Enable systemd services in a chroot
+    EnableServices {
+        /// Comma-separated service names
+        #[arg(short, long)]
+        services: String,
+        /// Root mount path
+        #[arg(short, long, default_value = "/mnt")]
+        root: String,
+    },
+    /// Install an AUR helper (paru or yay)
+    AurHelper {
+        /// AUR helper name (paru or yay)
+        #[arg(short = 'H', long)]
+        helper: String,
+        /// Target user (must be non-root)
+        #[arg(short, long)]
+        user: String,
+        /// Root mount path
+        #[arg(short, long, default_value = "/mnt")]
+        root: String,
     },
 }
 
@@ -227,6 +260,33 @@ pub enum UserToolCommands {
         #[arg(short, long)]
         action: String,
     },
+    /// Install dotfiles from a git repository
+    Dotfiles {
+        /// Git repository URL
+        #[arg(short, long)]
+        repo: String,
+        /// Target user
+        #[arg(short, long)]
+        user: String,
+        /// Branch (optional)
+        #[arg(short, long)]
+        branch: Option<String>,
+        /// Backup existing files
+        #[arg(long)]
+        backup: bool,
+    },
+    /// Run a command as a specific user inside a chroot
+    RunAs {
+        /// Target user
+        #[arg(short = 'U', long)]
+        user: String,
+        /// Command to run
+        #[arg(short, long)]
+        cmd: String,
+        /// Chroot root path
+        #[arg(short, long, default_value = "/mnt")]
+        root: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -281,6 +341,18 @@ pub enum NetworkToolCommands {
         /// Action to perform (basic, detailed, troubleshoot)
         #[arg(short, long)]
         action: String,
+    },
+    /// Update pacman mirrorlist
+    Mirrors {
+        /// Country filter (ISO 3166-1 alpha-2)
+        #[arg(short, long)]
+        country: Option<String>,
+        /// Number of mirrors to keep
+        #[arg(short, long, default_value = "20")]
+        limit: u32,
+        /// Sort method (rate, age, score)
+        #[arg(short, long, default_value = "rate")]
+        sort: String,
     },
 }
 
