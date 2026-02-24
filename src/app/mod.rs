@@ -25,14 +25,14 @@ use crate::input::InputHandler;
 use crate::installer::Installer;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 use crate::script_manifest::ManifestRegistry;
-use crate::script_traits::ScriptArgs;
+use crate::script_traits::{is_dry_run, ScriptArgs};
 use crate::scripts::config::{GenFstabArgs, UserAddArgs};
-use crate::scripts::disk::{FormatPartitionArgs, WipeDiskArgs, WipeMethod};
+use crate::scripts::disk::{CheckDiskHealthArgs, FormatPartitionArgs, WipeDiskArgs, WipeMethod};
 use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
-use crate::scripts::network::{MirrorSortMethod, UpdateMirrorsArgs};
+use crate::scripts::network::{MirrorSortMethod, NetworkDiagnosticsArgs, TestNetworkArgs, UpdateMirrorsArgs};
 use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
 use crate::scripts::system::{BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs};
-use crate::scripts::user::{GroupsArgs, ResetPasswordArgs, SshArgs};
+use crate::scripts::user::{GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs};
 use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
 use crate::types::AurHelper;
 use crate::ui::UiRenderer;
@@ -97,7 +97,7 @@ pub struct App {
 //              │
 //              ├── AutomatedInstall ───── FileBrowser ───── Installation
 //              │
-//              └── ToolsMenu ──┬── DiskTools ──┬── ToolDialog ── ToolExecution
+//              └── ToolsMenu ──┬── DiskTools ──┬── ToolDialog ── FloatingOutput
 //                              │               │
 //                              ├── SystemTools │── EmbeddedTerminal
 //                              │               │
@@ -405,6 +405,9 @@ impl App {
     }
 
     fn poll_tool_messages(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Track whether tool finished so we can clean up SecretFile after releasing state lock
+        let mut should_clear_secret = false;
+
         // Process all pending messages without blocking
         while let Ok(msg) = self.tool_rx.try_recv() {
             let mut state = self.lock_state_mut()?;
@@ -436,6 +439,7 @@ impl App {
                     };
                     state.status_message = status_msg.clone();
                     state.current_tool = None;
+                    should_clear_secret = true;
 
                     // Now update floating output
                     if let Some(ref mut floating) = state.floating_output {
@@ -456,6 +460,7 @@ impl App {
                 ToolMessage::Error(err) => {
                     state.status_message = format!("Tool error: {}", err);
                     state.current_tool = None;
+                    should_clear_secret = true;
 
                     if let Some(ref mut floating) = state.floating_output {
                         floating.append_line(format!("❌ Error: {}", err));
@@ -466,6 +471,12 @@ impl App {
                 }
             }
         }
+
+        // Clean up any active secret file (LUKS keyfile) after tool completion
+        if should_clear_secret {
+            self._active_secret_file = None;
+        }
+
         Ok(())
     }
 
@@ -664,9 +675,15 @@ impl App {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('b') | KeyCode::Char('B') => {
                     // Dismiss floating output and return to previous mode
                     let mut state = self.lock_state_mut()?;
-                    if let Some(_output) = state.floating_output.take() {
-                        // Return to tools menu or previous mode
+                    if let Some(output) = state.floating_output.take() {
+                        if !output.complete {
+                            // Tool still running — terminate registered child processes
+                            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                                registry.terminate_current(Duration::from_secs(3));
+                            }
+                        }
                         state.mode = AppMode::ToolsMenu;
+                        state.current_tool = None;
                     }
                 }
                 KeyCode::Up => {
@@ -759,6 +776,8 @@ impl App {
                         state.confirm_dialog = None;
                         if let Some(prev_mode) = state.pre_dialog_mode.take() {
                             state.mode = prev_mode;
+                        } else {
+                            state.mode = AppMode::ToolsMenu;
                         }
 
                         if confirmed {
@@ -775,6 +794,8 @@ impl App {
                         state.confirm_dialog = None;
                         if let Some(prev_mode) = state.pre_dialog_mode.take() {
                             state.mode = prev_mode;
+                        } else {
+                            state.mode = AppMode::ToolsMenu;
                         }
                     }
                     _ => {}
@@ -993,9 +1014,6 @@ impl App {
             AppMode::ToolDialog => {
                 self.handle_tool_dialog_enter()?;
             }
-            AppMode::ToolExecution => {
-                // Tool execution in progress, no action needed
-            }
             AppMode::Installation => {
                 // Installation is running, no action needed
             }
@@ -1130,7 +1148,16 @@ impl App {
             }
             "format_partition" => {
                 if let Some(partition) = data {
-                    self.execute_tool_with_device("format_partition.sh", &partition, &[])?;
+                    let sa = FormatPartitionArgs {
+                        device: PathBuf::from(&partition),
+                        filesystem: crate::types::Filesystem::Ext4,
+                        label: None,
+                        force: false,
+                    };
+                    self.execute_via_script_args(
+                        sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                        "format partition", sa.is_destructive(), true,
+                    )?;
                 }
             }
             "install_bootloader" => {
@@ -1138,10 +1165,15 @@ impl App {
                     // params format: "bootloader:disk"
                     let parts: Vec<&str> = params.split(':').collect();
                     if parts.len() == 2 {
-                        self.execute_tool_with_device(
-                            "install_bootloader.sh",
-                            parts[1],
-                            &["--bootloader", parts[0]],
+                        let sa = BootloaderArgs {
+                            bootloader_type: parts[0].to_string(),
+                            disk: PathBuf::from(parts[1]),
+                            mode: String::new(),
+                            efi_path: None,
+                        };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "install bootloader", sa.is_destructive(), true,
                         )?;
                     }
                 }
@@ -1151,48 +1183,61 @@ impl App {
                 self.start_installation()?;
             }
             "execute_tool" => {
-                // Deserialize PendingToolExecution from action_data
                 if let Some(data) = data {
-                    if let Ok(pending) = serde_json::from_str::<serde_json::Value>(&data) {
-                        let script_name = pending["script_name"].as_str().unwrap_or("").to_string();
-                        let cli_args: Vec<String> = pending["cli_args"]
-                            .as_array()
-                            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                            .unwrap_or_default();
-                        let env_vars: Vec<(String, String)> = pending["env_vars"]
-                            .as_array()
-                            .map(|a| {
-                                a.iter()
-                                    .filter_map(|v| {
-                                        let arr = v.as_array()?;
-                                        Some((arr.first()?.as_str()?.to_string(), arr.get(1)?.as_str()?.to_string()))
-                                    })
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        let display_name = pending["display_name"].as_str().unwrap_or("tool").to_string();
+                    match serde_json::from_str::<serde_json::Value>(&data) {
+                        Ok(pending) => {
+                            let script_name = pending["script_name"].as_str().unwrap_or("").to_string();
+                            if script_name.is_empty() {
+                                let mut state = self.lock_state_mut()?;
+                                state.status_message = "Error: missing script name in confirmed action".to_string();
+                                return Ok(());
+                            }
+                            let cli_args: Vec<String> = pending["cli_args"]
+                                .as_array()
+                                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                .unwrap_or_default();
+                            let env_vars: Vec<(String, String)> = pending["env_vars"]
+                                .as_array()
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(|v| {
+                                            let arr = v.as_array()?;
+                                            Some((arr.first()?.as_str()?.to_string(), arr.get(1)?.as_str()?.to_string()))
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            let display_name = pending["display_name"].as_str().unwrap_or("tool").to_string();
 
-                        let script_path = format!("scripts/tools/{}", script_name);
-                        // Set up floating output and spawn directly (already confirmed)
-                        {
-                            let mut state = self.lock_state_mut()?;
-                            state.floating_output = Some(FloatingOutputState {
-                                title: format!("Running: {}", display_name),
-                                content: vec![
-                                    format!("Executing: {} {}", script_path, cli_args.join(" ")),
-                                    String::new(),
-                                ],
-                                scroll_offset: 0,
-                                auto_scroll: true,
-                                complete: false,
-                                progress: None,
-                                status: "Running...".to_string(),
-                            });
-                            state.mode = AppMode::FloatingOutput;
-                            state.current_tool = Some(display_name);
+                            let script_path = format!("scripts/tools/{}", script_name);
+                            // Set up floating output and spawn directly (already confirmed)
+                            {
+                                let mut state = self.lock_state_mut()?;
+                                state.floating_output = Some(FloatingOutputState {
+                                    title: format!("Running: {}", display_name),
+                                    content: vec![
+                                        format!("Executing: {} {}", script_path, cli_args.join(" ")),
+                                        String::new(),
+                                    ],
+                                    scroll_offset: 0,
+                                    auto_scroll: true,
+                                    complete: false,
+                                    progress: None,
+                                    status: "Running...".to_string(),
+                                });
+                                state.mode = AppMode::FloatingOutput;
+                                state.current_tool = Some(display_name);
+                            }
+                            self.spawn_tool_script_with_env(&script_path, cli_args, env_vars)?;
                         }
-                        self.spawn_tool_script_with_env(&script_path, cli_args, env_vars)?;
+                        Err(e) => {
+                            let mut state = self.lock_state_mut()?;
+                            state.status_message = format!("Internal error: failed to parse tool data: {}", e);
+                        }
                     }
+                } else {
+                    let mut state = self.lock_state_mut()?;
+                    state.status_message = "Error: no action data for confirmed tool execution".to_string();
                 }
             }
             _ => {
@@ -1401,20 +1446,12 @@ impl App {
                         self.create_tool_dialog("manage_services")?;
                     }
                     4 => {
-                        // System Information - Simple tool with no parameters
-                        {
-                            let mut state = self.lock_state_mut()?;
-                            state.current_tool = Some("system_info".to_string());
-                            state.status_message = "Gathering system information...".to_string();
-                        }
-
-                        // Execute system info tool directly
-                        if let Err(e) = self.execute_simple_tool("system_info.sh", &["--detailed"])
-                        {
-                            eprintln!("Failed to execute system info tool: {}", e);
-                            let mut state = self.lock_state_mut()?;
-                            state.status_message = "System info tool failed".to_string();
-                        }
+                        // System Information - no parameters needed
+                        let sa = SystemInfoArgs { detailed: true };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "system info", sa.is_destructive(), true,
+                        )?;
                     }
                     5 => {
                         // Enable Services - Create dialog
@@ -1446,22 +1483,12 @@ impl App {
                         self.create_tool_dialog("configure_ssh")?;
                     }
                     4 => {
-                        // Security Audit - Simple tool
-                        {
-                            let mut state = self.lock_state_mut()?;
-                            state.current_tool = Some("security_audit".to_string());
-                            state.status_message =
-                                "Running security audit...".to_string();
-                        }
-                        if let Err(e) = self.execute_simple_tool(
-                            "security_audit.sh",
-                            &["--action", "basic"],
-                        ) {
-                            eprintln!("Failed to execute security audit: {}", e);
-                            let mut state = self.lock_state_mut()?;
-                            state.status_message =
-                                "Security audit failed".to_string();
-                        }
+                        // Security Audit - no parameters needed
+                        let sa = SecurityAuditArgs { action: "basic".into() };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "security audit", sa.is_destructive(), true,
+                        )?;
                     }
                     5 => {
                         // Install Dotfiles - Create dialog
@@ -1481,47 +1508,28 @@ impl App {
                         self.create_tool_dialog("configure_network")?;
                     }
                     1 => {
-                        // Test Network Connectivity - Simple tool
-                        {
-                            let mut state = self.lock_state_mut()?;
-                            state.current_tool = Some("test_network".to_string());
-                            state.status_message = "Testing network connectivity...".to_string();
-                        }
-
-                        // Execute network test tool directly
-                        if let Err(e) =
-                            self.execute_simple_tool("test_network.sh", &["--action", "full"])
-                        {
-                            eprintln!("Failed to execute network test tool: {}", e);
-                            let mut state = self.lock_state_mut()?;
-                            state.status_message = "Network test tool failed".to_string();
-                        }
+                        // Test Network Connectivity - no parameters needed
+                        let sa = TestNetworkArgs {
+                            action: "full".into(),
+                            host: None,
+                            timeout: 10,
+                        };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "test network", sa.is_destructive(), true,
+                        )?;
                     }
                     2 => {
                         // Configure Firewall - Create dialog
                         self.create_tool_dialog("configure_firewall")?;
                     }
                     3 => {
-                        // Network Diagnostics - Simple tool
-                        {
-                            let mut state = self.lock_state_mut()?;
-                            state.current_tool =
-                                Some("network_diagnostics".to_string());
-                            state.status_message =
-                                "Running network diagnostics...".to_string();
-                        }
-                        if let Err(e) = self.execute_simple_tool(
-                            "network_diagnostics.sh",
-                            &["--action", "basic"],
-                        ) {
-                            eprintln!(
-                                "Failed to execute network diagnostics: {}",
-                                e
-                            );
-                            let mut state = self.lock_state_mut()?;
-                            state.status_message =
-                                "Network diagnostics failed".to_string();
-                        }
+                        // Network Diagnostics - no parameters needed
+                        let sa = NetworkDiagnosticsArgs { action: "basic".into() };
+                        self.execute_via_script_args(
+                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                            "network diagnostics", sa.is_destructive(), true,
+                        )?;
                     }
                     4 => {
                         // Update Mirrors - Create dialog
@@ -1676,55 +1684,7 @@ impl App {
                 state.tool_dialog = None;
                 state.current_tool = None;
             }
-            AppMode::ToolExecution => {
-                // Go back to the appropriate tool menu (same logic as ToolDialog)
-                if let Some(ref tool_name) = state.current_tool {
-                    match tool_name.as_str() {
-                        "format_partition" | "wipe_disk" | "check_disk_health"
-                        | "mount_partitions" | "manual_partition" => {
-                            state.mode = AppMode::DiskTools;
-                            state.tools_menu_selection = 0;
-                            state.status_message = "Disk & Filesystem Tools".to_string();
-                        }
-                        "install_bootloader" | "generate_fstab" | "chroot_system"
-                        | "manage_services" | "system_info" => {
-                            state.mode = AppMode::SystemTools;
-                            state.tools_menu_selection = 0;
-                            state.status_message = "System & Boot Tools".to_string();
-                        }
-                        "add_user" | "reset_password" | "manage_groups" | "configure_ssh"
-                        | "security_audit" => {
-                            state.mode = AppMode::UserTools;
-                            state.tools_menu_selection = 0;
-                            state.status_message = "User & Security Tools".to_string();
-                        }
-                        "configure_network"
-                        | "test_network"
-                        | "configure_firewall"
-                        | "network_diagnostics" => {
-                            state.mode = AppMode::NetworkTools;
-                            state.tools_menu_selection = 0;
-                            state.status_message = "Network Tools".to_string();
-                        }
-                        _ => {
-                            // Fallback to tools menu
-                            state.mode = AppMode::ToolsMenu;
-                            state.tools_menu_selection = 0;
-                            state.status_message =
-                                "Arch Linux Tools - System repair and administration".to_string();
-                        }
-                    }
-                } else {
-                    // Fallback to tools menu
-                    state.mode = AppMode::ToolsMenu;
-                    state.tools_menu_selection = 0;
-                    state.status_message =
-                        "Arch Linux Tools - System repair and administration".to_string();
-                }
-                // Clear tool execution state
-                state.tool_output.clear();
-                state.current_tool = None;
-            }
+            // ToolExecution removed — tool execution uses FloatingOutput mode
             AppMode::Installation => {
                 // During installation, go back to guided installer
                 state.mode = AppMode::GuidedInstaller;
@@ -3386,8 +3346,7 @@ impl App {
                 if current_param < dialog.parameters.len() {
                     // Move to next parameter or execute tool
                     if current_param == dialog.parameters.len() - 1 {
-                        // All parameters collected, execute tool
-                        state.mode = AppMode::ToolExecution;
+                        // All parameters collected — mode will be set by execute_tool_with_params
                     } else {
                         // Move to next parameter
                         dialog.current_param += 1;
@@ -3445,95 +3404,15 @@ impl App {
         &mut self,
         selected_disk: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        self.execute_tool_with_device("check_disk_health.sh", &selected_disk, &["--detailed"])
-    }
-
-    /// Generic function to execute tools that need a device parameter (async/non-blocking)
-    fn execute_tool_with_device(
-        &mut self,
-        script_name: &str,
-        device: &str,
-        extra_args: &[&str],
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut args = Vec::new();
-        args.push("--device".to_string());
-        args.push(device.to_string());
-
-        for arg in extra_args {
-            args.push(arg.to_string());
-        }
-
-        let script_path = format!("scripts/tools/{}", script_name);
-        let tool_display = script_name.replace(".sh", "").replace('_', " ");
-
-        // Set up floating output window
-        {
-            let mut state = self.lock_state_mut()?;
-            state.floating_output = Some(FloatingOutputState {
-                title: format!("Running: {} on {}", tool_display, device),
-                content: vec![
-                    format!("Executing: {} {}", script_path, args.join(" ")),
-                    String::new(),
-                ],
-                scroll_offset: 0,
-                auto_scroll: true,
-                complete: false,
-                progress: None,
-                status: "Running...".to_string(),
-            });
-            state.mode = AppMode::FloatingOutput;
-            state.current_tool = Some(tool_display);
-        }
-
-        // Spawn the tool in a background thread
-        self.spawn_tool_script(&script_path, args)?;
-
-        Ok(())
-    }
-
-    /// Generic function to execute simple tools with no parameters (async/non-blocking)
-    fn execute_simple_tool(
-        &mut self,
-        script_name: &str,
-        extra_args: &[&str],
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let args: Vec<String> = extra_args.iter().map(|s| s.to_string()).collect();
-        let script_path = format!("scripts/tools/{}", script_name);
-        let tool_display = script_name.replace(".sh", "").replace('_', " ");
-
-        // Set up floating output window
-        {
-            let mut state = self.lock_state_mut()?;
-            state.floating_output = Some(FloatingOutputState {
-                title: format!("Running: {}", tool_display),
-                content: vec![
-                    format!("Executing: {} {}", script_path, args.join(" ")),
-                    String::new(),
-                ],
-                scroll_offset: 0,
-                auto_scroll: true,
-                complete: false,
-                progress: None,
-                status: "Running...".to_string(),
-            });
-            state.mode = AppMode::FloatingOutput;
-            state.current_tool = Some(tool_display.clone());
-        }
-
-        // Spawn the tool in a background thread
-        self.spawn_tool_script(&script_path, args)?;
-
-        Ok(())
-    }
-
-    /// Spawn a tool script in a background thread with no environment variables.
-    /// Delegates to `spawn_tool_script_with_env` with empty env.
-    fn spawn_tool_script(
-        &self,
-        script_path: &str,
-        args: Vec<String>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        self.spawn_tool_script_with_env(script_path, args, vec![])
+        let sa = CheckDiskHealthArgs {
+            device: PathBuf::from(&selected_disk),
+        };
+        let mut cli_args = sa.to_cli_args();
+        cli_args.push("--detailed".to_string());
+        self.execute_via_script_args(
+            sa.script_name(), cli_args, sa.get_env_vars(),
+            "check disk health", sa.is_destructive(), true,
+        )
     }
 
     /// Spawn a tool script in a background thread with real-time output streaming
@@ -3663,6 +3542,35 @@ impl App {
         is_destructive: bool,
         skip_confirm: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Dry-run check: show what WOULD execute without actually running
+        if is_dry_run() {
+            let script_path = format!("scripts/tools/{}", script_name);
+            let env_display: Vec<String> = env_vars.iter().map(|(k,v)| format!("{}={}", k, v)).collect();
+            let env_prefix = if env_display.is_empty() { String::new() } else { format!("{} ", env_display.join(" ")) };
+            let would_execute = format!("{}bash {} {}", env_prefix, script_path, cli_args.join(" "));
+
+            let mut state = self.lock_state_mut()?;
+            state.tool_dialog = None;
+            state.floating_output = Some(FloatingOutputState {
+                title: format!("[DRY RUN] {}", display_name),
+                content: vec![
+                    "[DRY RUN] Would execute:".to_string(),
+                    would_execute,
+                    String::new(),
+                    "No changes were made.".to_string(),
+                    String::new(),
+                    "Press Esc or Enter to close".to_string(),
+                ],
+                scroll_offset: 0,
+                auto_scroll: false,
+                complete: true,
+                progress: None,
+                status: "Dry run complete".to_string(),
+            });
+            state.mode = AppMode::FloatingOutput;
+            return Ok(());
+        }
+
         // If destructive and not already confirmed, show confirmation dialog
         if is_destructive && !skip_confirm {
             let severity = match script_name {
@@ -3685,6 +3593,7 @@ impl App {
             let action_data = pending.to_string();
 
             let mut state = self.lock_state_mut()?;
+            state.pre_dialog_mode = Some(state.mode.clone());
             state.tool_dialog = None;
             state.confirm_dialog = Some(
                 ConfirmDialogState::new(&title, &message, severity, "execute_tool")
@@ -3698,12 +3607,17 @@ impl App {
 
         let script_path = format!("scripts/tools/{}", script_name);
 
-        // Advisory manifest validation (log warnings, don't block)
+        // Manifest validation — destructive scripts are blocked without a manifest
         let script_basename = script_name.trim_end_matches(".sh");
         if let Some(manifest) = self.manifest_registry.get(script_basename) {
             log::debug!("Manifest found for {}: v{}", script_name, manifest.version);
+        } else if is_destructive {
+            log::error!("BLOCKED: No manifest found for destructive script: {}", script_name);
+            let mut state = self.lock_state_mut()?;
+            state.status_message = format!("Error: no manifest for destructive script {}", script_name);
+            return Ok(());
         } else {
-            log::warn!("No manifest found for script: {}", script_name);
+            log::warn!("No manifest found for script: {} (non-destructive, allowing)", script_name);
         }
 
         // Set up floating output window
@@ -3748,6 +3662,15 @@ impl App {
     //
     // =========================================================================
 
+    /// Validate that a required parameter is present and non-empty.
+    fn validate_required_param(params: &[String], index: usize, name: &str) -> Result<String, String> {
+        let val = params.get(index).cloned().unwrap_or_default();
+        if val.trim().is_empty() {
+            return Err(format!("Required parameter '{}' is empty", name));
+        }
+        Ok(val)
+    }
+
     /// Execute a tool with the collected parameters using ScriptArgs for type safety.
     pub fn execute_tool_with_params(
         &mut self,
@@ -3791,11 +3714,19 @@ impl App {
         // Non-interactive tools: construct ScriptArgs and execute via helper
         match tool_name {
             "format_partition" | "Format Partition" => {
+                let device = match Self::validate_required_param(&params, 0, "device") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let fs: crate::types::Filesystem = params.get(1)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(crate::types::Filesystem::Ext4);
                 let sa = FormatPartitionArgs {
-                    device: PathBuf::from(params.first().cloned().unwrap_or_default()),
+                    device: PathBuf::from(device),
                     filesystem: fs,
                     label: params.get(2).filter(|s| !s.is_empty()).cloned(),
                     force: false,
@@ -3806,12 +3737,20 @@ impl App {
                 )
             }
             "wipe_disk" | "Wipe Disk" => {
+                let device = match Self::validate_required_param(&params, 0, "device") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let method: WipeMethod = params.get(1)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(WipeMethod::Quick);
                 let confirm = params.get(2).map(|s| s == "true").unwrap_or(false);
                 let sa = WipeDiskArgs {
-                    device: PathBuf::from(params.first().cloned().unwrap_or_default()),
+                    device: PathBuf::from(device),
                     method,
                     confirm,
                 };
@@ -3879,9 +3818,25 @@ impl App {
                 )
             }
             "install_bootloader" => {
+                let bootloader_type = match Self::validate_required_param(&params, 0, "bootloader type") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let disk = match Self::validate_required_param(&params, 1, "disk") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let sa = BootloaderArgs {
-                    bootloader_type: params.first().cloned().unwrap_or_default(),
-                    disk: PathBuf::from(params.get(1).cloned().unwrap_or_default()),
+                    bootloader_type,
+                    disk: PathBuf::from(disk),
                     efi_path: params.get(2).filter(|s| !s.is_empty()).map(PathBuf::from),
                     mode: params.get(3).filter(|s| !s.is_empty()).cloned().unwrap_or_default(),
                 };
@@ -3905,8 +3860,16 @@ impl App {
             }
             "add_user" | "Add New User" => {
                 // params: username, password, full_name, groups, shell, system_user
+                let username = match Self::validate_required_param(&params, 0, "username") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let sa = UserAddArgs {
-                    username: params.first().cloned().unwrap_or_default(),
+                    username,
                     password: params.get(1).filter(|s| !s.is_empty()).cloned(),
                     full_name: params.get(2).filter(|s| !s.is_empty()).cloned(),
                     groups: params.get(3).filter(|s| !s.is_empty()).cloned(),
@@ -3921,9 +3884,15 @@ impl App {
                 )
             }
             "reset_password" => {
-                let sa = ResetPasswordArgs {
-                    username: params.first().cloned().unwrap_or_default(),
+                let username = match Self::validate_required_param(&params, 0, "username") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
                 };
+                let sa = ResetPasswordArgs { username };
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
                     "reset password", sa.is_destructive(), false,
@@ -3931,11 +3900,17 @@ impl App {
             }
             "configure_network" => {
                 // params: interface, action, config_type, ip, netmask, gateway
+                let interface = match Self::validate_required_param(&params, 0, "interface") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let mut cli_args = vec![];
-                if !params.is_empty() && !params[0].is_empty() {
-                    cli_args.push("--interface".to_string());
-                    cli_args.push(params[0].clone());
-                }
+                cli_args.push("--interface".to_string());
+                cli_args.push(interface);
                 if params.len() >= 2 {
                     cli_args.push("--action".to_string());
                     cli_args.push(params[1].clone());
@@ -3972,8 +3947,16 @@ impl App {
                 )
             }
             "manage_groups" => {
+                let action = match Self::validate_required_param(&params, 0, "action") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let sa = GroupsArgs {
-                    action: params.first().cloned().unwrap_or_default(),
+                    action,
                     user: params.get(1).filter(|s| !s.is_empty()).cloned(),
                     group: params.get(2).filter(|s| !s.is_empty()).cloned(),
                 };
@@ -4012,7 +3995,14 @@ impl App {
             "encrypt_device" => {
                 // params: action, device, password, mapper_name
                 let action = params.first().cloned().unwrap_or_default();
-                let device = params.get(1).cloned().unwrap_or_default();
+                let device = match Self::validate_required_param(&params, 1, "device") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let password = params.get(2).cloned().unwrap_or_default();
                 let mapper_name = params.get(3).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "cryptroot".to_string());
 
@@ -4077,9 +4067,17 @@ impl App {
                 let helper: AurHelper = params.first()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(AurHelper::Paru);
+                let target_user = match Self::validate_required_param(&params, 1, "target user") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let sa = InstallAurHelperArgs {
                     helper,
-                    target_user: params.get(1).cloned().unwrap_or_default(),
+                    target_user,
                     chroot_path: PathBuf::from(params.get(2).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
                 };
                 self.execute_via_script_args(
@@ -4089,9 +4087,25 @@ impl App {
             }
             "install_dotfiles" => {
                 // params: repo_url, target_user, branch, backup
+                let repo_url = match Self::validate_required_param(&params, 0, "repository URL") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let target_user = match Self::validate_required_param(&params, 1, "target user") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let sa = InstallDotfilesArgs {
-                    repo_url: params.first().cloned().unwrap_or_default(),
-                    target_user: params.get(1).cloned().unwrap_or_default(),
+                    repo_url,
+                    target_user,
                     target_dir: None,
                     branch: params.get(2).filter(|s| !s.is_empty()).cloned(),
                     backup: params.get(3).map(|s| s == "true").unwrap_or(true),
@@ -4103,9 +4117,25 @@ impl App {
             }
             "run_as_user" => {
                 // params: user, command, root, workdir
+                let user = match Self::validate_required_param(&params, 0, "user") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let command = match Self::validate_required_param(&params, 1, "command") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state_mut()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
                 let sa = UserRunArgs {
-                    user: params.first().cloned().unwrap_or_default(),
-                    command: params.get(1).cloned().unwrap_or_default(),
+                    user,
+                    command,
                     chroot_path: PathBuf::from(params.get(2).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
                     workdir: params.get(3).filter(|s| !s.is_empty()).map(PathBuf::from),
                 };

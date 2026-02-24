@@ -169,19 +169,6 @@ impl KeybindingContext {
             ],
         );
 
-        // Tool Execution / Floating Output
-        self.mode_bindings.insert(
-            AppMode::ToolExecution,
-            vec![
-                Keybinding::new(KeyCode::Up, KeyAction::ScrollUp, "Up", "Scroll up"),
-                Keybinding::new(KeyCode::Down, KeyAction::ScrollDown, "Down", "Scroll down"),
-                Keybinding::new(KeyCode::PageUp, KeyAction::PageUp, "PgUp", "Page up"),
-                Keybinding::new(KeyCode::PageDown, KeyAction::PageDown, "PgDn", "Page down"),
-                Keybinding::new(KeyCode::Esc, KeyAction::Dismiss, "Esc", "Close"),
-                Keybinding::new(KeyCode::Char('b'), KeyAction::Back, "B", "Back"),
-            ],
-        );
-
         // Installation
         self.mode_bindings.insert(
             AppMode::Installation,
@@ -305,7 +292,7 @@ impl KeybindingContext {
                 KeyAction::Quit,
             ],
             AppMode::EmbeddedTerminal => vec![KeyAction::ExitTerminal],
-            AppMode::FloatingOutput | AppMode::ToolExecution => vec![
+            AppMode::FloatingOutput => vec![
                 KeyAction::ScrollUp,
                 KeyAction::ScrollDown,
                 KeyAction::Dismiss,

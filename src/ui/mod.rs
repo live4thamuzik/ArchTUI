@@ -312,9 +312,6 @@ impl UiRenderer {
             AppMode::ToolDialog => {
                 dialogs::render_tool_dialog_in_area(f, state, content_area);
             }
-            AppMode::ToolExecution => {
-                installer::render_tool_execution_in_area(f, state, content_area, &self.header);
-            }
             AppMode::Installation => {
                 installer::render_installation_ui_in_area(f, state, content_area, &self.header);
             }

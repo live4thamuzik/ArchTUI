@@ -98,7 +98,6 @@ fn app_mode_strategy() -> impl Strategy<Value = AppMode> {
         Just(AppMode::UserTools),
         Just(AppMode::NetworkTools),
         Just(AppMode::ToolDialog),
-        Just(AppMode::ToolExecution),
         Just(AppMode::Installation),
         Just(AppMode::Complete),
         Just(AppMode::EmbeddedTerminal),

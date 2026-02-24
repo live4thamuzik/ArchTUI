@@ -70,7 +70,6 @@ impl HelpOverlay {
             AppMode::UserTools => "User Tools",
             AppMode::NetworkTools => "Network Tools",
             AppMode::ToolDialog => "Tool Configuration",
-            AppMode::ToolExecution => "Tool Execution",
             AppMode::Installation => "Installation",
             AppMode::Complete => "Complete",
             AppMode::EmbeddedTerminal => "Terminal",
