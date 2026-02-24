@@ -62,6 +62,47 @@ impl ChildRegistry {
         self.pids.len()
     }
 
+    /// Terminate currently running child processes without setting the cleanup_initiated flag.
+    /// Used when the user dismisses a running tool (Esc on FloatingOutput) so that
+    /// future tool launches can still be tracked and cleaned up.
+    pub fn terminate_current(&mut self, grace_period: Duration) {
+        if self.pids.is_empty() {
+            return;
+        }
+        log::info!("Terminating {} running tool process(es)...", self.pids.len());
+
+        let pids_to_kill: Vec<u32> = self.pids.iter().copied().collect();
+        for &pid in &pids_to_kill {
+            if let Err(e) = send_signal_to_group(pid, Signal::SIGTERM) {
+                log::warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
+                let _ = send_signal(pid, Signal::SIGTERM);
+            }
+        }
+
+        let start = Instant::now();
+        while start.elapsed() < grace_period {
+            let still_alive: Vec<u32> = pids_to_kill.iter()
+                .filter(|&&pid| is_process_alive(pid))
+                .copied().collect();
+            if still_alive.is_empty() {
+                self.pids.clear();
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        for &pid in &pids_to_kill {
+            if is_process_alive(pid) {
+                log::warn!("Process {} did not terminate, sending SIGKILL", pid);
+                let _ = send_signal_to_group(pid, Signal::SIGKILL);
+                let _ = send_signal(pid, Signal::SIGKILL);
+            }
+        }
+        for &pid in &pids_to_kill {
+            self.pids.remove(&pid);
+        }
+    }
+
     /// Terminate all tracked child processes
     /// Sends SIGTERM first, waits up to `grace_period`, then SIGKILL
     pub fn terminate_all(&mut self, grace_period: Duration) {

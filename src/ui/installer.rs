@@ -222,43 +222,6 @@ pub fn render_automated_install_ui_in_area(
     f.render_widget(config_example, content_chunks[1]);
 }
 
-/// Render tool execution in specified area
-pub fn render_tool_execution_in_area(
-    f: &mut Frame,
-    state: &AppState,
-    area: Rect,
-    header: &HeaderRenderer,
-) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(7), // Header
-            Constraint::Length(3), // Title
-            Constraint::Min(0),    // Output
-        ])
-        .split(area);
-
-    header.render_header(f, chunks[0]);
-
-    let title = if let Some(ref tool) = state.current_tool {
-        format!("Running: {}", tool)
-    } else {
-        "Tool Execution".to_string()
-    };
-    header.render_title(f, chunks[1], &title);
-
-    // Render tool output
-    let output_items: Vec<ListItem> = state
-        .tool_output
-        .iter()
-        .map(|line| ListItem::new(line.as_str()))
-        .collect();
-
-    let output_list = List::new(output_items)
-        .block(Block::default().borders(Borders::ALL).title("Output"));
-    f.render_widget(output_list, chunks[2]);
-}
-
 /// Render installation UI in specified area
 pub fn render_installation_ui_in_area(
     f: &mut Frame,

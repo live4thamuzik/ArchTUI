@@ -107,8 +107,6 @@ pub enum AppMode {
     NetworkTools,
     /// Tool parameter input dialog
     ToolDialog,
-    /// Tool execution in progress
-    ToolExecution,
     /// Installation phase - running the actual installation
     Installation,
     /// Installation complete

@@ -124,7 +124,6 @@ fn test_all_app_modes_are_distinct() {
         AppMode::UserTools,
         AppMode::NetworkTools,
         AppMode::ToolDialog,
-        AppMode::ToolExecution,
         AppMode::Installation,
         AppMode::Complete,
         AppMode::EmbeddedTerminal,
