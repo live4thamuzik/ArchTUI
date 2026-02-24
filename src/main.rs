@@ -140,6 +140,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     debug!("Signal handlers initialized");
     debug!("CLI arguments parsed");
 
+    // Fail fast if scripts directory is not found
+    let scripts_dir = script_runner::scripts_base_dir();
+    if !scripts_dir.join("utils.sh").exists() {
+        eprintln!("Fatal: scripts directory not found at {:?}", scripts_dir);
+        eprintln!("Run archtui from the repository root or set ARCHTUI_SCRIPTS_DIR");
+        std::process::exit(1);
+    }
+    debug!("Scripts directory verified: {:?}", scripts_dir);
+
     // Enable dry-run mode if requested
     if cli.dry_run {
         script_traits::enable_dry_run();
@@ -244,7 +253,10 @@ fn run_installer_with_config(
     println!("✓ Configuration loaded and validated");
     println!("🚀 Starting installation with configuration file...");
 
-    let script_path = "./scripts/install.sh";
+    let script_path = script_runner::scripts_base_dir()
+        .join("install.sh")
+        .to_string_lossy()
+        .to_string();
     info!("Spawning installer script: {}", script_path);
 
     let mut child = Command::new("bash")

@@ -285,12 +285,8 @@ impl FloatingWindow {
         f.render_widget(content_block, chunks[1]);
 
         let visible_height = inner_area.height as usize;
-        let start = if content.len() > visible_height {
-            content.len() - visible_height // Auto-scroll to bottom
-        } else {
-            0
-        };
-        let end = content.len();
+        let start = self.scroll_state.offset;
+        let end = (start + visible_height).min(content.len());
 
         let visible_content: Vec<ListItem> = content[start..end]
             .iter()

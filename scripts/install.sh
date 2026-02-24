@@ -386,10 +386,32 @@ configure_mirrors() {
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
     # Use reflector if available, otherwise use default mirrors
+    # Flags per https://wiki.archlinux.org/title/Reflector:
+    #   -a 48   = mirrors synced within 48 hours
+    #   -f 5    = pre-filter to 5 fastest by connection speed
+    #   -l 20   = limit to 20 most recently synced before speed test
+    #   --sort rate = final sort by download rate
+    #   --connection-timeout / --download-timeout = skip unresponsive mirrors after 5s
     if command -v reflector >/dev/null 2>&1; then
-        log_info "Using reflector to rank mirrors for country: ${MIRROR_COUNTRY:-US}..."
-        log_info "This may take a minute while mirrors are tested..."
-        reflector --country "${MIRROR_COUNTRY:-US}" --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist 2>&1 | while IFS= read -r line; do
+        local -a reflector_args=(
+            --age 48
+            --fastest 5
+            --latest 20
+            --sort rate
+            --connection-timeout 5
+            --download-timeout 5
+            --save /etc/pacman.d/mirrorlist
+        )
+
+        if [[ -n "${MIRROR_COUNTRY:-}" ]]; then
+            reflector_args+=(--country "$MIRROR_COUNTRY")
+            log_info "Using reflector to rank mirrors for country: $MIRROR_COUNTRY..."
+        else
+            log_info "Using reflector to rank mirrors globally..."
+        fi
+
+        log_info "This may take a moment while mirrors are tested..."
+        reflector "${reflector_args[@]}" 2>&1 | while IFS= read -r line; do
             case "$line" in
                 *"error"*|*"Error"*)
                     echo -e "${RED}  [reflector] $line${RESET}"
@@ -639,8 +661,8 @@ configure_chroot() {
 
     # Copy necessary scripts to target system
     log_info "Copying configuration scripts to /mnt/root/..."
-    cp "$SCRIPT_DIR/chroot_config.sh" /mnt/root/
-    cp "$SCRIPT_DIR/utils.sh" /mnt/root/
+    cp "$SCRIPT_DIR/chroot_config.sh" /mnt/root/ || error_exit "Failed to copy chroot_config.sh to /mnt/root/"
+    cp "$SCRIPT_DIR/utils.sh" /mnt/root/ || error_exit "Failed to copy utils.sh to /mnt/root/"
     mkdir -p /mnt/root/desktops
     cp -r "$SCRIPT_DIR/desktops/"* /mnt/root/desktops/ 2>/dev/null || true
 
