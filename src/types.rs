@@ -154,11 +154,11 @@ pub enum Bootloader {
 #[derive(Display, EnumString, EnumIter)]
 #[strum(serialize_all = "lowercase")]
 pub enum AurHelper {
-    #[default]
     #[strum(serialize = "paru")]
     Paru,
     #[strum(serialize = "yay")]
     Yay,
+    #[default]
     #[strum(serialize = "none")]
     None,
 }
@@ -203,9 +203,9 @@ pub enum GpuDriver {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumIter)]
 pub enum Toggle {
-    #[default]
     #[strum(serialize = "Yes")]
     Yes,
+    #[default]
     #[strum(serialize = "No")]
     No,
 }
@@ -351,6 +351,6 @@ mod tests {
         assert_eq!(PartitionScheme::default(), PartitionScheme::AutoSimple);
         assert_eq!(DesktopEnvironment::default(), DesktopEnvironment::None);
         assert_eq!(Bootloader::default(), Bootloader::Grub);
-        assert_eq!(Toggle::default(), Toggle::Yes);
+        assert_eq!(Toggle::default(), Toggle::No);
     }
 }

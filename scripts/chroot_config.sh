@@ -225,7 +225,7 @@ create_user_account() {
 
     # Create user with home directory and add to wheel group
     if ! id "$MAIN_USERNAME" &>/dev/null; then
-        useradd -m -G wheel,users,audio,video,storage,optical -s /bin/bash "$MAIN_USERNAME"
+        useradd -m -G wheel,users,audio,video,storage,optical -s /bin/bash "$MAIN_USERNAME" || { log_error "Failed to create user $MAIN_USERNAME"; return 1; }
         log_info "User $MAIN_USERNAME created"
     else
         log_info "User $MAIN_USERNAME already exists"
@@ -233,13 +233,13 @@ create_user_account() {
 
     # Set user password
     if [[ -n "${MAIN_USER_PASSWORD:-}" ]]; then
-        echo "$MAIN_USERNAME:$MAIN_USER_PASSWORD" | chpasswd
+        echo "$MAIN_USERNAME:$MAIN_USER_PASSWORD" | chpasswd || log_warn "Failed to set user password"
         log_info "User password set"
     fi
 
     # Set root password
     if [[ -n "${ROOT_PASSWORD:-}" ]]; then
-        echo "root:$ROOT_PASSWORD" | chpasswd
+        echo "root:$ROOT_PASSWORD" | chpasswd || log_warn "Failed to set root password"
         log_info "Root password set"
     fi
 
@@ -1453,7 +1453,7 @@ ExecStart=/bin/bash -c 'for tty in /dev/tty{1..6}; do /usr/bin/setleds -D +num <
 [Install]
 WantedBy=multi-user.target
 EOF
-            systemctl enable numlock.service
+            systemctl enable numlock.service || log_warn "Failed to enable numlock.service"
         fi
     fi
 

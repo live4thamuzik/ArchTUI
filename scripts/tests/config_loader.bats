@@ -379,13 +379,13 @@ teardown() {
         export HOME_FILESYSTEM="ext4"
         export SEPARATE_HOME="no"
         export ENCRYPTION="no"
-        export SWAP="yes"
+        export SWAP="no"
         export SYSTEM_HOSTNAME="testhost"
         export MAIN_USERNAME="testuser"
         export DESKTOP_ENVIRONMENT="none"
         export DISPLAY_MANAGER="none"
         export BOOTLOADER="grub"
-        export AUR_HELPER="paru"
+        export AUR_HELPER="none"
 
         run display_configuration
         [ "$status" -eq 0 ]
