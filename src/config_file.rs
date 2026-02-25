@@ -358,7 +358,7 @@ impl Default for InstallationConfig {
             grub_theme_selection: GrubTheme::PolyDark,
             desktop_environment: DesktopEnvironment::None,
             display_manager: DisplayManager::None,
-            plymouth: Toggle::Yes,
+            plymouth: Toggle::No,
             plymouth_theme: PlymouthTheme::ArchGlow,
             numlock_on_boot: Toggle::Yes,
             git_repository: Toggle::No,
