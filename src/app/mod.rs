@@ -1946,11 +1946,14 @@ impl App {
             };
             let errors = self.get_validation_errors(&config);
 
-            if errors.len() == 1 {
-                state.status_message = format!("❌ Cannot start installation: {}", errors[0]);
+            if errors.is_empty() {
+                state.status_message =
+                    "Cannot start installation: configuration is invalid".to_string();
+            } else if errors.len() == 1 {
+                state.status_message = format!("Cannot start installation: {}", errors[0]);
             } else {
                 state.status_message = format!(
-                    "❌ Cannot start installation: {} (and {} more errors)",
+                    "Cannot start installation: {} (and {} more errors)",
                     errors[0],
                     errors.len() - 1
                 );
@@ -2053,16 +2056,14 @@ impl App {
         // Check if we need to save the config before starting
         if let Some(save_path) = &self.save_config_path {
             info!("Saving configuration to: {:?}", save_path);
-            let state = self.lock_state()?;
-            let file_config = crate::config_file::InstallationConfig::from(&state.config);
+            let file_config = {
+                let state = self.lock_state()?;
+                crate::config_file::InstallationConfig::from(&state.config)
+            };
             file_config.save_to_file(save_path)?;
 
-            let mut state_mut = self.lock_state_mut()?;
-            state_mut.status_message = format!("✓ Config saved to {}", save_path.display());
-            drop(state_mut);
-
-            // Give user a moment to see the save message
-            std::thread::sleep(std::time::Duration::from_millis(1000));
+            let mut state = self.lock_state_mut()?;
+            state.status_message = format!("Config saved to {}", save_path.display());
         }
 
         // Update state to installation mode
@@ -2153,7 +2154,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
-                        .map(|opt| opt.value.clone())
+                        .map(|opt| opt.get_value())
                         .unwrap_or_default()
                 };
 
@@ -2180,7 +2181,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Swap")
-                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
                 };
 
@@ -2263,14 +2264,14 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Root Filesystem")
-                        .map(|opt| opt.value.to_lowercase() == "btrfs")
+                        .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false);
                     let snapshots = state
                         .config
                         .options
                         .iter()
                         .find(|opt| opt.name == "Btrfs Snapshots")
-                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
                     (btrfs, snapshots)
                 };
@@ -2304,14 +2305,14 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Bootloader")
-                        .map(|opt| opt.value.to_lowercase() == "grub")
+                        .map(|opt| opt.get_value().to_lowercase() == "grub")
                         .unwrap_or(false);
                     let themes = state
                         .config
                         .options
                         .iter()
                         .find(|opt| opt.name == "GRUB Theme")
-                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
                     (grub, themes)
                 };
@@ -2346,7 +2347,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Git Repository")
-                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
                 };
 
@@ -2373,7 +2374,7 @@ impl App {
                     .options
                     .iter()
                     .find(|opt| opt.name == "Partitioning Strategy")
-                    .map(|opt| opt.value.clone())
+                    .map(|opt| opt.get_value())
                     .unwrap_or_default();
                 drop(state); // Release the lock
 
@@ -2411,7 +2412,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Encryption")
-                        .map(|opt| opt.value.to_lowercase() != "no")
+                        .map(|opt| opt.get_value().to_lowercase() != "no")
                         .unwrap_or(false)
                 };
 
@@ -2462,7 +2463,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Timezone Region")
-                        .map(|opt| opt.value.clone())
+                        .map(|opt| opt.get_value())
                         .unwrap_or_default()
                 };
 
@@ -2486,7 +2487,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Desktop Environment")
-                        .map(|opt| opt.value.clone())
+                        .map(|opt| opt.get_value())
                         .unwrap_or_default()
                 };
 
@@ -2516,7 +2517,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Plymouth")
-                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
                 };
 
@@ -2542,7 +2543,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Bootloader")
-                        .map(|opt| opt.value.to_lowercase() == "grub")
+                        .map(|opt| opt.get_value().to_lowercase() == "grub")
                         .unwrap_or(false)
                 };
 
@@ -2567,7 +2568,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Separate Home Partition")
-                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
                 };
 
@@ -2593,7 +2594,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
-                        .map(|opt| opt.value.clone())
+                        .map(|opt| opt.get_value())
                         .unwrap_or_default();
                     strat == "auto_raid" || strat == "auto_raid_luks"
                 };
@@ -2622,7 +2623,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Root Filesystem")
-                        .map(|opt| opt.value.to_lowercase() == "btrfs")
+                        .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false)
                 };
 
@@ -2647,7 +2648,7 @@ impl App {
                         .options
                         .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
-                        .map(|opt| opt.value.contains("raid"))
+                        .map(|opt| opt.get_value().contains("raid"))
                         .unwrap_or(false)
                 };
 

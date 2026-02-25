@@ -113,17 +113,43 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         packages.push("lvm2");
     }
 
-    // 9. Btrfs tools (if Btrfs filesystem selected)
-    if config.root_filesystem == Filesystem::Btrfs {
+    // 9. Btrfs tools (if Btrfs filesystem selected for root or home)
+    if config.root_filesystem == Filesystem::Btrfs || config.home_filesystem == Filesystem::Btrfs {
         packages.push("btrfs-progs");
     }
 
-    // 10. RAID tools (if RAID strategy selected)
+    // 10. XFS tools (if XFS filesystem selected)
+    if config.root_filesystem == Filesystem::Xfs || config.home_filesystem == Filesystem::Xfs {
+        packages.push("xfsprogs");
+    }
+
+    // 11. FAT tools (always needed for EFI partition)
+    packages.push("dosfstools");
+
+    // 12. RAID tools (if RAID strategy selected)
     if config.partitioning_strategy.requires_raid() {
         packages.push("mdadm");
     }
 
-    // 11. Additional user-specified packages
+    // 13. Snapper (if btrfs snapshots enabled)
+    if config.root_filesystem == Filesystem::Btrfs && config.btrfs_snapshots == Toggle::Yes {
+        packages.push("snapper");
+        if config.btrfs_assistant == Toggle::Yes {
+            packages.push("btrfs-assistant");
+        }
+    }
+
+    // 14. OS prober (if enabled)
+    if config.os_prober == Toggle::Yes {
+        packages.push("os-prober");
+    }
+
+    // 15. Plymouth (if enabled)
+    if config.plymouth == Toggle::Yes {
+        packages.push("plymouth");
+    }
+
+    // 16. Additional user-specified packages
     let additional = parse_package_list(&config.additional_packages);
 
     // Deduplicate and sort
@@ -157,10 +183,20 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
     // NetworkManager — always enabled
     services.push("NetworkManager");
 
-    // Display manager from profile
+    // Display manager — prefer user's explicit choice, fall back to profile default
     let profile = desktop_to_profile(config.desktop_environment);
-    if let Some(dm) = profile.get_display_manager() {
-        services.push(dm);
+    match config.display_manager {
+        DisplayManager::None => {
+            // No DM selected by user — use profile default
+            if let Some(dm) = profile.get_display_manager() {
+                services.push(dm);
+            }
+        }
+        DisplayManager::Gdm => services.push("gdm"),
+        DisplayManager::Sddm => services.push("sddm"),
+        DisplayManager::Lightdm => services.push("lightdm"),
+        DisplayManager::Lxdm => services.push("lxdm"),
+        DisplayManager::Ly => services.push("ly"),
     }
 
     // Profile-specific services
