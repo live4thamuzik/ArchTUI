@@ -177,18 +177,7 @@ check_package_available() {
     pacman -Si "$1" >/dev/null 2>&1
 }
 
-format_filesystem() {
-    local dev="$1"
-    local fs="$2"
-    case "$fs" in
-        ext4) mkfs.ext4 -F "$dev" ;;
-        btrfs) mkfs.btrfs -f "$dev" ;;
-        xfs) mkfs.xfs -f "$dev" ;;
-        vfat|fat32) mkfs.fat -F32 "$dev" ;;
-        swap) mkswap "$dev" ;;
-        *) return 1 ;;
-    esac
-}
+# format_filesystem is defined in disk_utils.sh with full error handling
 
 # --- Initialization Functions ---
 

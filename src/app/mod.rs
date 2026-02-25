@@ -240,6 +240,7 @@ impl App {
                             progress: None,
                             status: "Ready to install".to_string(),
                         });
+                        state.pre_dialog_mode = Some(AppMode::AutomatedInstall);
                         state.mode = AppMode::FloatingOutput;
                     }
                     Err(e) => {
@@ -674,7 +675,7 @@ impl App {
                                 registry.terminate_current(Duration::from_secs(3));
                             }
                         }
-                        state.mode = AppMode::ToolsMenu;
+                        state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
                         state.current_tool = None;
                     }
                 }
@@ -810,6 +811,19 @@ impl App {
             if state.config_scroll.selected_index == state.config.options.len() {
                 state.installer_button_selection =
                     if state.installer_button_selection == 0 { 1 } else { 0 };
+            }
+            return Ok(false);
+        }
+
+        // Guard: Q during active installation requires confirmation via B/Escape, not bare Q
+        if current_mode == AppMode::Installation {
+            match key_event.code {
+                KeyCode::Up => { self.navigate_up(); }
+                KeyCode::Down => { self.navigate_down(); }
+                KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Esc => {
+                    self.handle_back_key()?;
+                }
+                _ => {}
             }
             return Ok(false);
         }
@@ -952,7 +966,10 @@ impl App {
                     state.config_scroll.move_down();
                 }
                 AppMode::Installation => {
-                    state.installer_scroll_offset += 1;
+                    let max_offset = state.installer_output.len().saturating_sub(1);
+                    if state.installer_scroll_offset < max_offset {
+                        state.installer_scroll_offset += 1;
+                    }
                     // Re-enable auto-scroll when scrolled near bottom
                     let visible_height = 30_usize; // approximate viewport
                     if state.installer_scroll_offset
@@ -1072,7 +1089,7 @@ impl App {
                 // Dismiss floating output on Enter
                 let mut state = self.lock_state_mut()?;
                 if let Some(_output) = state.floating_output.take() {
-                    state.mode = AppMode::ToolsMenu;
+                    state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
                 }
             }
             AppMode::FileBrowser => {
@@ -1270,6 +1287,9 @@ impl App {
                                     progress: None,
                                     status: "Running...".to_string(),
                                 });
+                                if state.pre_dialog_mode.is_none() {
+                                    state.pre_dialog_mode = Some(state.mode.clone());
+                                }
                                 state.mode = AppMode::FloatingOutput;
                                 state.current_tool = Some(display_name);
                             }
@@ -1760,9 +1780,9 @@ impl App {
                 return Ok(());
             }
             AppMode::FloatingOutput => {
-                // Dismiss floating output and return to tools menu
+                // Dismiss floating output and return to previous mode
                 if let Some(_output) = state.floating_output.take() {
-                    state.mode = AppMode::ToolsMenu;
+                    state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
                     state.tools_menu_selection = 0;
                     state.status_message =
                         "Arch Linux Tools - System repair and administration".to_string();
@@ -2590,6 +2610,56 @@ impl App {
                         .start_selection(option.name.clone(), options, option.value);
                 }
             }
+            "Btrfs Snapshots" => {
+                // Only allow toggling btrfs snapshots when root filesystem is btrfs
+                let is_btrfs = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Root Filesystem")
+                        .map(|opt| opt.value.to_lowercase() == "btrfs")
+                        .unwrap_or(false)
+                };
+
+                if is_btrfs {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "Btrfs Snapshots requires Root Filesystem to be btrfs.".to_string();
+                }
+            }
+            "RAID Level" => {
+                // Only allow RAID level selection when a RAID strategy is selected
+                let is_raid = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Partitioning Strategy")
+                        .map(|opt| opt.value.contains("raid"))
+                        .unwrap_or(false)
+                };
+
+                if is_raid {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "RAID Level is only available for RAID partitioning strategies.".to_string();
+                }
+            }
             _ => {
                 // Use predefined options for selection fields
                 let options = InputHandler::get_predefined_options(&option.name);
@@ -2836,9 +2906,10 @@ impl App {
         desktop_env: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let display_manager = match desktop_env {
-            "kde" => "sddm",
-            "gnome" => "gdm",
+            "kde" | "sway" => "sddm",
+            "gnome" | "budgie" => "gdm",
             "hyprland" => "sddm",
+            "i3" | "xfce" | "cinnamon" | "mate" => "lightdm",
             "none" => "none",
             _ => "",
         };
@@ -2994,7 +3065,29 @@ impl App {
                                 opt.value = "N/A".to_string();
                             }
                         }
-                    } else if value.contains("lvm") {
+                    }
+                    // Set RAID Level based on whether strategy is RAID
+                    if value.contains("raid") {
+                        if let Some(raid_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "RAID Level")
+                        {
+                            if raid_opt.value == "N/A" {
+                                raid_opt.value = "raid1".to_string();
+                            }
+                        }
+                    } else if let Some(raid_opt) = state
+                        .config
+                        .options
+                        .iter_mut()
+                        .find(|opt| opt.name == "RAID Level")
+                    {
+                        raid_opt.value = "N/A".to_string();
+                    }
+
+                    if value.contains("lvm") && !is_plain_raid {
                         // When switching to LVM without home, ensure root size is usable
                         let home_enabled = state
                             .config
@@ -4142,6 +4235,7 @@ impl App {
                 progress: None,
                 status: "Dry run complete".to_string(),
             });
+            state.pre_dialog_mode = Some(state.mode.clone());
             state.mode = AppMode::FloatingOutput;
             return Ok(());
         }
@@ -4211,6 +4305,9 @@ impl App {
                 progress: None,
                 status: "Running...".to_string(),
             });
+            if state.pre_dialog_mode.is_none() {
+                state.pre_dialog_mode = Some(state.mode.clone());
+            }
             state.mode = AppMode::FloatingOutput;
             state.current_tool = Some(display_name.to_string());
         }

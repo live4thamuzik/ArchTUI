@@ -23,6 +23,8 @@ pub struct InstallationConfig {
     // Disk & Storage
     pub install_disk: String, // Disk path like /dev/sda - must remain String
     pub partitioning_strategy: PartitionScheme,
+    #[serde(default = "default_raid_level")]
+    pub raid_level: String, // RAID level (raid0/raid1/raid5/raid6/raid10)
     pub root_filesystem: Filesystem,
     pub home_filesystem: Filesystem,
     pub separate_home: Toggle,
@@ -82,6 +84,10 @@ pub struct InstallationConfig {
     pub numlock_on_boot: Toggle,
     pub git_repository: Toggle,
     pub git_repository_url: String, // User-defined URL
+}
+
+fn default_raid_level() -> String {
+    "raid1".to_string()
 }
 
 fn default_root_size() -> String {
@@ -234,6 +240,7 @@ impl InstallationConfig {
                 "PARTITIONING_STRATEGY".to_string(),
                 self.partitioning_strategy.to_string(),
             ),
+            ("RAID_LEVEL".to_string(), self.raid_level.clone()),
             (
                 "ROOT_FILESYSTEM".to_string(),
                 self.root_filesystem.to_string(),
@@ -334,6 +341,7 @@ impl Default for InstallationConfig {
             secure_boot: Toggle::No,
             install_disk: String::new(),
             partitioning_strategy: PartitionScheme::AutoSimple,
+            raid_level: "raid1".to_string(),
             root_filesystem: Filesystem::Ext4,
             home_filesystem: Filesystem::Ext4,
             separate_home: Toggle::No,
@@ -404,6 +412,10 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             secure_boot: parse_or_default(&get_value("Secure Boot")),
             install_disk: get_value("Disk"),
             partitioning_strategy: parse_or_default(&get_value("Partitioning Strategy")),
+            raid_level: {
+                let v = get_value("RAID Level");
+                if v == "N/A" || v.is_empty() { "raid1".to_string() } else { v }
+            },
             root_filesystem: parse_or_default(&get_value("Root Filesystem")),
             home_filesystem: parse_or_default(&get_value("Home Filesystem")),
             separate_home: parse_or_default(&get_value("Separate Home Partition")),

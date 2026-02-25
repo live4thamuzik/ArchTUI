@@ -61,29 +61,29 @@ execute_raid_luks_partitioning() {
     partprobe
     
     # Create RAID arrays
-    log_info "Creating RAID arrays"
-    
+    local raid_level="${RAID_LEVEL:-raid1}"
+    log_info "Creating RAID arrays (level: $raid_level)"
+
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Create RAID arrays for XBOOTLDR and data
         XBOOTLDR_PARTS=()
         DATA_PARTS=()
-        
+
         for disk in "${RAID_DEVICES[@]}"; do
-            XBOOTLDR_PARTS+=("${disk}2")
-            DATA_PARTS+=("${disk}3")
+            XBOOTLDR_PARTS+=("$(get_partition_path "$disk" 2)")
+            DATA_PARTS+=("$(get_partition_path "$disk" 3)")
         done
-        
-        # Create XBOOTLDR RAID1 array
+
+        # Create XBOOTLDR RAID1 array (always RAID1 for boot)
         log_info "Creating XBOOTLDR RAID1 array"
         mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
-        if [[ ${#RAID_DEVICES[@]} -eq 2 ]]; then
-            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        else
-            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        fi
+        mdadm --create --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+
+        # Wait for RAID arrays to be ready
+        mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
 
         # Format XBOOTLDR
         format_filesystem "/dev/md/XBOOTLDR" "ext4"
@@ -94,53 +94,54 @@ execute_raid_luks_partitioning() {
         DATA_PARTS=()
 
         for disk in "${RAID_DEVICES[@]}"; do
-            BOOT_PARTS+=("${disk}2")
-            DATA_PARTS+=("${disk}3")
+            BOOT_PARTS+=("$(get_partition_path "$disk" 2)")
+            DATA_PARTS+=("$(get_partition_path "$disk" 3)")
         done
 
-        # Create boot RAID1 array
+        # Create boot RAID1 array (always RAID1 for boot)
         log_info "Creating boot RAID1 array"
         mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
-        if [[ ${#RAID_DEVICES[@]} -eq 2 ]]; then
-            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        else
-            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        fi
-        
+        mdadm --create --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+
+        # Wait for RAID arrays to be ready
+        mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
+
         # Format boot
         format_filesystem "/dev/md/BOOT" "ext4"
     fi
-    
+
     # Set up LUKS encryption on data RAID array using helper function (non-interactive)
     local encrypted_dev
-    encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptdata")
+    encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptroot")
     
     # Format encrypted array
     log_info "Formatting encrypted RAID array"
-    format_filesystem "/dev/mapper/cryptdata" "$ROOT_FILESYSTEM_TYPE"
-    
+    format_filesystem "/dev/mapper/cryptroot" "$ROOT_FILESYSTEM_TYPE"
+
     # Mount filesystems
     log_info "Mounting filesystems"
     if [[ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]]; then
         local include_home="yes"
         [[ "$WANT_HOME_PARTITION" == "yes" ]] && include_home="no"
-        setup_btrfs_subvolumes "/dev/mapper/cryptdata" "$include_home"
+        setup_btrfs_subvolumes "/dev/mapper/cryptroot" "$include_home"
     else
-        safe_mount "/dev/mapper/cryptdata" "/mnt"
+        safe_mount "/dev/mapper/cryptroot" "/mnt"
     fi
 
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Mount ESP and XBOOTLDR
         safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
-        safe_mount "${RAID_DEVICES[0]}1" "/mnt/efi"
+        local efi_part
+        efi_part=$(get_partition_path "${RAID_DEVICES[0]}" 1)
+        safe_mount "$efi_part" "/mnt/efi"
 
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/XBOOTLDR"
-        capture_device_info "efi" "${RAID_DEVICES[0]}1"
-        capture_device_info "root" "/dev/mapper/cryptdata"
+        capture_device_info "efi" "$efi_part"
+        capture_device_info "root" "/dev/mapper/cryptroot"
         capture_device_info "luks" "/dev/md/DATA"
     else
         # BIOS: Mount boot
@@ -148,7 +149,7 @@ execute_raid_luks_partitioning() {
 
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/BOOT"
-        capture_device_info "root" "/dev/mapper/cryptdata"
+        capture_device_info "root" "/dev/mapper/cryptroot"
         capture_device_info "luks" "/dev/md/DATA"
     fi
     
@@ -158,7 +159,7 @@ execute_raid_luks_partitioning() {
     fi
 
     # Capture UUIDs for bootloader config
-    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptdata")
+    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot")
     LUKS_UUID=$(get_device_uuid "/dev/md/DATA")
     export ROOT_UUID LUKS_UUID
 
@@ -170,7 +171,7 @@ execute_raid_luks_partitioning() {
     # Generate crypttab entry for boot-time unlocking
     log_info "Generating crypttab entry..."
     mkdir -p /mnt/etc
-    generate_crypttab "/dev/md/DATA" "cryptdata"
+    generate_crypttab "/dev/md/DATA" "cryptroot"
 
     log_info "RAID + LUKS partitioning completed successfully"
 }

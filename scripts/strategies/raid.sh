@@ -63,7 +63,7 @@ execute_raid_partitioning() {
         if [ "$BOOT_MODE" = "UEFI" ]; then
             sgdisk -n "$data_part_num:0:0" -t "$data_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create data partition on $disk."
         else
-            printf "n\np\n$data_part_num\n\n\nw\n" | fdisk "$disk" || error_exit "Failed to create data partition on $disk."
+            sgdisk -n "$data_part_num:0:0" -t "$data_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create data partition on $disk."
         fi
         
         sync_partitions "$disk"

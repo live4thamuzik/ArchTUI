@@ -400,7 +400,7 @@ pub mod gpu_packages {
     pub const AMD: &[&str] = &["mesa", "xf86-video-amdgpu", "vulkan-radeon", "lib32-mesa"];
 
     /// Intel integrated graphics packages.
-    pub const INTEL: &[&str] = &["mesa", "intel-ucode", "vulkan-intel", "lib32-mesa"];
+    pub const INTEL: &[&str] = &["mesa", "xf86-video-intel", "vulkan-intel", "lib32-mesa"];
 
     /// Nouveau open-source Nvidia driver packages.
     pub const NOUVEAU: &[&str] = &["mesa", "xf86-video-nouveau", "lib32-mesa"];
