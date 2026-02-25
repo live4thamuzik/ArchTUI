@@ -503,10 +503,16 @@ setup_luks_encryption() {
         --hash sha256 \
         --pbkdf argon2id \
         --batch-mode \
-        "$partition" -
+        "$partition" - || {
+        log_error "cryptsetup luksFormat failed on $partition"
+        return 1
+    }
 
     # Open mapping
-    echo -n "$password" | cryptsetup open "$partition" "$mapper_name" -
+    echo -n "$password" | cryptsetup open "$partition" "$mapper_name" - || {
+        log_error "cryptsetup open failed on $partition (mapper: $mapper_name)"
+        return 1
+    }
 
     # Return the mapper device path (CRITICAL for callers)
     echo "/dev/mapper/$mapper_name"
@@ -519,39 +525,51 @@ setup_btrfs_subvolumes() {
     log_info "Setting up Btrfs subvolumes on $device"
 
     # Mount the device first to create subvolumes
-    mount "$device" /mnt
+    mount "$device" /mnt || {
+        log_error "Failed to mount $device for btrfs subvolume creation"
+        return 1
+    }
 
     # Create standard subvolume layout
-    btrfs subvolume create /mnt/@
-    btrfs subvolume create /mnt/@var
-    btrfs subvolume create /mnt/@tmp
-    btrfs subvolume create /mnt/@snapshots
-    btrfs subvolume create /mnt/@cache
-    btrfs subvolume create /mnt/@log
+    btrfs subvolume create /mnt/@ || { umount /mnt; log_error "Failed to create @ subvolume"; return 1; }
+    btrfs subvolume create /mnt/@var || { umount /mnt; log_error "Failed to create @var subvolume"; return 1; }
+    btrfs subvolume create /mnt/@tmp || { umount /mnt; log_error "Failed to create @tmp subvolume"; return 1; }
+    btrfs subvolume create /mnt/@snapshots || { umount /mnt; log_error "Failed to create @snapshots subvolume"; return 1; }
+    btrfs subvolume create /mnt/@cache || { umount /mnt; log_error "Failed to create @cache subvolume"; return 1; }
+    btrfs subvolume create /mnt/@log || { umount /mnt; log_error "Failed to create @log subvolume"; return 1; }
 
     if [[ "$include_home" == "yes" ]]; then
-        btrfs subvolume create /mnt/@home
+        btrfs subvolume create /mnt/@home || { umount /mnt; log_error "Failed to create @home subvolume"; return 1; }
     fi
 
     # Unmount to remount with proper subvolume
-    umount /mnt
+    umount /mnt || {
+        log_error "Failed to unmount /mnt after subvolume creation"
+        return 1
+    }
 
     # Mount root subvolume with compression and noatime
-    mount -o compress=zstd,noatime,space_cache=v2,subvol=@ "$device" /mnt
+    mount -o compress=zstd,noatime,space_cache=v2,subvol=@ "$device" /mnt || {
+        log_error "Failed to mount @ subvolume"
+        return 1
+    }
 
     # Create mount point directories
-    mkdir -p /mnt/{var,tmp,.snapshots,boot,efi,var/cache,var/log}
+    mkdir -p /mnt/{var,tmp,.snapshots,boot,efi,var/cache,var/log} || {
+        log_error "Failed to create mount point directories"
+        return 1
+    }
 
     # Mount other subvolumes
-    mount -o compress=zstd,noatime,space_cache=v2,subvol=@var "$device" /mnt/var
-    mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp "$device" /mnt/tmp
-    mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots "$device" /mnt/.snapshots
-    mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache "$device" /mnt/var/cache
-    mount -o compress=zstd,noatime,space_cache=v2,subvol=@log "$device" /mnt/var/log
+    mount -o compress=zstd,noatime,space_cache=v2,subvol=@var "$device" /mnt/var || { log_error "Failed to mount @var subvolume"; return 1; }
+    mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp "$device" /mnt/tmp || { log_error "Failed to mount @tmp subvolume"; return 1; }
+    mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots "$device" /mnt/.snapshots || { log_error "Failed to mount @snapshots subvolume"; return 1; }
+    mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache "$device" /mnt/var/cache || { log_error "Failed to mount @cache subvolume"; return 1; }
+    mount -o compress=zstd,noatime,space_cache=v2,subvol=@log "$device" /mnt/var/log || { log_error "Failed to mount @log subvolume"; return 1; }
 
     if [[ "$include_home" == "yes" ]]; then
         mkdir -p /mnt/home
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@home "$device" /mnt/home
+        mount -o compress=zstd,noatime,space_cache=v2,subvol=@home "$device" /mnt/home || { log_error "Failed to mount @home subvolume"; return 1; }
     fi
 
     log_success "Btrfs subvolumes created and mounted"

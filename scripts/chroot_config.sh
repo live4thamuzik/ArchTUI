@@ -137,6 +137,14 @@ main() {
     # --- Phase 3: Desktop Environment ---
     log_info "=== Phase 3: Desktop Environment ==="
 
+    # Enable multilib repository in chroot if requested
+    if [[ "${MULTILIB:-No}" == "Yes" ]]; then
+        log_info "Enabling multilib repository in chroot..."
+        sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf
+        pacman -Sy --noconfirm || log_warn "Failed to sync multilib repository"
+        log_success "Multilib repository enabled in chroot"
+    fi
+
     install_desktop_environment
     install_display_manager
     install_gpu_drivers
@@ -1099,8 +1107,15 @@ install_display_manager() {
 
 install_gpu_drivers() {
     local gpu="${GPU_DRIVERS:-Auto}"
+    local multilib="${MULTILIB:-No}"
 
     log_info "Installing GPU drivers: $gpu"
+
+    # Only include lib32 packages if multilib repo is enabled
+    local use_lib32="no"
+    if [[ "$multilib" == "Yes" ]]; then
+        use_lib32="yes"
+    fi
 
     case "$gpu" in
         "Auto"|"auto")
@@ -1111,11 +1126,15 @@ install_gpu_drivers() {
             fi
             if lspci | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
                 log_info "AMD GPU detected"
-                pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-amdgpu vulkan-radeon || true
+                local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
+                [[ "$use_lib32" == "yes" ]] && amd_pkgs+=(lib32-mesa)
+                pacman -S --noconfirm --needed "${amd_pkgs[@]}" || true
             fi
             if lspci | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; then
                 log_info "Intel GPU detected"
-                pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-intel vulkan-intel || true
+                local intel_pkgs=(mesa xf86-video-intel vulkan-intel)
+                [[ "$use_lib32" == "yes" ]] && intel_pkgs+=(lib32-mesa)
+                pacman -S --noconfirm --needed "${intel_pkgs[@]}" || true
             fi
             ;;
         "nvidia"|"NVIDIA")
@@ -1125,13 +1144,19 @@ install_gpu_drivers() {
             pacman -S --noconfirm --needed nvidia-open nvidia-utils nvidia-settings || log_warn "Failed to install NVIDIA-open drivers"
             ;;
         "amd"|"AMD")
-            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-amdgpu vulkan-radeon || log_warn "Failed to install AMD drivers"
+            local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
+            [[ "$use_lib32" == "yes" ]] && amd_pkgs+=(lib32-mesa)
+            pacman -S --noconfirm --needed "${amd_pkgs[@]}" || log_warn "Failed to install AMD drivers"
             ;;
         "intel"|"Intel")
-            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-intel vulkan-intel || log_warn "Failed to install Intel drivers"
+            local intel_pkgs=(mesa xf86-video-intel vulkan-intel)
+            [[ "$use_lib32" == "yes" ]] && intel_pkgs+=(lib32-mesa)
+            pacman -S --noconfirm --needed "${intel_pkgs[@]}" || log_warn "Failed to install Intel drivers"
             ;;
         "nouveau")
-            pacman -S --noconfirm --needed mesa lib32-mesa xf86-video-nouveau || log_warn "Failed to install Nouveau drivers"
+            local nouveau_pkgs=(mesa xf86-video-nouveau)
+            [[ "$use_lib32" == "yes" ]] && nouveau_pkgs+=(lib32-mesa)
+            pacman -S --noconfirm --needed "${nouveau_pkgs[@]}" || log_warn "Failed to install Nouveau drivers"
             ;;
         "none"|"None")
             log_info "No GPU drivers selected"

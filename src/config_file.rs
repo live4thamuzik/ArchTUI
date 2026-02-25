@@ -184,8 +184,10 @@ impl InstallationConfig {
             anyhow::bail!("Root password cannot contain whitespace");
         }
 
-        // Validate encryption password if encryption is enabled
-        if self.encryption == AutoToggle::Yes && self.encryption_password.trim().is_empty() {
+        // Validate encryption password if encryption is enabled or strategy requires it
+        let needs_encryption =
+            self.encryption == AutoToggle::Yes || self.partitioning_strategy.uses_encryption();
+        if needs_encryption && self.encryption_password.trim().is_empty() {
             anyhow::bail!("Encryption password must be specified when encryption is enabled");
         }
 
@@ -205,7 +207,17 @@ impl InstallationConfig {
 
         // Validate RAID configuration
         if self.partitioning_strategy.requires_raid() {
-            // RAID validation would check multiple disks - handled at runtime
+            let disk = self.install_disk.trim();
+            if disk.is_empty() {
+                anyhow::bail!("Install disk must be specified for RAID strategies");
+            }
+            let disk_count = disk.split(',').filter(|s| !s.trim().is_empty()).count();
+            if disk_count < 2 {
+                anyhow::bail!(
+                    "RAID strategies require at least 2 disks (found {}). Select multiple disks.",
+                    disk_count
+                );
+            }
         }
 
         Ok(())

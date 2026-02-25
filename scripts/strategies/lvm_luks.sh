@@ -64,6 +64,7 @@ execute_lvm_luks_partitioning() {
         create_swap_partition "$INSTALL_DISK" "$part_num" "$swap_size_mib"
         local swap_device
         swap_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
+        capture_device_info "swap" "$swap_device"
         SWAP_UUID=$(get_device_uuid "$swap_device")
         export SWAP_UUID
         current_start_mib=$((current_start_mib + swap_size_mib))
@@ -140,11 +141,13 @@ execute_lvm_luks_partitioning() {
     local boot_device
     boot_device=$(get_partition_path "$INSTALL_DISK" "$boot_part_num")
     safe_mount "$boot_device" "/mnt/boot"
+    capture_device_info "boot" "$boot_device"
 
     if [ "$BOOT_MODE" = "UEFI" ]; then
         local esp_device
         esp_device=$(get_partition_path "$INSTALL_DISK" "$esp_part_num")
         safe_mount "$esp_device" "/mnt/efi"
+        capture_device_info "efi" "$esp_device"
         export EFI_DEVICE="$esp_device"
     fi
 
