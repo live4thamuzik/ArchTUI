@@ -131,6 +131,8 @@ execute_raid_lvm_luks_partitioning() {
         log_info "Creating swap logical volume"
         lvcreate -L "$(get_swap_size_mib)M" -n swap archvg
         mkswap /dev/archvg/swap
+        SWAP_UUID=$(get_device_uuid "/dev/archvg/swap")
+        export SWAP_UUID
     fi
 
     # Create root and home logical volumes

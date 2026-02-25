@@ -169,10 +169,16 @@ pub enum GpuDriver {
     Auto,
     #[strum(serialize = "NVIDIA")]
     Nvidia,
+    #[strum(serialize = "nvidia-open")]
+    NvidiaOpen,
     #[strum(serialize = "AMD")]
     Amd,
     #[strum(serialize = "Intel")]
     Intel,
+    #[strum(serialize = "nouveau")]
+    Nouveau,
+    #[strum(serialize = "None")]
+    None,
 }
 
 /// Generic Yes/No toggle for boolean-like options

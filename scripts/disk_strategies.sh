@@ -49,11 +49,6 @@ execute_disk_strategy() {
         export RAID_LEVEL="$raid_level"
     fi
     
-    # Auto-populate RAID devices for RAID strategies in TUI mode
-    if [[ "$TUI_MODE" == "true" && "$base_strategy" =~ ^auto_raid ]]; then
-        auto_populate_raid_devices || error_exit "Failed to populate RAID devices"
-    fi
-    
     # Execute the strategy
     if declare -f "$strategy_func" >/dev/null 2>&1; then
         "$strategy_func" || error_exit "Disk strategy '$PARTITION_SCHEME' failed."

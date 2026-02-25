@@ -73,8 +73,11 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     // 3. GPU drivers
     let gpu_pkgs = match config.gpu_drivers {
         GpuDriver::Nvidia => gpu_packages::NVIDIA,
+        GpuDriver::NvidiaOpen => gpu_packages::NVIDIA_OPEN,
         GpuDriver::Amd => gpu_packages::AMD,
         GpuDriver::Intel => gpu_packages::INTEL,
+        GpuDriver::Nouveau => gpu_packages::NOUVEAU,
+        GpuDriver::None => gpu_packages::NONE,
         GpuDriver::Auto => gpu_packages::AUTO,
     };
     // Only include lib32-* packages if multilib is enabled
