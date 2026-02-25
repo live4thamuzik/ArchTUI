@@ -128,7 +128,7 @@ execute_raid_partitioning() {
     fi
 
     # Capture UUIDs for bootloader config
-    ROOT_UUID=$(get_device_uuid "/dev/md0")
+    ROOT_UUID=$(get_device_uuid "/dev/md0") || error_exit "Cannot determine ROOT_UUID"
     export ROOT_UUID
 
     # Save RAID configuration for boot

@@ -263,7 +263,7 @@ impl InstallationConfig {
             ("ENCRYPTION".to_string(), self.encryption.to_string()),
             (
                 "ENCRYPTION_PASSWORD".to_string(),
-                self.encryption_password.clone(),
+                sanitize(self.encryption_password.clone()),
             ),
             ("SWAP".to_string(), self.swap.to_string()),
             ("SWAP_SIZE".to_string(), sanitize(self.swap_size.clone())),

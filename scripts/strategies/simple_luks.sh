@@ -190,8 +190,8 @@ execute_simple_luks_partitioning() {
 
     # Capture UUIDs for bootloader config
     capture_device_info "luks" "$luks_dev"
-    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot")
-    LUKS_UUID=$(get_device_uuid "$luks_dev")
+    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot") || error_exit "Cannot determine ROOT_UUID"
+    LUKS_UUID=$(get_device_uuid "$luks_dev") || error_exit "Cannot determine LUKS_UUID"
     export ROOT_UUID LUKS_UUID
 
     # Capture swap UUID if swap exists
@@ -201,7 +201,7 @@ execute_simple_luks_partitioning() {
         local swap_device
         swap_device=$(get_partition_path "$INSTALL_DISK" "$swap_part_num")
         capture_device_info "swap" "$swap_device"
-        SWAP_UUID=$(get_device_uuid "$swap_device")
+        SWAP_UUID=$(get_device_uuid "$swap_device") || log_warn "Cannot determine SWAP_UUID"
         export SWAP_UUID
     fi
 

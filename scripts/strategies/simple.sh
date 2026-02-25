@@ -113,7 +113,7 @@ execute_simple_partitioning() {
         local swap_device
         swap_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
         capture_device_info "swap" "$swap_device"
-        SWAP_UUID=$(get_device_uuid "$swap_device")
+        SWAP_UUID=$(get_device_uuid "$swap_device") || log_warn "Cannot determine SWAP_UUID"
         export SWAP_UUID
 
         part_num=$((part_num + 1))
@@ -204,7 +204,7 @@ execute_simple_partitioning() {
 
     # Capture UUIDs for bootloader config
     capture_device_info "root" "$root_device"
-    ROOT_UUID=$(get_device_uuid "$root_device")
+    ROOT_UUID=$(get_device_uuid "$root_device") || error_exit "Cannot determine ROOT_UUID"
     export ROOT_UUID
 
     log_partitioning_complete "Simple (ESP + boot + root)"

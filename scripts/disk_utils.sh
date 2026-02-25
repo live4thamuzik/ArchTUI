@@ -615,9 +615,19 @@ capture_device_info() {
 get_device_uuid() {
     local device="$1"
     if [[ -z "$device" ]]; then
+        log_error "get_device_uuid: no device specified"
         return 1
     fi
-    lsblk -n -o UUID "$device"
+    local uuid
+    uuid=$(lsblk -n -o UUID "$device" 2>/dev/null) || {
+        log_error "Failed to get UUID for $device"
+        return 1
+    }
+    if [[ -z "$uuid" ]]; then
+        log_error "Device $device has no UUID (not formatted?)"
+        return 1
+    fi
+    echo "$uuid"
 }
 
 validate_partitioning_requirements() {
@@ -807,7 +817,7 @@ mount_standard_partitions() {
     safe_mount "$root_device" "/mnt"
 
     # Capture root UUID for bootloader config
-    ROOT_UUID=$(get_device_uuid "$root_device")
+    ROOT_UUID=$(get_device_uuid "$root_device") || error_exit "Cannot determine ROOT_UUID for $root_device"
     export ROOT_UUID
 
     # Create mount points

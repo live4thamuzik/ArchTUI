@@ -65,7 +65,7 @@ execute_lvm_partitioning() {
         local swap_device
         swap_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
         capture_device_info "swap" "$swap_device"
-        SWAP_UUID=$(get_device_uuid "$swap_device")
+        SWAP_UUID=$(get_device_uuid "$swap_device") || log_warn "Cannot determine SWAP_UUID"
         export SWAP_UUID
         current_start_mib=$((current_start_mib + swap_size_mib))
         part_num=$((part_num + 1))
@@ -150,7 +150,7 @@ execute_lvm_partitioning() {
     fi
 
     # Capture root UUID
-    ROOT_UUID=$(get_device_uuid "/dev/archvg/root")
+    ROOT_UUID=$(get_device_uuid "/dev/archvg/root") || error_exit "Cannot determine ROOT_UUID"
     export ROOT_UUID
 
     log_partitioning_complete "LVM (ESP + boot + LVM)"

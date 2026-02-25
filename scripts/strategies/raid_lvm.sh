@@ -130,7 +130,7 @@ execute_raid_lvm_partitioning() {
         lvcreate -L "$(get_swap_size_mib)M" -n swap archvg || error_exit "Failed to create swap logical volume."
         mkswap /dev/archvg/swap || error_exit "Failed to create swap filesystem."
         swapon /dev/archvg/swap || log_warn "Failed to activate swap"
-        SWAP_UUID=$(get_device_uuid "/dev/archvg/swap")
+        SWAP_UUID=$(get_device_uuid "/dev/archvg/swap") || log_warn "Cannot determine SWAP_UUID"
         export SWAP_UUID
     fi
 
@@ -204,7 +204,7 @@ execute_raid_lvm_partitioning() {
     fi
     
     # Capture root UUID for bootloader config
-    ROOT_UUID=$(get_device_uuid "/dev/archvg/root")
+    ROOT_UUID=$(get_device_uuid "/dev/archvg/root") || error_exit "Cannot determine ROOT_UUID"
     export ROOT_UUID
 
     # Save RAID configuration
