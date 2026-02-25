@@ -187,7 +187,7 @@ ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
 HOME_FILESYSTEM_TYPE="$HOME_FILESYSTEM"
 WANT_HOME_PARTITION="$(echo "$SEPARATE_HOME" | tr '[:upper:]' '[:lower:]')"
 [[ "$WANT_HOME_PARTITION" == "yes" ]] || WANT_HOME_PARTITION="no"
-WANT_SWAP="$(echo "${SWAP:-Yes}" | tr '[:upper:]' '[:lower:]')"
+WANT_SWAP="$(echo "$SWAP" | tr '[:upper:]' '[:lower:]')"
 [[ "$WANT_SWAP" == "yes" ]] || WANT_SWAP="no"
 
 # Export for strategy scripts
