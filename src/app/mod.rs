@@ -532,17 +532,6 @@ impl App {
                 }
             }
 
-            // Check if installation is complete
-            {
-                let state = self
-                    .state
-                    .lock()
-                    .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)))?;
-                if state.mode == AppMode::Complete {
-                    break;
-                }
-            }
-
             // Render UI
             let mut render_poisoned = false;
             terminal.draw(|f| {
@@ -910,6 +899,9 @@ impl App {
                     state.installer_scroll_offset =
                         state.installer_scroll_offset.saturating_sub(1);
                 }
+                AppMode::DryRunSummary => {
+                    state.dry_run_scroll_offset = state.dry_run_scroll_offset.saturating_sub(1);
+                }
                 _ => {}
             }
         }
@@ -967,6 +959,14 @@ impl App {
                         >= state.installer_output.len().saturating_sub(visible_height)
                     {
                         state.installer_auto_scroll = true;
+                    }
+                }
+                AppMode::DryRunSummary => {
+                    if let Some(ref summary) = state.dry_run_summary {
+                        let max = summary.len().saturating_sub(1);
+                        if state.dry_run_scroll_offset < max {
+                            state.dry_run_scroll_offset += 1;
+                        }
                     }
                 }
                 _ => {}
@@ -1060,7 +1060,10 @@ impl App {
                 // Installation is running, no action needed
             }
             AppMode::Complete => {
-                // Installation complete, no action needed
+                let mut state = self.lock_state_mut()?;
+                state.mode = AppMode::MainMenu;
+                state.main_menu_selection = 0;
+                state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
             AppMode::EmbeddedTerminal => {
                 // Embedded terminal handles its own input
@@ -2000,6 +2003,7 @@ impl App {
 
         let mut state = self.lock_state_mut()?;
         state.dry_run_summary = Some(summary);
+        state.dry_run_scroll_offset = 0;
         state.mode = AppMode::DryRunSummary;
         state.status_message = "Test Config - review your settings (B to go back)".to_string();
         Ok(())

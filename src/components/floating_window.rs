@@ -145,9 +145,10 @@ impl FloatingWindow {
         // Render the block
         f.render_widget(block, content_area);
 
-        // Render scrollable content
+        // Render scrollable content (clamp so auto_scroll shows last full page)
         let visible_height = inner_area.height as usize;
-        let start = self.scroll_state.offset;
+        let max_offset = content.len().saturating_sub(visible_height);
+        let start = self.scroll_state.offset.min(max_offset);
         let end = (start + visible_height).min(content.len());
 
         let visible_content: Vec<ListItem> = content[start..end]
@@ -285,7 +286,8 @@ impl FloatingWindow {
         f.render_widget(content_block, chunks[1]);
 
         let visible_height = inner_area.height as usize;
-        let start = self.scroll_state.offset;
+        let max_offset = content.len().saturating_sub(visible_height);
+        let start = self.scroll_state.offset.min(max_offset);
         let end = (start + visible_height).min(content.len());
 
         let visible_content: Vec<ListItem> = content[start..end]
