@@ -178,7 +178,10 @@ configure_localization() {
     # Set locale
     if [[ -n "${LOCALE:-}" ]]; then
         log_info "Setting locale to: ${LOCALE}"
-        echo "${LOCALE} UTF-8" >> /etc/locale.gen
+        # Avoid duplicate entries
+        if ! grep -q "^${LOCALE} UTF-8" /etc/locale.gen 2>/dev/null; then
+            echo "${LOCALE} UTF-8" >> /etc/locale.gen || { log_error "Failed to update locale.gen"; return 1; }
+        fi
         locale-gen || { log_error "locale-gen failed"; return 1; }
         echo "LANG=${LOCALE}" > /etc/locale.conf
     fi
@@ -188,12 +191,12 @@ configure_localization() {
         local tz_path="/usr/share/zoneinfo/${TIMEZONE_REGION}/${TIMEZONE}"
         if [[ -f "$tz_path" ]]; then
             log_info "Setting timezone to: ${TIMEZONE_REGION}/${TIMEZONE}"
-            ln -sf "$tz_path" /etc/localtime
+            ln -sf "$tz_path" /etc/localtime || { log_error "Failed to set timezone symlink"; return 1; }
         else
             # Try without region
             tz_path="/usr/share/zoneinfo/${TIMEZONE}"
             if [[ -f "$tz_path" ]]; then
-                ln -sf "$tz_path" /etc/localtime
+                ln -sf "$tz_path" /etc/localtime || { log_error "Failed to set timezone symlink"; return 1; }
             else
                 log_warn "Timezone not found: ${TIMEZONE_REGION}/${TIMEZONE}"
             fi
@@ -260,7 +263,7 @@ configure_sudoers() {
     # Enable wheel group for sudo (without password for installation, can be changed later)
     if [[ -f /etc/sudoers ]]; then
         # Use sed to uncomment the wheel line
-        sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+        sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers || log_warn "sed failed to modify sudoers"
 
         # Verify the change was made
         if grep -q "^%wheel ALL=(ALL:ALL) ALL" /etc/sudoers; then
@@ -463,9 +466,14 @@ install_grub() {
             return 1
         }
     else
-        # BIOS installation
-        log_info "Installing GRUB for BIOS to ${INSTALL_DISK:-/dev/sda}"
-        grub-install --target=i386-pc "${INSTALL_DISK:-/dev/sda}" --recheck || {
+        # BIOS installation — extract first disk for RAID (comma-separated INSTALL_DISK)
+        local bios_disk="${INSTALL_DISK%%,*}"
+        if [[ -z "$bios_disk" ]]; then
+            log_error "INSTALL_DISK not set for BIOS GRUB install"
+            return 1
+        fi
+        log_info "Installing GRUB for BIOS to $bios_disk"
+        grub-install --target=i386-pc "$bios_disk" --recheck || {
             log_error "GRUB installation failed"
             return 1
         }

@@ -313,10 +313,22 @@ validate_configuration() {
         fi
     done
 
-    # Validate disk exists
-    if [[ ! -b "$INSTALL_DISK" ]]; then
-        log_error "Installation disk $INSTALL_DISK does not exist or is not a block device"
-        return 1
+    # Validate disk(s) exist
+    if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
+        # RAID: validate each comma-separated disk
+        IFS=',' read -ra _validate_disks <<< "$INSTALL_DISK"
+        for _disk in "${_validate_disks[@]}"; do
+            _disk="${_disk// /}"  # trim whitespace
+            if [[ ! -b "$_disk" ]]; then
+                log_error "RAID disk $_disk does not exist or is not a block device"
+                return 1
+            fi
+        done
+    else
+        if [[ ! -b "$INSTALL_DISK" ]]; then
+            log_error "Installation disk $INSTALL_DISK does not exist or is not a block device"
+            return 1
+        fi
     fi
 
     # Auto-detect boot mode if needed
