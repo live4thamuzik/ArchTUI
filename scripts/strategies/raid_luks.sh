@@ -128,32 +128,34 @@ execute_raid_luks_partitioning() {
         [[ "$WANT_HOME_PARTITION" == "yes" ]] && include_home="no"
         setup_btrfs_subvolumes "/dev/mapper/cryptdata" "$include_home"
     else
-        mount /dev/mapper/cryptdata /mnt
+        safe_mount "/dev/mapper/cryptdata" "/mnt"
     fi
-    
+
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Mount ESP and XBOOTLDR
-        mkdir -p /mnt/efi /mnt/boot
-        mount /dev/md/XBOOTLDR /mnt/boot
-        
-        # Mount ESP on first disk
-        mount "${RAID_DEVICES[0]}1" /mnt/efi
-        
+        safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
+        safe_mount "${RAID_DEVICES[0]}1" "/mnt/efi"
+
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/XBOOTLDR"
+        capture_device_info "efi" "${RAID_DEVICES[0]}1"
         capture_device_info "root" "/dev/mapper/cryptdata"
         capture_device_info "luks" "/dev/md/DATA"
     else
         # BIOS: Mount boot
-        mkdir -p /mnt/boot
-        mount /dev/md/BOOT /mnt/boot
-        
+        safe_mount "/dev/md/BOOT" "/mnt/boot"
+
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/BOOT"
         capture_device_info "root" "/dev/mapper/cryptdata"
         capture_device_info "luks" "/dev/md/DATA"
     fi
     
+    # Create swap file if requested (non-LVM RAID+LUKS uses swapfile since array is a single device)
+    if [[ "$WANT_SWAP" == "yes" ]]; then
+        create_swapfile "$(get_swap_size_mib)"
+    fi
+
     # Capture UUIDs for bootloader config
     ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptdata")
     LUKS_UUID=$(get_device_uuid "/dev/md/DATA")

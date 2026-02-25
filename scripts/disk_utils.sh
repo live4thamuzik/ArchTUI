@@ -447,13 +447,38 @@ create_home_partition() {
     format_filesystem "$part_device" "$filesystem"
 }
 
+create_swapfile() {
+    local swap_size_mib="$1"
+    local swapfile="/mnt/swapfile"
+
+    log_info "Creating ${swap_size_mib}MiB swap file at $swapfile"
+
+    if [[ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]]; then
+        # Btrfs requires special handling: use btrfs-specific swapfile creation
+        btrfs filesystem mkswapfile --size "${swap_size_mib}m" "$swapfile" || {
+            log_error "Failed to create btrfs swap file"
+            return 1
+        }
+    else
+        dd if=/dev/zero of="$swapfile" bs=1M count="$swap_size_mib" status=progress || {
+            log_error "Failed to allocate swap file"
+            return 1
+        }
+        chmod 600 "$swapfile"
+        mkswap "$swapfile" || { log_error "Failed to format swap file"; return 1; }
+    fi
+
+    swapon "$swapfile" || log_warn "Failed to activate swap file"
+    log_success "Swap file created and activated"
+}
+
 safe_mount() {
     local device="$1"
     local mountpoint="$2"
     local options="${3:-defaults}"
-    
-    mkdir -p "$mountpoint"
-    mount -o "$options" "$device" "$mountpoint"
+
+    mkdir -p "$mountpoint" || { log_error "Failed to create mount point $mountpoint"; return 1; }
+    mount -o "$options" "$device" "$mountpoint" || { log_error "Failed to mount $device on $mountpoint"; return 1; }
 }
 
 setup_luks_encryption() {
@@ -785,16 +810,16 @@ format_filesystem() {
 
     case "$fs_type" in
         ext4)
-            mkfs.ext4 -F "$device"
+            mkfs.ext4 -F "$device" || { log_error "Failed to format $device as ext4"; return 1; }
             ;;
         btrfs)
-            mkfs.btrfs -f "$device"
+            mkfs.btrfs -f "$device" || { log_error "Failed to format $device as btrfs"; return 1; }
             ;;
         xfs)
-            mkfs.xfs -f "$device"
+            mkfs.xfs -f "$device" || { log_error "Failed to format $device as xfs"; return 1; }
             ;;
         vfat|fat32)
-            mkfs.fat -F32 "$device"
+            mkfs.fat -F32 "$device" || { log_error "Failed to format $device as fat32"; return 1; }
             ;;
         *)
             log_error "Unknown filesystem type: $fs_type"
