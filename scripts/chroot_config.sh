@@ -1198,7 +1198,7 @@ install_aur_helper() {
     case "$helper" in
         "paru")
             # Install paru dependencies
-            pacman -S --noconfirm --needed base-devel git
+            pacman -S --noconfirm --needed base-devel git || { log_error "Failed to install paru dependencies"; rm -f "$sudoers_drop"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
 set -e
@@ -1210,7 +1210,7 @@ AUREOF
             ;;
         "yay")
             # Install yay dependencies
-            pacman -S --noconfirm --needed base-devel git go
+            pacman -S --noconfirm --needed base-devel git go || { log_error "Failed to install yay dependencies"; rm -f "$sudoers_drop"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
 set -e
@@ -1221,7 +1221,7 @@ makepkg -si --noconfirm
 AUREOF
             ;;
         "pikaur")
-            pacman -S --noconfirm --needed base-devel git python
+            pacman -S --noconfirm --needed base-devel git python || { log_error "Failed to install pikaur dependencies"; rm -f "$sudoers_drop"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
 set -e
@@ -1253,10 +1253,13 @@ install_flatpak() {
 
     log_info "Installing Flatpak..."
 
-    pacman -S --noconfirm --needed flatpak
+    pacman -S --noconfirm --needed flatpak || {
+        log_error "Failed to install flatpak"
+        return 1
+    }
 
     # Add Flathub repository for the user (--user flag, no sudo needed)
-    runuser -u "$MAIN_USERNAME" -- flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo || true
+    runuser -u "$MAIN_USERNAME" -- flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo || log_warn "Failed to add Flathub repository"
 
     log_success "Flatpak installed"
 }

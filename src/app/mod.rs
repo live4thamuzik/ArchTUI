@@ -2831,7 +2831,7 @@ impl App {
             "kde" => "sddm",
             "gnome" => "gdm",
             "hyprland" => "sddm",
-            "none" => "", // Don't auto-set when "none" - let user choose
+            "none" => "none",
             _ => "",
         };
 
@@ -3105,6 +3105,19 @@ impl App {
                             .find(|opt| opt.name == "Plymouth Theme")
                         {
                             theme_option.value = "none".to_string();
+                        }
+                    }
+                }
+                "Git Repository" => {
+                    if value.to_lowercase() == "no" {
+                        // Clear git repository URL when git is disabled
+                        if let Some(url_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Git Repository URL")
+                        {
+                            url_option.value = String::new();
                         }
                     }
                 }

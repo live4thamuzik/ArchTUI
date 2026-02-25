@@ -41,15 +41,16 @@ execute_raid_lvm_luks_partitioning() {
         
         if [[ "$PARTITION_TABLE" == "gpt" ]]; then
             # UEFI: ESP + XBOOTLDR + RAID member
-            sgdisk --zap-all "$disk"
-            sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$ESP_PARTITION_TYPE" --change-name=1:ESP "$disk"
-            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$XBOOTLDR_PARTITION_TYPE" --change-name=2:XBOOTLDR "$disk"
-            sgdisk --new=3:0:0 --typecode=3:"$LUKS_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk"
+            sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
+            sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$ESP_PARTITION_TYPE" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
+            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$XBOOTLDR_PARTITION_TYPE" --change-name=2:XBOOTLDR "$disk" || error_exit "Failed to create XBOOTLDR on $disk"
+            sgdisk --new=3:0:0 --typecode=3:"$LUKS_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member on $disk"
         else
-            # BIOS: MBR + RAID member
-            sgdisk --zap-all "$disk"
-            sgdisk --new=1:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=1:8300 --change-name=1:BOOT "$disk"
-            sgdisk --new=2:0:0 --typecode=2:"$LUKS_PARTITION_TYPE" --change-name=2:RAID_MEMBER "$disk"
+            # BIOS: BIOS boot (EF02) + boot + RAID member
+            sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
+            sgdisk --new=1:0:+${BIOS_BOOT_PART_SIZE_MIB}MiB --typecode=1:"$BIOS_BOOT_PARTITION_TYPE" --change-name=1:BIOSBOOT "$disk" || error_exit "Failed to create BIOS boot partition on $disk"
+            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:8300 --change-name=2:BOOT "$disk" || error_exit "Failed to create boot partition on $disk"
+            sgdisk --new=3:0:0 --typecode=3:"$LUKS_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member partition on $disk"
         fi
         
         sgdisk --print "$disk"
@@ -74,39 +75,39 @@ execute_raid_lvm_luks_partitioning() {
         
         # Create XBOOTLDR RAID1 array
         log_info "Creating XBOOTLDR RAID1 array"
-        mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}"
-        
+        mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
+
         # Create data RAID array
         log_info "Creating data RAID array"
         if [[ ${#RAID_DEVICES[@]} -eq 2 ]]; then
-            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}"
+            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
         else
-            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}"
+            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
         fi
-        
+
         # Format XBOOTLDR
         format_filesystem "/dev/md/XBOOTLDR" "ext4"
-        
+
     else
         # BIOS: Create RAID arrays for boot and data
         BOOT_PARTS=()
         DATA_PARTS=()
-        
+
         for disk in "${RAID_DEVICES[@]}"; do
-            BOOT_PARTS+=("${disk}1")
-            DATA_PARTS+=("${disk}2")
+            BOOT_PARTS+=("${disk}2")
+            DATA_PARTS+=("${disk}3")
         done
-        
+
         # Create boot RAID1 array
         log_info "Creating boot RAID1 array"
-        mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}"
-        
+        mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
+
         # Create data RAID array
         log_info "Creating data RAID array"
         if [[ ${#RAID_DEVICES[@]} -eq 2 ]]; then
-            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}"
+            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
         else
-            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}"
+            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
         fi
         
         # Format boot

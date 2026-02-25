@@ -83,7 +83,7 @@ load_config_from_json() {
     export MAIN_USER_PASSWORD="$(jq -r '.user_password // ""' "$config_file")"
     export ROOT_PASSWORD="$(jq -r '.root_password // ""' "$config_file")"
 
-    export MIRROR_COUNTRY="$(jq -r '.mirror_country // ""' "$config_file")"
+    export MIRROR_COUNTRY="$(jq -r '.mirror_country // "United States"' "$config_file")"
     export BOOTLOADER="$(jq -r '.bootloader // "grub"' "$config_file")"
     export OS_PROBER="$(jq -r '.os_prober // "No"' "$config_file")"
     export DESKTOP_ENVIRONMENT="$(jq -r '.desktop_environment // "none"' "$config_file")"
