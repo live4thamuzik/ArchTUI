@@ -135,24 +135,27 @@ impl InstallationConfig {
             anyhow::bail!("Install disk must be specified");
         }
 
-        // Validate hostname (3-32 chars, start with letter, alphanumeric + underscore)
+        // Validate hostname (RFC 1123: 1-63 chars, alphanumeric + hyphens, no leading/trailing hyphen)
         let hostname = self.hostname.trim();
         if hostname.is_empty() {
             anyhow::bail!("Hostname must be specified");
         }
-        if hostname.len() < 3 || hostname.len() > 32 {
-            anyhow::bail!("Hostname must be 3-32 characters long");
+        if hostname.len() > 63 {
+            anyhow::bail!("Hostname must be at most 63 characters long (RFC 1123)");
         }
         if let Some(first_char) = hostname.chars().next() {
-            if !first_char.is_ascii_alphabetic() {
-                anyhow::bail!("Hostname must start with a letter");
+            if !first_char.is_ascii_alphanumeric() {
+                anyhow::bail!("Hostname must start with a letter or digit");
             }
+        }
+        if hostname.ends_with('-') {
+            anyhow::bail!("Hostname must not end with a hyphen");
         }
         if !hostname
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
         {
-            anyhow::bail!("Hostname can only contain letters, numbers, and underscores");
+            anyhow::bail!("Hostname can only contain letters, numbers, and hyphens");
         }
 
         // Validate username (3-32 chars, start with letter, alphanumeric + underscore)
@@ -198,8 +201,11 @@ impl InstallationConfig {
         }
 
         // Validate Git repository URL format if enabled
-        if self.git_repository == Toggle::Yes && !self.git_repository_url.trim().is_empty() {
+        if self.git_repository == Toggle::Yes {
             let url = self.git_repository_url.trim();
+            if url.is_empty() {
+                anyhow::bail!("Git repository URL must be specified when Git Repository is enabled");
+            }
             if !url.starts_with("http://")
                 && !url.starts_with("https://")
                 && !url.starts_with("git://")
@@ -229,9 +235,13 @@ impl InstallationConfig {
         Ok(())
     }
 
-    /// Convert to environment variables for Bash scripts
+    /// Convert to environment variables for Bash scripts.
+    /// N/A sentinel values are converted to empty strings.
     #[allow(dead_code)] // API: Used when passing config to install scripts
     pub fn to_env_vars(&self) -> Vec<(String, String)> {
+        let sanitize = |s: String| -> String {
+            if s == "N/A" { String::new() } else { s }
+        };
         vec![
             ("BOOT_MODE".to_string(), self.boot_mode.to_string()),
             ("SECURE_BOOT".to_string(), self.secure_boot.to_string()),
@@ -240,7 +250,7 @@ impl InstallationConfig {
                 "PARTITIONING_STRATEGY".to_string(),
                 self.partitioning_strategy.to_string(),
             ),
-            ("RAID_LEVEL".to_string(), self.raid_level.clone()),
+            ("RAID_LEVEL".to_string(), sanitize(self.raid_level.clone())),
             (
                 "ROOT_FILESYSTEM".to_string(),
                 self.root_filesystem.to_string(),
@@ -256,9 +266,9 @@ impl InstallationConfig {
                 self.encryption_password.clone(),
             ),
             ("SWAP".to_string(), self.swap.to_string()),
-            ("SWAP_SIZE".to_string(), self.swap_size.clone()),
-            ("ROOT_SIZE".to_string(), self.root_size.clone()),
-            ("HOME_SIZE".to_string(), self.home_size.clone()),
+            ("SWAP_SIZE".to_string(), sanitize(self.swap_size.clone())),
+            ("ROOT_SIZE".to_string(), sanitize(self.root_size.clone())),
+            ("HOME_SIZE".to_string(), sanitize(self.home_size.clone())),
             (
                 "BTRFS_SNAPSHOTS".to_string(),
                 self.btrfs_snapshots.to_string(),
@@ -569,7 +579,7 @@ mod tests {
     #[test]
     fn test_validation_invalid_hostname() {
         let mut config = create_test_config();
-        config.hostname = "1invalid".to_string(); // Starts with number
+        config.hostname = "-invalid".to_string(); // Starts with hyphen
         assert!(config.validate().is_err());
     }
 
@@ -686,27 +696,35 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_hostname_too_short() {
+    fn test_validation_hostname_too_long() {
         let mut config = create_test_config();
-        config.hostname = "ab".to_string(); // Only 2 chars
+        config.hostname = "a".repeat(64); // 64 chars, exceeds RFC 1123 limit of 63
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("3-32"));
+        assert!(result.unwrap_err().to_string().contains("63"));
     }
 
     #[test]
-    fn test_validation_hostname_too_long() {
+    fn test_validation_hostname_hyphen_allowed() {
         let mut config = create_test_config();
-        config.hostname = "a".repeat(33); // 33 chars
+        config.hostname = "host-name".to_string(); // Hyphens are valid per RFC 1123
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validation_hostname_trailing_hyphen() {
+        let mut config = create_test_config();
+        config.hostname = "hostname-".to_string(); // Trailing hyphen is invalid
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("3-32"));
+        assert!(result.unwrap_err().to_string().contains("hyphen"));
     }
 
     #[test]
     fn test_validation_hostname_special_chars() {
         let mut config = create_test_config();
-        config.hostname = "host-name".to_string(); // Contains hyphen
+        config.hostname = "host_name".to_string(); // Underscores not allowed per RFC 1123
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("letters, numbers"));
@@ -960,21 +978,21 @@ mod tests {
     fn test_very_long_hostname_invalid() {
         let mut config = InstallationConfig::default();
         config.install_disk = "/dev/sda".to_string();
-        // Hostnames longer than 32 chars are invalid per implementation
-        config.hostname = "a".repeat(33);
+        // Hostnames longer than 63 chars are invalid per RFC 1123
+        config.hostname = "a".repeat(64);
         config.username = "user".to_string();
         config.user_password = "pass".to_string();
         config.root_password = "root".to_string();
 
-        assert!(config.validate().is_err(), "Hostname > 32 chars should be invalid");
+        assert!(config.validate().is_err(), "Hostname > 63 chars should be invalid");
     }
 
     #[test]
     fn test_maximum_valid_hostname() {
         let mut config = InstallationConfig::default();
         config.install_disk = "/dev/sda".to_string();
-        // 32 chars is the maximum valid hostname length per implementation
-        config.hostname = "a".repeat(32);
+        // 63 chars is the maximum valid hostname length per RFC 1123
+        config.hostname = "a".repeat(63);
         config.username = "user".to_string();
         config.user_password = "pass".to_string();
         config.root_password = "root".to_string();

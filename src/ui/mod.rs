@@ -317,8 +317,29 @@ impl UiRenderer {
                 dialogs::render_embedded_terminal(f, state, content_area, pty_terminal);
             }
             AppMode::FloatingOutput => {
-                // Render background (previous mode content) then floating window
-                menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                // Render background based on pre_dialog_mode, then floating window
+                if let Some(ref pre_mode) = state.pre_dialog_mode {
+                    match pre_mode {
+                        AppMode::DiskTools => {
+                            menus::render_disk_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::SystemTools => {
+                            menus::render_system_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::UserTools => {
+                            menus::render_user_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::NetworkTools => {
+                            menus::render_network_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::GuidedInstaller => {
+                            installer::render_configuration_ui_in_area(f, state, content_area, &self.header)
+                        }
+                        _ => menus::render_tools_menu_in_area(f, state, content_area, &self.header),
+                    }
+                } else {
+                    menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                }
                 dialogs::render_floating_output(f, state);
             }
             AppMode::FileBrowser => {

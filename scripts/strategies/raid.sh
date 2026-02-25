@@ -80,13 +80,26 @@ execute_raid_partitioning() {
     done
     
     # Create RAID array
-    mdadm --create --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
+    mdadm --create --run --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
     
     # Wait for RAID to be ready
     sleep 5
     mdadm --wait /dev/md0 || error_exit "RAID array not ready."
     
-    # --- Phase 3: Handle boot partitions ---
+    # --- Phase 3: Format and mount root FIRST ---
+    format_filesystem "/dev/md0" "$ROOT_FILESYSTEM_TYPE"
+    capture_device_info "root" "/dev/md0"
+
+    # Mount root (setup_btrfs_subvolumes handles its own mount/remount cycle)
+    if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
+        local include_home="yes"
+        [ "$WANT_HOME_PARTITION" = "yes" ] && include_home="no"
+        setup_btrfs_subvolumes "/dev/md0" "$include_home"
+    else
+        safe_mount "/dev/md0" "/mnt"
+    fi
+
+    # --- Phase 4: Handle boot partitions (after root is mounted) ---
     if [ "$BOOT_MODE" = "UEFI" ]; then
         # Format and mount ESP (not in RAID)
         local first_disk="${RAID_DEVICES[0]}"
@@ -107,20 +120,6 @@ execute_raid_partitioning() {
         format_filesystem "$boot_part" "$BOOT_FILESYSTEM"
         capture_device_info "boot" "$boot_part"
         safe_mount "$boot_part" "/mnt/boot"
-    fi
-
-    # --- Phase 4: Handle data partition ---
-    # Format RAID array
-    format_filesystem "/dev/md0" "$ROOT_FILESYSTEM_TYPE"
-    capture_device_info "root" "/dev/md0"
-
-    # Mount root (setup_btrfs_subvolumes handles its own mount/remount cycle)
-    if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
-        local include_home="yes"
-        [ "$WANT_HOME_PARTITION" = "yes" ] && include_home="no"
-        setup_btrfs_subvolumes "/dev/md0" "$include_home"
-    else
-        safe_mount "/dev/md0" "/mnt"
     fi
     
     # Create swap file if requested (non-LVM RAID uses swapfile since array is a single device)

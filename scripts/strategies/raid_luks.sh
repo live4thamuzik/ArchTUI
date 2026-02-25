@@ -58,7 +58,9 @@ execute_raid_luks_partitioning() {
     
     # Wait for partitions to be available
     sleep 2
-    partprobe
+    for disk in "${RAID_DEVICES[@]}"; do
+        partprobe "$disk" || true
+    done
     
     # Create RAID arrays
     local raid_level="${RAID_LEVEL:-raid1}"
@@ -76,11 +78,11 @@ execute_raid_luks_partitioning() {
 
         # Create XBOOTLDR RAID1 array (always RAID1 for boot)
         log_info "Creating XBOOTLDR RAID1 array"
-        mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
+        mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
-        mdadm --create --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+        mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
         # Wait for RAID arrays to be ready
         mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
@@ -100,11 +102,11 @@ execute_raid_luks_partitioning() {
 
         # Create boot RAID1 array (always RAID1 for boot)
         log_info "Creating boot RAID1 array"
-        mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
+        mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
-        mdadm --create --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+        mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
         # Wait for RAID arrays to be ready
         mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
@@ -136,6 +138,7 @@ execute_raid_luks_partitioning() {
         safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
         local efi_part
         efi_part=$(get_partition_path "${RAID_DEVICES[0]}" 1)
+        format_filesystem "$efi_part" "vfat"
         safe_mount "$efi_part" "/mnt/efi"
 
         # Capture UUIDs for configuration

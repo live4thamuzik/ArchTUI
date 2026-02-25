@@ -158,6 +158,8 @@ pub enum AurHelper {
     Paru,
     #[strum(serialize = "yay")]
     Yay,
+    #[strum(serialize = "pikaur")]
+    Pikaur,
     #[default]
     #[strum(serialize = "none")]
     None,

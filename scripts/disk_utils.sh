@@ -284,16 +284,16 @@ is_ssd() {
 # Get human-readable disk type
 get_disk_type() {
     local device="$1"
+    local ret=0
 
-    if is_ssd "$device"; then
+    is_ssd "$device" && ret=$? || ret=$?
+
+    if [[ $ret -eq 0 ]]; then
         echo "SSD"
+    elif [[ $ret -eq 1 ]]; then
+        echo "HDD"
     else
-        local ret=$?
-        if [[ $ret -eq 1 ]]; then
-            echo "HDD"
-        else
-            echo "Unknown"
-        fi
+        echo "Unknown"
     fi
 }
 
