@@ -116,8 +116,8 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
         let param_area = Rect::new(
             dialog_x + 2,
             dialog_y + 2,
-            dialog_width - 4,
-            dialog_height - 6,
+            dialog_width.saturating_sub(4),
+            dialog_height.saturating_sub(6),
         );
 
         let mut param_items = Vec::new();
@@ -167,8 +167,8 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
         // Render instructions
         let instruction_area = Rect::new(
             dialog_x + 2,
-            dialog_y + dialog_height - 3,
-            dialog_width - 4,
+            dialog_y + dialog_height.saturating_sub(3),
+            dialog_width.saturating_sub(4),
             1,
         );
 

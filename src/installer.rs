@@ -72,6 +72,8 @@ impl Installer {
 
         // Update app state to installation mode
         {
+            // SAFETY: unwrap is acceptable here — if the mutex is poisoned, installation
+            // cannot proceed and panicking is the correct behavior
             let mut state = self.app_state.lock().unwrap();
             state.mode = crate::app::AppMode::Installation;
             state.status_message = "Starting installation...".to_string();
@@ -114,6 +116,8 @@ impl Installer {
         // Register child PID for Death Pact compliance and cancellation
         let child_pid = child.id();
         {
+            // SAFETY: unwrap is acceptable — poisoned mutex means main thread panicked,
+            // so failing here is correct
             let mut state = self.app_state.lock().unwrap();
             state.installer_pid = Some(child_pid);
         }
@@ -128,6 +132,8 @@ impl Installer {
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
                 for line in reader.lines().map_while(Result::ok) {
+                    // SAFETY: unwrap — if mutex is poisoned the thread exits, which is acceptable
+                    // for a background output reader; the wait thread handles final state transition
                     let mut state = app_state.lock().unwrap();
                     state.installer_output.push(line.clone());
 
@@ -199,6 +205,7 @@ impl Installer {
             thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
+                    // SAFETY: unwrap — same rationale as stdout reader above
                     let mut state = app_state.lock().unwrap();
                     state.installer_output.push(format!("ERROR: {}", line));
 
@@ -252,6 +259,8 @@ impl Installer {
 
             match result {
             Ok(status) => {
+                // SAFETY: unwrap — wait thread is the final handler; poisoned mutex
+                // means the TUI is already dead, panicking here is correct
                 let mut state = app_state.lock().unwrap();
                 state.installer_pid = None;
 
@@ -276,6 +285,7 @@ impl Installer {
                 }
             }
             Err(e) => {
+                // SAFETY: unwrap — same rationale as Ok branch above
                 let mut state = app_state.lock().unwrap();
                 state.installer_pid = None;
 

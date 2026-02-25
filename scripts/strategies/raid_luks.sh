@@ -162,8 +162,8 @@ execute_raid_luks_partitioning() {
     fi
 
     # Capture UUIDs for bootloader config
-    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot")
-    LUKS_UUID=$(get_device_uuid "/dev/md/DATA")
+    ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot") || error_exit "Cannot determine ROOT_UUID"
+    LUKS_UUID=$(get_device_uuid "/dev/md/DATA") || error_exit "Cannot determine LUKS_UUID"
     export ROOT_UUID LUKS_UUID
 
     # Save RAID configuration
