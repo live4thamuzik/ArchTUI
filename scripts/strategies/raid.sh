@@ -123,43 +123,13 @@ execute_raid_partitioning() {
         safe_mount "/dev/md0" "/mnt"
     fi
     
-    # Separate home partition (if requested)
-    if [ "$WANT_HOME_PARTITION" = "yes" ]; then
-        log_info "Creating separate home RAID array..."
-        
-        # Create second RAID array for home
-        local home_partitions=()
-        for disk in "${RAID_DEVICES[@]}"; do
-            local home_part=$(get_partition_path "$disk" "$((data_part_num + 1))")
-            home_partitions+=("$home_part")
-        done
-        
-        mdadm --create --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md1 "${home_partitions[@]}" || error_exit "Failed to create home RAID array."
-        
-        # Wait for RAID to be ready
-        sleep 5
-        mdadm --wait /dev/md1 || error_exit "Home RAID array not ready."
-        
-        # Format and mount home
-        format_filesystem "/dev/md1" "$HOME_FILESYSTEM_TYPE"
-        capture_device_info "home" "/dev/md1"
-        mkdir -p /mnt/home
-        safe_mount "/dev/md1" "/mnt/home"
-        
-        # Handle Btrfs subvolumes for home if needed
-        if [ "$HOME_FILESYSTEM_TYPE" = "btrfs" ]; then
-            log_info "Creating Btrfs subvolumes for home..."
-            btrfs subvolume create /mnt/home/@
-        fi
-    fi
-    
     # Capture UUIDs for bootloader config
     ROOT_UUID=$(get_device_uuid "/dev/md0")
     export ROOT_UUID
 
     # Save RAID configuration for boot
     mkdir -p /mnt/etc
-    mdadm --detail --scan >> /mnt/etc/mdadm.conf
+    mdadm --detail --scan > /mnt/etc/mdadm.conf
     log_info "Saved RAID configuration to /mnt/etc/mdadm.conf"
 
     log_partitioning_complete "RAID (ESP + boot + RAID array)"
