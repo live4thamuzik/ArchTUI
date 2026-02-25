@@ -18,6 +18,9 @@ cleanup_on_exit() {
 
     echo "=== CLEANUP ON EXIT (Code: $exit_code) ==="
 
+    # Deactivate swap before unmounting (swapfiles on /mnt block umount)
+    swapoff -a 2>/dev/null || true
+
     # Try to unmount everything cleanly (in reverse order)
     for mount_point in /mnt/home /mnt/boot /mnt/efi /mnt; do
         if mountpoint -q "$mount_point" 2>/dev/null; then
@@ -35,7 +38,7 @@ cleanup_on_exit() {
     # Enhanced LUKS cleanup - close all LUKS containers
     if command -v cryptsetup >/dev/null 2>&1; then
         echo "Closing LUKS containers..."
-        for mapper in /dev/mapper/arch_* /dev/mapper/cryptlvm; do
+        for mapper in /dev/mapper/cryptroot /dev/mapper/crypthome /dev/mapper/cryptlvm /dev/mapper/cryptdata; do
             if [[ -e "$mapper" ]]; then
                 cryptsetup close "$(basename "$mapper")" 2>/dev/null || true
             fi

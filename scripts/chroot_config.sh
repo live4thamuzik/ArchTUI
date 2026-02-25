@@ -1324,7 +1324,10 @@ configure_plymouth() {
     log_info "Configuring Plymouth..."
 
     # Install Plymouth if not already installed
-    pacman -S --noconfirm --needed plymouth || true
+    pacman -S --noconfirm --needed plymouth || {
+        log_warn "Failed to install plymouth"
+        return 0
+    }
 
     # Set Plymouth theme if specified
     if [[ -n "${PLYMOUTH_THEME:-}" && "${PLYMOUTH_THEME}" != "none" ]]; then
@@ -1479,11 +1482,9 @@ configure_numlock() {
 
     log_info "Configuring numlock on boot..."
 
-    # For console (TTY)
-    if [[ -f /etc/vconsole.conf ]]; then
-        if ! grep -q "^KEYMAP_TOGGLE=" /etc/vconsole.conf; then
-            # Create a systemd service for numlock
-            cat > /etc/systemd/system/numlock.service << 'EOF'
+    # For console (TTY) — always create the systemd service
+    mkdir -p /etc/systemd/system
+    cat > /etc/systemd/system/numlock.service << 'EOF'
 [Unit]
 Description=Activate numlock on boot
 
@@ -1494,9 +1495,7 @@ ExecStart=/bin/bash -c 'for tty in /dev/tty{1..6}; do /usr/bin/setleds -D +num <
 [Install]
 WantedBy=multi-user.target
 EOF
-            systemctl enable numlock.service || log_warn "Failed to enable numlock.service"
-        fi
-    fi
+    systemctl enable numlock.service || log_warn "Failed to enable numlock.service"
 
     # For SDDM
     if [[ "${DISPLAY_MANAGER:-}" == "sddm" ]]; then
@@ -1526,7 +1525,7 @@ deploy_dotfiles() {
 
     # Run install script if it exists
     if [[ -x "$user_home/dotfiles/install.sh" ]]; then
-        runuser -u "$MAIN_USERNAME" -- bash -c "cd \"$user_home/dotfiles\" && ./install.sh" || log_warn "Dotfiles install script failed"
+        timeout 120 runuser -u "$MAIN_USERNAME" -- bash -c "cd \"$user_home/dotfiles\" && ./install.sh" || log_warn "Dotfiles install script failed or timed out"
     fi
 
     log_success "Dotfiles deployed"
