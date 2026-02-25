@@ -225,7 +225,7 @@ impl Default for Configuration {
                 ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
                 ConfigOption::new("Display Manager", false, "Display manager", "none"),
                 // Boot Splash and Final Setup (40-44)
-                ConfigOption::new("Plymouth", false, "Boot splash screen", "Yes"),
+                ConfigOption::new("Plymouth", false, "Boot splash screen", "No"),
                 ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "arch-glow"),
                 ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot", "Yes"),
                 ConfigOption::new(
