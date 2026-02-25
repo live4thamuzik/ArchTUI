@@ -525,7 +525,11 @@ install_systemd_boot() {
     # Get root partition UUID
     local root_uuid="${ROOT_UUID:-}"
     if [[ -z "$root_uuid" ]]; then
-        root_uuid=$(findmnt -n -o UUID /)
+        root_uuid=$(findmnt -n -o UUID /) || true
+    fi
+    if [[ -z "$root_uuid" ]]; then
+        log_error "Cannot determine root partition UUID for systemd-boot entry"
+        return 1
     fi
 
     # Build options line
@@ -735,6 +739,7 @@ WINEOF
     mkdir -p /boot/grub
     grub-mkconfig -o /boot/grub/grub.cfg || {
         log_error "grub-mkconfig failed — system may not boot correctly"
+        return 1
     }
 
     log_success "GRUB configured"

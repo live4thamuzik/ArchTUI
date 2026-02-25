@@ -2228,22 +2228,36 @@ impl App {
                 }
             }
             "Btrfs Frequency" | "Btrfs Keep Count" | "Btrfs Assistant" => {
-                // Only allow btrfs configuration if snapshots are enabled
-                let snapshots_enabled = {
+                // Only allow btrfs configuration if root filesystem is btrfs AND snapshots are enabled
+                let (is_btrfs, snapshots_enabled) = {
                     let state = match self.lock_state() {
                         Ok(state) => state,
                         Err(_) => return Ok(()),
                     };
-                    state
+                    let btrfs = state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Root Filesystem")
+                        .map(|opt| opt.value.to_lowercase() == "btrfs")
+                        .unwrap_or(false);
+                    let snapshots = state
                         .config
                         .options
                         .iter()
                         .find(|opt| opt.name == "Btrfs Snapshots")
                         .map(|opt| opt.value.to_lowercase() == "yes")
-                        .unwrap_or(false)
+                        .unwrap_or(false);
+                    (btrfs, snapshots)
                 };
 
-                if snapshots_enabled {
+                if !is_btrfs {
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "Btrfs options are only available when Root Filesystem is btrfs."
+                                .to_string();
+                    }
+                } else if snapshots_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);

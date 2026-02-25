@@ -109,9 +109,10 @@ execute_simple_partitioning() {
         swap_size_mib=$(get_swap_size_mib)
         create_swap_partition "$INSTALL_DISK" "$part_num" "$swap_size_mib"
 
-        # Capture swap UUID for hibernation
+        # Capture swap device info and UUID for hibernation
         local swap_device
         swap_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
+        capture_device_info "swap" "$swap_device"
         SWAP_UUID=$(get_device_uuid "$swap_device")
         export SWAP_UUID
 
@@ -131,8 +132,8 @@ execute_simple_partitioning() {
             root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
         fi
 
-        sgdisk -n "${part_num}:0:+${root_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$INSTALL_DISK"
-        sleep 1
+        sgdisk -n "${part_num}:0:+${root_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$INSTALL_DISK" || error_exit "Failed to create root partition."
+        sync_partitions "$INSTALL_DISK"
         local root_device
         root_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
         format_filesystem "$root_device" "$ROOT_FILESYSTEM_TYPE"
@@ -149,8 +150,8 @@ execute_simple_partitioning() {
         else
             # Fixed size home
             local home_device
-            sgdisk -n "${part_num}:0:+${home_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$INSTALL_DISK"
-            sleep 1
+            sgdisk -n "${part_num}:0:+${home_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$INSTALL_DISK" || error_exit "Failed to create home partition."
+            sync_partitions "$INSTALL_DISK"
             home_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
             format_filesystem "$home_device" "$HOME_FILESYSTEM_TYPE"
         fi
@@ -178,6 +179,7 @@ execute_simple_partitioning() {
 
     # Mount boot
     safe_mount "$boot_device" "/mnt/boot"
+    capture_device_info "boot" "$boot_device"
 
     # Mount ESP
     if [[ "$use_existing_esp" == "yes" ]]; then
@@ -187,8 +189,8 @@ execute_simple_partitioning() {
     fi
 
     if [[ "$BOOT_MODE" == "UEFI" ]]; then
-        mkdir -p /mnt/efi
         safe_mount "$esp_device" "/mnt/efi"
+        capture_device_info "efi" "$esp_device"
         export EFI_DEVICE="$esp_device"
     fi
 
@@ -196,11 +198,12 @@ execute_simple_partitioning() {
     if [ "$WANT_HOME_PARTITION" = "yes" ]; then
         local home_device
         home_device=$(get_partition_path "$INSTALL_DISK" "$home_part_num")
-        mkdir -p /mnt/home
         safe_mount "$home_device" "/mnt/home"
+        capture_device_info "home" "$home_device"
     fi
 
     # Capture UUIDs for bootloader config
+    capture_device_info "root" "$root_device"
     ROOT_UUID=$(get_device_uuid "$root_device")
     export ROOT_UUID
 
