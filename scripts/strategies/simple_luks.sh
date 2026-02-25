@@ -178,15 +178,18 @@ execute_simple_luks_partitioning() {
     local boot_device
     boot_device=$(get_partition_path "$INSTALL_DISK" "$boot_part_num")
     safe_mount "$boot_device" "/mnt/boot"
+    capture_device_info "boot" "$boot_device"
 
     if [ "$BOOT_MODE" = "UEFI" ]; then
         local esp_device
         esp_device=$(get_partition_path "$INSTALL_DISK" "$esp_part_num")
         safe_mount "$esp_device" "/mnt/efi"
+        capture_device_info "efi" "$esp_device"
         export EFI_DEVICE="$esp_device"
     fi
 
     # Capture UUIDs for bootloader config
+    capture_device_info "luks" "$luks_dev"
     ROOT_UUID=$(get_device_uuid "/dev/mapper/cryptroot")
     LUKS_UUID=$(get_device_uuid "$luks_dev")
     export ROOT_UUID LUKS_UUID
@@ -197,6 +200,7 @@ execute_simple_luks_partitioning() {
         local swap_part_num=$((luks_part_num - 1))
         local swap_device
         swap_device=$(get_partition_path "$INSTALL_DISK" "$swap_part_num")
+        capture_device_info "swap" "$swap_device"
         SWAP_UUID=$(get_device_uuid "$swap_device")
         export SWAP_UUID
     fi
