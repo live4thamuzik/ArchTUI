@@ -135,7 +135,7 @@ impl Default for Configuration {
                 // System Locale and Input (2-3)
                 ConfigOption::new("Locale", true, "System locale", "en_US.UTF-8"),
                 ConfigOption::new("Keymap", true, "Keyboard layout", "us"),
-                // Disk and Storage (4-17)
+                // Disk and Storage (4-18)
                 ConfigOption::new("Disk", true, "Target disk for installation", ""),
                 ConfigOption::new(
                     "Partitioning Strategy",
@@ -144,6 +144,12 @@ impl Default for Configuration {
                     "",
                 ),
                 ConfigOption::new("Encryption", false, "Enable disk encryption", "Auto"),
+                ConfigOption::new(
+                    "Encryption Password",
+                    false,
+                    "LUKS encryption passphrase",
+                    "",
+                ),
                 ConfigOption::new("Root Filesystem", true, "Root partition filesystem", "ext4"),
                 ConfigOption::new(
                     "Separate Home Partition",
@@ -175,7 +181,7 @@ impl Default for Configuration {
                     "3",
                 ),
                 ConfigOption::new("Btrfs Assistant", false, "Use Btrfs assistant", "No"),
-                // Time and Location (18-20)
+                // Time and Location (19-21)
                 ConfigOption::new("Timezone Region", true, "Timezone region", "America"),
                 ConfigOption::new("Timezone", true, "Timezone city", "New_York"),
                 ConfigOption::new(
@@ -184,7 +190,7 @@ impl Default for Configuration {
                     "Enable NTP time synchronization",
                     "Yes",
                 ),
-                // System Packages (21-25)
+                // System Packages (22-26)
                 ConfigOption::new(
                     "Mirror Country",
                     true,
@@ -200,25 +206,25 @@ impl Default for Configuration {
                     "",
                 ),
                 ConfigOption::new("GPU Drivers", false, "Graphics drivers", "Auto"),
-                // Hostname (26)
+                // Hostname (27)
                 ConfigOption::new("Hostname", true, "System hostname", ""),
-                // User Setup (27-29)
+                // User Setup (28-30)
                 ConfigOption::new("Username", true, "Primary user account", ""),
                 ConfigOption::new("User Password", true, "User account password", ""),
                 ConfigOption::new("Root Password", true, "Root account password", ""),
-                // Package Management (30-32)
+                // Package Management (31-33)
                 ConfigOption::new("AUR Helper", false, "AUR package helper", "paru"),
                 ConfigOption::new("Additional AUR Packages", false, "Extra AUR packages", ""),
                 ConfigOption::new("Flatpak", false, "Enable Flatpak support", "No"),
-                // Boot Configuration (33-36)
+                // Boot Configuration (34-37)
                 ConfigOption::new("Bootloader", true, "Boot loader", "grub"),
                 ConfigOption::new("OS Prober", false, "Enable OS detection", "Yes"),
                 ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
                 ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "PolyDark"),
-                // Desktop Environment (37-38)
+                // Desktop Environment (38-39)
                 ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
                 ConfigOption::new("Display Manager", false, "Display manager", "none"),
-                // Boot Splash and Final Setup (39-43)
+                // Boot Splash and Final Setup (40-44)
                 ConfigOption::new("Plymouth", false, "Boot splash screen", "Yes"),
                 ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "arch-glow"),
                 ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot", "Yes"),

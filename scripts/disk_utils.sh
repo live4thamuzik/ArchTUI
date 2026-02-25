@@ -41,7 +41,7 @@ if [[ -z "${EFI_PARTITION_TYPE:-}" ]]; then
     readonly BIOS_BOOT_PART_SIZE_MIB=1
     readonly BOOT_PART_SIZE_MIB=1024
     readonly DEFAULT_SWAP_SIZE_MIB=2048
-    readonly DEFAULT_ROOT_SIZE_MIB=102400
+    readonly DEFAULT_ROOT_SIZE_MIB=51200
     readonly DEFAULT_ESP_SIZE_MIB=512
 
     # Filesystem Types

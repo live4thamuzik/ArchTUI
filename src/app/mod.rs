@@ -2254,30 +2254,46 @@ impl App {
                     );
                 }
             }
-            "GRUB Theme Selection" => {
-                // Only allow theme selection if GRUB themes are enabled
-                let themes_enabled = {
+            "GRUB Theme" | "GRUB Theme Selection" => {
+                // Only allow GRUB theme options when bootloader is GRUB
+                let (is_grub, themes_enabled) = {
                     let state = match self.lock_state() {
                         Ok(state) => state,
                         Err(_) => return Ok(()),
                     };
-                    state
+                    let grub = state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Bootloader")
+                        .map(|opt| opt.value.to_lowercase() == "grub")
+                        .unwrap_or(false);
+                    let themes = state
                         .config
                         .options
                         .iter()
                         .find(|opt| opt.name == "GRUB Theme")
                         .map(|opt| opt.value.to_lowercase() == "yes")
-                        .unwrap_or(false)
+                        .unwrap_or(false);
+                    (grub, themes)
                 };
 
-                if themes_enabled {
+                if !is_grub {
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "GRUB theme options are only available with the GRUB bootloader."
+                                .to_string();
+                    }
+                } else if option.name == "GRUB Theme Selection" && !themes_enabled {
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "GRUB theme selection is only available when GRUB themes are enabled."
+                                .to_string();
+                    }
+                } else {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
-                    state.status_message =
-                        "GRUB theme selection is only available when GRUB themes are enabled."
-                            .to_string();
                 }
             }
             "Git Repository URL" => {
@@ -2344,6 +2360,34 @@ impl App {
 
                 self.input_handler
                     .start_text_input(option.name.clone(), option.value, placeholder);
+            }
+            "Encryption Password" => {
+                // Only allow encryption password when encryption is enabled
+                let encryption_enabled = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Encryption")
+                        .map(|opt| opt.value.to_lowercase() != "no")
+                        .unwrap_or(false)
+                };
+
+                if encryption_enabled {
+                    self.input_handler.start_password_input(
+                        option.name.clone(),
+                        option.value,
+                        "Enter encryption passphrase".to_string(),
+                    );
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "Encryption password is only needed when encryption is enabled."
+                            .to_string();
+                }
             }
             "User Password" | "Root Password" => {
                 let placeholder = match option.name.as_str() {
@@ -2420,6 +2464,83 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
+                }
+            }
+            "Plymouth Theme" => {
+                // Only allow theme selection when Plymouth is enabled
+                let plymouth_enabled = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Plymouth")
+                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .unwrap_or(false)
+                };
+
+                if plymouth_enabled {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "Plymouth theme can only be selected when Plymouth is enabled."
+                            .to_string();
+                }
+            }
+            "OS Prober" => {
+                // Only relevant for GRUB bootloader
+                let is_grub = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Bootloader")
+                        .map(|opt| opt.value.to_lowercase() == "grub")
+                        .unwrap_or(false)
+                };
+
+                if is_grub {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "OS Prober is only available with the GRUB bootloader.".to_string();
+                }
+            }
+            "Home Filesystem" => {
+                // Only relevant when Separate Home Partition is enabled
+                let home_enabled = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Separate Home Partition")
+                        .map(|opt| opt.value.to_lowercase() == "yes")
+                        .unwrap_or(false)
+                };
+
+                if home_enabled {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else if let Ok(mut state) = self.lock_state_mut() {
+                    state.status_message =
+                        "Home filesystem can only be selected when Separate Home Partition is enabled."
+                            .to_string();
                 }
             }
             _ => {
@@ -2831,6 +2952,19 @@ impl App {
                         }
                     }
                 }
+                "Encryption" => {
+                    if value.to_lowercase() == "no" {
+                        // Clear encryption password when encryption is disabled
+                        if let Some(pass_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Password")
+                        {
+                            pass_option.value = String::new();
+                        }
+                    }
+                }
                 "Plymouth" => {
                     if value.to_lowercase() == "no" {
                         // Set plymouth theme to none when plymouth is disabled
@@ -2854,6 +2988,35 @@ impl App {
                             .find(|opt| opt.name == "GRUB Theme Selection")
                         {
                             theme_option.value = "none".to_string();
+                        }
+                    }
+                }
+                "Bootloader" => {
+                    if value.to_lowercase() != "grub" {
+                        // Reset GRUB-specific options when switching away from GRUB
+                        if let Some(theme_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "GRUB Theme")
+                        {
+                            theme_option.value = "No".to_string();
+                        }
+                        if let Some(selection_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "GRUB Theme Selection")
+                        {
+                            selection_option.value = "none".to_string();
+                        }
+                        if let Some(prober_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "OS Prober")
+                        {
+                            prober_option.value = "No".to_string();
                         }
                     }
                 }
