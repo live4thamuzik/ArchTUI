@@ -408,7 +408,10 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             home_filesystem: parse_or_default(&get_value("Home Filesystem")),
             separate_home: parse_or_default(&get_value("Separate Home Partition")),
             encryption: parse_or_default(&get_value("Encryption")),
-            encryption_password: get_value("Encryption Password"),
+            encryption_password: {
+                let v = get_value("Encryption Password");
+                if v == "N/A" { String::new() } else { v }
+            },
             swap: parse_or_default(&get_value("Swap")),
             swap_size: get_value("Swap Size"),
             root_size: get_value("Root Size"),

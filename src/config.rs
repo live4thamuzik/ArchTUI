@@ -148,7 +148,7 @@ impl Default for Configuration {
                     "Encryption Password",
                     false,
                     "LUKS encryption passphrase",
-                    "",
+                    "N/A",
                 ),
                 ConfigOption::new("Root Filesystem", true, "Root partition filesystem", "ext4"),
                 ConfigOption::new(
@@ -306,7 +306,12 @@ impl Configuration {
                 _ => continue, // Skip unknown options
             };
 
-            env_vars.insert(env_name.to_string(), option.get_value());
+            let value = option.get_value();
+            // Don't export "N/A" sentinel values — they indicate disabled/gated fields
+            if value == "N/A" {
+                continue;
+            }
+            env_vars.insert(env_name.to_string(), value);
         }
 
         env_vars
@@ -332,7 +337,7 @@ impl Configuration {
                 // Encryption password may be set via the Encryption option or LUKS config
                 "Encryption Password" | "LUKS Password" => {
                     let val = option.get_value();
-                    if !val.is_empty() {
+                    if !val.is_empty() && val != "N/A" {
                         encryption_password = Some(val);
                     }
                 }
