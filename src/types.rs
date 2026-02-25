@@ -103,6 +103,18 @@ pub enum DesktopEnvironment {
     Kde,
     #[strum(serialize = "hyprland")]
     Hyprland,
+    #[strum(serialize = "sway")]
+    Sway,
+    #[strum(serialize = "i3")]
+    I3,
+    #[strum(serialize = "xfce")]
+    Xfce,
+    #[strum(serialize = "cinnamon")]
+    Cinnamon,
+    #[strum(serialize = "mate")]
+    Mate,
+    #[strum(serialize = "budgie")]
+    Budgie,
 }
 
 /// Display manager selection
@@ -117,6 +129,12 @@ pub enum DisplayManager {
     Gdm,
     #[strum(serialize = "sddm")]
     Sddm,
+    #[strum(serialize = "lightdm")]
+    Lightdm,
+    #[strum(serialize = "lxdm")]
+    Lxdm,
+    #[strum(serialize = "ly")]
+    Ly,
 }
 
 /// Bootloader selection

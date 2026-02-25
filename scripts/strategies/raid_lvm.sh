@@ -207,8 +207,8 @@ execute_raid_lvm_partitioning() {
 
     # Save RAID configuration
     log_info "Saving RAID configuration"
-    mkdir -p /mnt/etc/mdadm
-    mdadm --detail --scan > /mnt/etc/mdadm/mdadm.conf
+    mkdir -p /mnt/etc
+    mdadm --detail --scan > /mnt/etc/mdadm.conf
 
     log_info "RAID + LVM partitioning completed successfully"
 }

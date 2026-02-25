@@ -2766,6 +2766,12 @@ impl App {
                             encryption_value
                         );
                     }
+                    // Clear encryption password when encryption is disabled
+                    if encryption_value == "No" {
+                        if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
+                            pass_opt.value = String::new();
+                        }
+                    }
                 }
             }
         }
@@ -2901,6 +2907,30 @@ impl App {
                                 if root_opt.value == "N/A" {
                                     root_opt.value = "Remaining".to_string();
                                 }
+                            }
+                        }
+                    }
+                }
+                "Root Filesystem" => {
+                    if value.to_lowercase() != "btrfs" {
+                        // Disable all btrfs options when not using btrfs
+                        for name in &[
+                            "Btrfs Snapshots",
+                            "Btrfs Frequency",
+                            "Btrfs Keep Count",
+                            "Btrfs Assistant",
+                        ] {
+                            if let Some(opt) = state
+                                .config
+                                .options
+                                .iter_mut()
+                                .find(|o| o.name == *name)
+                            {
+                                opt.value = if *name == "Btrfs Snapshots" || *name == "Btrfs Assistant" {
+                                    "No".to_string()
+                                } else {
+                                    "N/A".to_string()
+                                };
                             }
                         }
                     }

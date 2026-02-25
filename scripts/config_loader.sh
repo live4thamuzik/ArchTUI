@@ -100,6 +100,13 @@ load_config_from_json() {
     export GIT_REPOSITORY_URL="$(jq -r '.git_repository_url // ""' "$config_file")"
     export NUMLOCK_ON_BOOT="$(jq -r '.numlock_on_boot // "No"' "$config_file")"
     export SECURE_BOOT="$(jq -r '.secure_boot // "No"' "$config_file")"
+    export GPU_DRIVERS="$(jq -r '.gpu_drivers // "Auto"' "$config_file")"
+    export MULTILIB="$(jq -r '.multilib // "Yes"' "$config_file")"
+    export FLATPAK="$(jq -r '.flatpak // "No"' "$config_file")"
+    export BTRFS_SNAPSHOTS="$(jq -r '.btrfs_snapshots // "No"' "$config_file")"
+    export BTRFS_FREQUENCY="$(jq -r '.btrfs_frequency // "weekly"' "$config_file")"
+    export BTRFS_KEEP_COUNT="$(jq -r '.btrfs_keep_count // "3"' "$config_file")"
+    export BTRFS_ASSISTANT="$(jq -r '.btrfs_assistant // "No"' "$config_file")"
 
     # Convert TUI variables to internal Bash variables (as done in install.sh)
     export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"

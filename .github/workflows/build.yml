@@ -34,6 +34,10 @@ jobs:
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Run clippy
+      # Note: alpm feature disabled on Ubuntu (requires libalpm from Arch Linux)
+      run: cargo clippy --no-default-features -- -D warnings
+
     - name: Run tests
       # Note: alpm feature disabled on Ubuntu (requires libalpm from Arch Linux)
       run: cargo test --no-default-features
