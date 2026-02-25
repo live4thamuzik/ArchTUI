@@ -272,23 +272,73 @@ pub fn render_completion_ui_in_area(
     area: Rect,
     header: &HeaderRenderer,
 ) {
+    let is_success = state.installation_progress >= 100
+        && !state.status_message.to_lowercase().contains("fail")
+        && !state.status_message.to_lowercase().contains("error");
+
+    let title = if is_success {
+        "Installation Complete"
+    } else {
+        "Installation Failed"
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(7), // Header
             Constraint::Length(3), // Title
-            Constraint::Min(0),    // Completion message
+            Constraint::Length(3), // Status message
+            Constraint::Min(0),    // Last output lines
+            Constraint::Length(1), // Navigation hint
         ])
         .split(area);
 
     header.render_header(f, chunks[0]);
-    header.render_title(f, chunks[1], "Installation Complete");
+    header.render_title(f, chunks[1], title);
 
-    let message = Paragraph::new(state.status_message.clone())
-        .block(Block::default().borders(Borders::ALL).title("Status"))
+    // Status message
+    let status_color = if is_success { Colors::SUCCESS } else { Colors::ERROR };
+    let status = Paragraph::new(state.status_message.clone())
+        .block(Block::default().borders(Borders::ALL).title(" Status "))
         .alignment(Alignment::Center)
-        .style(Style::default().fg(Colors::SUCCESS));
-    f.render_widget(message, chunks[2]);
+        .style(Style::default().fg(status_color));
+    f.render_widget(status, chunks[2]);
+
+    // Last output lines (tail view)
+    let output_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Installer Output (last lines) ")
+        .title_style(Style::default().fg(Colors::PRIMARY))
+        .border_style(Style::default().fg(Colors::PRIMARY))
+        .style(Style::default().bg(Colors::BG_PRIMARY));
+    let inner_area = output_block.inner(chunks[3]);
+    f.render_widget(output_block, chunks[3]);
+
+    let visible_height = inner_area.height as usize;
+    let start = state.installer_output.len().saturating_sub(visible_height);
+    let tail: Vec<ListItem> = state.installer_output[start..]
+        .iter()
+        .map(|line| {
+            let style = if line.contains("ERROR") || line.contains("error") {
+                Style::default().fg(Colors::ERROR)
+            } else if line.contains("WARNING") || line.contains("warning") {
+                Style::default().fg(Colors::WARNING)
+            } else if line.starts_with("==>") || line.starts_with("::") {
+                Style::default().fg(Colors::INFO).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Colors::FG_PRIMARY)
+            };
+            ListItem::new(line.as_str()).style(style)
+        })
+        .collect();
+    let output_list = List::new(tail);
+    f.render_widget(output_list, inner_area);
+
+    // Navigation hint
+    let hint = Paragraph::new(" Press B to return to menu | Enter to return to menu | Q to quit ")
+        .style(Style::default().fg(Colors::FG_MUTED))
+        .alignment(Alignment::Center);
+    f.render_widget(hint, chunks[4]);
 }
 
 /// Render configuration options list with scrolling
@@ -427,10 +477,23 @@ pub fn render_dry_run_summary_in_area(
     header.render_header(f, chunks[0]);
     header.render_title(f, chunks[1], "Dry Run Summary - Actions to be Performed");
 
-    // Build summary content
+    // Build summary content with scrolling
+    let summary_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Actions (\u{2191}\u{2193} scroll, B=back, Enter=dismiss) ")
+        .title_style(Style::default().fg(Colors::PRIMARY));
+    let inner_area = summary_block.inner(chunks[2]);
+    f.render_widget(summary_block, chunks[2]);
+
+    let visible_height = inner_area.height as usize;
+
     let summary_lines: Vec<ListItem> = if let Some(ref summary) = state.dry_run_summary {
+        let max_offset = summary.len().saturating_sub(visible_height);
+        let offset = state.dry_run_scroll_offset.min(max_offset);
         summary
             .iter()
+            .skip(offset)
+            .take(visible_height)
             .map(|line| {
                 let style = if line.starts_with("[DESTRUCTIVE]") {
                     Style::default().fg(Colors::ERROR)
@@ -448,11 +511,6 @@ pub fn render_dry_run_summary_in_area(
         vec![ListItem::new("No actions to perform").style(Style::default().fg(Colors::FG_MUTED))]
     };
 
-    let summary_list = List::new(summary_lines).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" Actions (Press B to go back, Enter to dismiss) ")
-            .title_style(Style::default().fg(Colors::PRIMARY)),
-    );
-    f.render_widget(summary_list, chunks[2]);
+    let summary_list = List::new(summary_lines);
+    f.render_widget(summary_list, inner_area);
 }

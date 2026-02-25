@@ -86,6 +86,8 @@ pub struct AppState {
     pub pre_dialog_mode: Option<AppMode>,
     /// Dry-run summary output (Sprint 8)
     pub dry_run_summary: Option<Vec<String>>,
+    /// Scroll offset for dry-run summary display
+    pub dry_run_scroll_offset: usize,
     /// Button selection in guided installer (0 = Test Config, 1 = Start Install)
     pub installer_button_selection: usize,
     /// PID of the running installer process (for cancellation)
@@ -154,6 +156,7 @@ impl Default for AppState {
             confirm_dialog: None,
             pre_dialog_mode: None,
             dry_run_summary: None,
+            dry_run_scroll_offset: 0,
             installer_button_selection: 1, // Default to "Start Install"
             installer_pid: None,
         }
