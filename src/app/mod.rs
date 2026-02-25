@@ -114,17 +114,10 @@ pub struct App {
 // =============================================================================
 
 impl App {
-    /// Helper function to safely lock the state mutex
+    /// Helper function to safely lock the state mutex.
+    /// MutexGuard provides both &T and &mut T — use `let mut state` at
+    /// the call site when mutation is needed.
     fn lock_state(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, AppState>, Box<dyn std::error::Error>> {
-        self.state
-            .lock()
-            .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)).into())
-    }
-
-    /// Helper function to safely lock the state mutex mutably
-    fn lock_state_mut(
         &self,
     ) -> Result<std::sync::MutexGuard<'_, AppState>, Box<dyn std::error::Error>> {
         self.state
@@ -184,7 +177,7 @@ impl App {
 
     /// Toggle help overlay visibility
     pub fn toggle_help(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             state.help_visible = !state.help_visible;
         }
     }
@@ -195,7 +188,7 @@ impl App {
 
         // Clear file browser state first
         {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.file_browser = None;
         }
 
@@ -205,7 +198,7 @@ impl App {
                 match config.validate() {
                     Ok(_) => {
                         // Config is valid - start installation
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = format!(
                             "Configuration loaded from: {}",
                             path.display()
@@ -244,14 +237,14 @@ impl App {
                         state.mode = AppMode::FloatingOutput;
                     }
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.mode = AppMode::AutomatedInstall;
                         state.status_message = format!("Config validation failed: {}", e);
                     }
                 }
             }
             Err(e) => {
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.mode = AppMode::AutomatedInstall;
                 state.status_message = format!("Failed to load config: {}", e);
             }
@@ -278,7 +271,7 @@ impl App {
             PtySpawnResult::Success(pty) => {
                 self.pty_terminal = Some(*pty);
 
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 let return_menu_selection = state.tools_menu_selection;
                 state.embedded_terminal = Some(PtyTerminalState {
                     tool_name: tool_name.to_string(),
@@ -325,7 +318,7 @@ impl App {
         // Check status and return to appropriate mode
         match status {
             Ok(exit_status) => {
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if exit_status.success() {
                     state.status_message = format!("{} completed successfully", cmd);
                 } else {
@@ -334,7 +327,7 @@ impl App {
                 state.mode = return_mode;
             }
             Err(e) => {
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.status_message = format!("Failed to run {}: {}", cmd, e);
                 state.mode = return_mode;
             }
@@ -352,7 +345,7 @@ impl App {
         self.pty_terminal = None;
 
         // Return to previous mode
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         if let Some(terminal_state) = state.embedded_terminal.take() {
             state.mode = terminal_state.return_mode;
             state.tools_menu_selection = terminal_state.return_menu_selection;
@@ -411,7 +404,7 @@ impl App {
 
         // Process all pending messages without blocking
         while let Ok(msg) = self.tool_rx.try_recv() {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
 
             match msg {
                 ToolMessage::Stdout(line) => {
@@ -637,7 +630,7 @@ impl App {
                         }
                         "format_partition" => {
                             // Show confirmation dialog before formatting
-                            let mut state = self.lock_state_mut()?;
+                            let mut state = self.lock_state()?;
                             state.pre_dialog_mode = Some(AppMode::DiskTools);
                             state.confirm_dialog =
                                 Some(format_partition_confirm(&value, "ext4"));
@@ -646,7 +639,7 @@ impl App {
                         }
                         "wipe_disk" => {
                             // Show confirmation dialog before wiping
-                            let mut state = self.lock_state_mut()?;
+                            let mut state = self.lock_state()?;
                             state.pre_dialog_mode = Some(AppMode::DiskTools);
                             state.confirm_dialog = Some(wipe_disk_confirm(&value));
                             state.mode = AppMode::ConfirmDialog;
@@ -667,7 +660,7 @@ impl App {
             match key_event.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('b') | KeyCode::Char('B') => {
                     // Dismiss floating output and return to previous mode
-                    let mut state = self.lock_state_mut()?;
+                    let mut state = self.lock_state()?;
                     if let Some(output) = state.floating_output.take() {
                         if !output.complete {
                             // Tool still running — terminate registered child processes
@@ -680,7 +673,7 @@ impl App {
                     }
                 }
                 KeyCode::Up => {
-                    let mut state = self.lock_state_mut()?;
+                    let mut state = self.lock_state()?;
                     if let Some(ref mut output) = state.floating_output {
                         if output.scroll_offset > 0 {
                             output.scroll_offset -= 1;
@@ -689,7 +682,7 @@ impl App {
                     }
                 }
                 KeyCode::Down => {
-                    let mut state = self.lock_state_mut()?;
+                    let mut state = self.lock_state()?;
                     if let Some(ref mut output) = state.floating_output {
                         let max = output.content.len().saturating_sub(1);
                         if output.scroll_offset < max {
@@ -708,7 +701,7 @@ impl App {
 
         // Handle file browser mode
         if current_mode == AppMode::FileBrowser {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             if let Some(ref mut browser) = state.file_browser {
                 match key_event.code {
                     KeyCode::Esc => {
@@ -751,7 +744,7 @@ impl App {
 
         // Handle confirm dialog mode
         if current_mode == AppMode::ConfirmDialog {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             if let Some(ref mut dialog) = state.confirm_dialog {
                 match key_event.code {
                     KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
@@ -807,7 +800,7 @@ impl App {
         if current_mode == AppMode::GuidedInstaller
             && matches!(key_event.code, KeyCode::Left | KeyCode::Right | KeyCode::Tab)
         {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             if state.config_scroll.selected_index == state.config.options.len() {
                 state.installer_button_selection =
                     if state.installer_button_selection == 0 { 1 } else { 0 };
@@ -876,7 +869,7 @@ impl App {
 
     /// Navigate to previous option
     fn navigate_up(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             match state.mode {
                 AppMode::MainMenu => {
                     if state.main_menu_selection > 0 {
@@ -923,7 +916,7 @@ impl App {
 
     /// Navigate to next option
     fn navigate_down(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             match state.mode {
                 AppMode::MainMenu => {
                     if state.main_menu_selection < 3 {
@@ -993,7 +986,7 @@ impl App {
 
     /// Page up in configuration list
     fn page_up(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.page_up();
             }
@@ -1002,7 +995,7 @@ impl App {
 
     /// Page down in configuration list
     fn page_down(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.page_down();
             }
@@ -1011,7 +1004,7 @@ impl App {
 
     /// Move to first configuration option
     fn move_to_first(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.move_to_first();
             }
@@ -1020,7 +1013,7 @@ impl App {
 
     /// Move to last configuration option
     fn move_to_last(&self) {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             if state.mode == AppMode::GuidedInstaller {
                 state.config_scroll.move_to_last();
             }
@@ -1077,7 +1070,7 @@ impl App {
                 // Installation is running, no action needed
             }
             AppMode::Complete => {
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.mode = AppMode::MainMenu;
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
@@ -1087,7 +1080,7 @@ impl App {
             }
             AppMode::FloatingOutput => {
                 // Dismiss floating output on Enter
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if let Some(_output) = state.floating_output.take() {
                     state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
                 }
@@ -1101,7 +1094,7 @@ impl App {
             }
             AppMode::DryRunSummary => {
                 // Dismiss dry-run summary and return to guided installer
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.mode = AppMode::GuidedInstaller;
                 state.dry_run_summary = None;
             }
@@ -1140,7 +1133,7 @@ impl App {
 
         // Clear the dialog
         {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.confirm_dialog = None;
             // Return to previous mode
             if let Some(mode) = pre_mode {
@@ -1250,7 +1243,7 @@ impl App {
                         Ok(pending) => {
                             let script_name = pending["script_name"].as_str().unwrap_or("").to_string();
                             if script_name.is_empty() {
-                                let mut state = self.lock_state_mut()?;
+                                let mut state = self.lock_state()?;
                                 state.status_message = "Error: missing script name in confirmed action".to_string();
                                 return Ok(());
                             }
@@ -1274,7 +1267,7 @@ impl App {
                             let script_path = format!("scripts/tools/{}", script_name);
                             // Set up floating output and spawn directly (already confirmed)
                             {
-                                let mut state = self.lock_state_mut()?;
+                                let mut state = self.lock_state()?;
                                 state.floating_output = Some(FloatingOutputState {
                                     title: format!("Running: {}", display_name),
                                     content: vec![
@@ -1296,18 +1289,18 @@ impl App {
                             self.spawn_tool_script_with_env(&script_path, cli_args, env_vars)?;
                         }
                         Err(e) => {
-                            let mut state = self.lock_state_mut()?;
+                            let mut state = self.lock_state()?;
                             state.status_message = format!("Internal error: failed to parse tool data: {}", e);
                         }
                     }
                 } else {
-                    let mut state = self.lock_state_mut()?;
+                    let mut state = self.lock_state()?;
                     state.status_message = "Error: no action data for confirmed tool execution".to_string();
                 }
             }
             _ => {
                 // Unknown action
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.status_message = format!("Unknown action: {}", action);
             }
         }
@@ -1340,7 +1333,7 @@ impl App {
 
         debug!("Main menu selection: {}", selection);
 
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         match selection {
             0 => {
                 // Guided Installer
@@ -1376,7 +1369,7 @@ impl App {
             state.tools_menu_selection
         };
 
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         match selection {
             0 => {
                 // Disk & Filesystem Tools
@@ -1430,7 +1423,7 @@ impl App {
 
         if is_back_option {
             // Go back to tools menu
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.mode = AppMode::ToolsMenu;
             state.tools_menu_selection = 0;
             state.status_message =
@@ -1458,7 +1451,7 @@ impl App {
                     1 => {
                         // Format Partition - Use disk selection dialog
                         self.input_handler.start_disk_selection("".to_string());
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.current_tool = Some("format_partition".to_string());
                         state.status_message =
                             "Select partition to format (Enter to select, Esc to cancel)"
@@ -1467,7 +1460,7 @@ impl App {
                     2 => {
                         // Wipe Disk - Use disk selection dialog
                         self.input_handler.start_disk_selection("".to_string());
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.current_tool = Some("wipe_disk".to_string());
                         state.status_message =
                             "Select disk to wipe (Enter to select, Esc to cancel)".to_string();
@@ -1475,7 +1468,7 @@ impl App {
                     3 => {
                         // Check Disk Health - Use disk selection dialog
                         self.input_handler.start_disk_selection("".to_string());
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.current_tool = Some("health".to_string());
                         state.status_message =
                             "Select disk to check health (Enter to select, Esc to cancel)"
@@ -1634,7 +1627,7 @@ impl App {
         if should_start_installation {
             if self.validate_configuration_for_installation() {
                 // Show confirmation dialog before starting
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
                 state.confirm_dialog = Some(start_install_confirm());
                 state.mode = AppMode::ConfirmDialog;
@@ -1655,7 +1648,7 @@ impl App {
             vec!["toml".to_string(), "json".to_string()],
         );
 
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         state.file_browser = Some(file_browser);
         state.mode = AppMode::FileBrowser;
         state.status_message = "Select a configuration file (.toml or .json)".to_string();
@@ -1669,7 +1662,7 @@ impl App {
             state.mode.clone()
         };
 
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         match current_mode {
             AppMode::MainMenu => {
                 // Already at top level - could show exit confirmation
@@ -1940,7 +1933,7 @@ impl App {
             // All validation passed - installation can proceed
             true
         } else {
-            let mut state = match self.lock_state_mut() {
+            let mut state = match self.lock_state() {
                 Ok(state) => state,
                 Err(_) => return false, // If we can't lock the state, validation fails
             };
@@ -2024,7 +2017,7 @@ impl App {
             summary.push(format!("  {}={}", key, display));
         }
 
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         state.dry_run_summary = Some(summary);
         state.dry_run_scroll_offset = 0;
         state.mode = AppMode::DryRunSummary;
@@ -2062,13 +2055,13 @@ impl App {
             };
             file_config.save_to_file(save_path)?;
 
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.status_message = format!("Config saved to {}", save_path.display());
         }
 
         // Update state to installation mode
         {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.mode = AppMode::Installation;
             state.status_message = "Starting installation...".to_string();
         }
@@ -2164,7 +2157,7 @@ impl App {
                         .start_selection(option.name.clone(), options, option.value);
                 } else {
                     // Show message that encryption is auto-set for non-manual strategies
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message = "Encryption is auto-set based on partitioning strategy. Use manual partitioning to control encryption.".to_string();
                     }
                 }
@@ -2189,7 +2182,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Swap size can only be configured when swap is enabled.".to_string();
                 }
@@ -2222,7 +2215,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Root size is configurable when using a separate home partition or LVM strategy.".to_string();
                 }
@@ -2247,7 +2240,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Home size is only configurable when separate home partition is enabled.".to_string();
                 }
@@ -2277,7 +2270,7 @@ impl App {
                 };
 
                 if !is_btrfs {
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message =
                             "Btrfs options are only available when Root Filesystem is btrfs."
                                 .to_string();
@@ -2286,7 +2279,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message = format!(
                         "{} can only be configured when Btrfs snapshots are enabled.",
                         option.name
@@ -2318,13 +2311,13 @@ impl App {
                 };
 
                 if !is_grub {
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message =
                             "GRUB theme options are only available with the GRUB bootloader."
                                 .to_string();
                     }
                 } else if option.name == "GRUB Theme Selection" && !themes_enabled {
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message =
                             "GRUB theme selection is only available when GRUB themes are enabled."
                                 .to_string();
@@ -2357,7 +2350,7 @@ impl App {
                         option.value,
                         "Enter git repository URL".to_string(),
                     );
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Git repository URL can only be configured when git repository is enabled."
                             .to_string();
@@ -2422,7 +2415,7 @@ impl App {
                         option.value,
                         "Enter encryption passphrase".to_string(),
                     );
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Encryption password is only needed when encryption is enabled."
                             .to_string();
@@ -2471,7 +2464,7 @@ impl App {
                     let options = InputHandler::get_timezones_for_region(&timezone_region);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message = "Please select a timezone region first.".to_string();
                 }
             }
@@ -2493,7 +2486,7 @@ impl App {
 
                 if desktop_env != "none" && !desktop_env.is_empty() {
                     // Desktop environment is selected, display manager should be auto-set
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message =
                             "Display Manager is auto-set based on Desktop Environment selection."
                                 .to_string();
@@ -2525,7 +2518,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Plymouth theme can only be selected when Plymouth is enabled."
                             .to_string();
@@ -2551,7 +2544,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "OS Prober is only available with the GRUB bootloader.".to_string();
                 }
@@ -2576,7 +2569,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Home filesystem can only be selected when Separate Home Partition is enabled."
                             .to_string();
@@ -2600,7 +2593,7 @@ impl App {
                 };
 
                 if is_plain_raid {
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message =
                             "Separate home not available for RAID without LVM."
                                 .to_string();
@@ -2631,7 +2624,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "Btrfs Snapshots requires Root Filesystem to be btrfs.".to_string();
                 }
@@ -2656,7 +2649,7 @@ impl App {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.input_handler
                         .start_selection(option.name.clone(), options, option.value);
-                } else if let Ok(mut state) = self.lock_state_mut() {
+                } else if let Ok(mut state) = self.lock_state() {
                     state.status_message =
                         "RAID Level is only available for RAID partitioning strategies.".to_string();
                 }
@@ -2780,7 +2773,7 @@ impl App {
 
                 // Launch partitioning tool
                 if let Err(e) = self.input_handler.launch_partitioning_tool(&disk_paths) {
-                    if let Ok(mut state) = self.lock_state_mut() {
+                    if let Ok(mut state) = self.lock_state() {
                         state.status_message = format!("Partitioning failed: {}", e);
                         return Ok(());
                     }
@@ -2807,7 +2800,7 @@ impl App {
                     .validate_manual_partitioning(&disk_paths, &boot_mode)
                 {
                     Ok(layout) => {
-                        if let Ok(mut state) = self.lock_state_mut() {
+                        if let Ok(mut state) = self.lock_state() {
                             state.status_message = format!(
                                 "Manual partitioning validated successfully! Found {} partitions with {} table",
                                 layout.partitions.len(),
@@ -2816,7 +2809,7 @@ impl App {
                         }
                     }
                     Err(e) => {
-                        if let Ok(mut state) = self.lock_state_mut() {
+                        if let Ok(mut state) = self.lock_state() {
                             state.status_message = format!("Partitioning validation failed: {}", e);
                         }
                     }
@@ -2851,7 +2844,7 @@ impl App {
 
         // Move to next step
         {
-            if let Ok(mut state) = self.lock_state_mut() {
+            if let Ok(mut state) = self.lock_state() {
                 if state.config_scroll.selected_index < state.config.options.len() - 1 {
                     let next_index = state.config_scroll.selected_index + 1;
                     state.config_scroll.set_selected(next_index);
@@ -2876,7 +2869,7 @@ impl App {
             };
 
             {
-                if let Ok(mut state) = self.lock_state_mut() {
+                if let Ok(mut state) = self.lock_state() {
                     if let Some(enc_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption") {
                         enc_opt.value = encryption_value.to_string();
                         state.status_message = format!(
@@ -2917,7 +2910,7 @@ impl App {
 
         if !display_manager.is_empty() {
             {
-                if let Ok(mut state) = self.lock_state_mut() {
+                if let Ok(mut state) = self.lock_state() {
                     // Find display manager option by name
                     if let Some(display_manager_option) = state
                         .config
@@ -2944,7 +2937,7 @@ impl App {
         option_name: &str,
         value: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             match option_name {
                 "Swap" => {
                     if value.to_lowercase() == "no" {
@@ -3321,7 +3314,7 @@ impl App {
         height: u16,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Update scroll state with new visible height
-        if let Ok(mut state) = self.lock_state_mut() {
+        if let Ok(mut state) = self.lock_state() {
             if state.mode == AppMode::GuidedInstaller {
                 // Calculate available height for config list
                 // Header(7) + Title(3) + Instructions(3) + Start Button(3) = 16 lines reserved
@@ -3868,7 +3861,7 @@ impl App {
         match key_event.code {
             KeyCode::Up => {
                 // Move to previous parameter (if not at first)
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     if dialog.current_param > 0 {
                         dialog.current_param -= 1;
@@ -3877,7 +3870,7 @@ impl App {
             }
             KeyCode::Down => {
                 // Move to next parameter (if not at last)
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     if dialog.current_param < dialog.parameters.len().saturating_sub(1) {
                         dialog.current_param += 1;
@@ -3890,7 +3883,7 @@ impl App {
             }
             KeyCode::Esc => {
                 // Cancel tool dialog and go back
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 let current_tool = state.current_tool.clone();
                 state.tool_dialog = None;
                 state.current_tool = None;
@@ -3940,7 +3933,7 @@ impl App {
             }
             KeyCode::Left | KeyCode::Right => {
                 // Cycle through Selection parameter options
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
                     if idx < dialog.parameters.len() && idx < dialog.param_values.len() {
@@ -3962,7 +3955,7 @@ impl App {
             }
             KeyCode::Char(c) => {
                 // Handle text input for current parameter (skip for Selection types)
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
                     if idx < dialog.parameters.len() && idx < dialog.param_values.len()
@@ -3974,7 +3967,7 @@ impl App {
             }
             KeyCode::Backspace => {
                 // Handle backspace for current parameter (skip for Selection types)
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
                     if idx < dialog.parameters.len() && idx < dialog.param_values.len()
@@ -4005,7 +3998,7 @@ impl App {
         };
 
         {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             if let Some(ref mut dialog) = state.tool_dialog {
                 if current_param < dialog.parameters.len() {
                     // Move to next parameter or execute tool
@@ -4048,7 +4041,7 @@ impl App {
             })
             .collect();
 
-        let mut state = self.lock_state_mut()?;
+        let mut state = self.lock_state()?;
         state.current_tool = Some(tool_name.to_string());
         state.tool_dialog = Some(ToolDialogState {
             tool_name: tool_name.to_string(),
@@ -4205,7 +4198,7 @@ impl App {
         // Shell-safety check: reject args with dangerous characters
         for arg in &cli_args {
             if !shell_safe(arg) {
-                let mut state = self.lock_state_mut()?;
+                let mut state = self.lock_state()?;
                 state.status_message = "Error: unsafe characters in argument".to_string();
                 return Ok(());
             }
@@ -4218,7 +4211,7 @@ impl App {
             let env_prefix = if env_display.is_empty() { String::new() } else { format!("{} ", env_display.join(" ")) };
             let would_execute = format!("{}bash {} {}", env_prefix, script_path, cli_args.join(" "));
 
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.tool_dialog = None;
             state.floating_output = Some(FloatingOutputState {
                 title: format!("[DRY RUN] {}", display_name),
@@ -4262,7 +4255,7 @@ impl App {
             let detail2 = format!("Args: {}", cli_args.join(" "));
             let action_data = pending.to_string();
 
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.pre_dialog_mode = Some(state.mode.clone());
             state.tool_dialog = None;
             state.confirm_dialog = Some(
@@ -4283,7 +4276,7 @@ impl App {
             log::debug!("Manifest found for {}: v{}", script_name, manifest.version);
         } else if is_destructive {
             log::error!("BLOCKED: No manifest found for destructive script: {}", script_name);
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.status_message = format!("Error: no manifest for destructive script {}", script_name);
             return Ok(());
         } else {
@@ -4292,7 +4285,7 @@ impl App {
 
         // Set up floating output window
         {
-            let mut state = self.lock_state_mut()?;
+            let mut state = self.lock_state()?;
             state.tool_dialog = None;
             state.floating_output = Some(FloatingOutputState {
                 title: format!("Running: {}", display_name),
@@ -4359,7 +4352,7 @@ impl App {
                 };
                 let script_path = format!("scripts/tools/{}", sa.script_name());
                 let cli_args = sa.to_cli_args();
-                if let Ok(mut state) = self.lock_state_mut() {
+                if let Ok(mut state) = self.lock_state() {
                     state.tool_dialog = None;
                     state.current_tool = None;
                 }
@@ -4369,7 +4362,7 @@ impl App {
             }
             "manual_partition" => {
                 let script_path = "scripts/tools/manual_partition.sh";
-                if let Ok(mut state) = self.lock_state_mut() {
+                if let Ok(mut state) = self.lock_state() {
                     state.tool_dialog = None;
                     state.current_tool = None;
                 }
@@ -4390,7 +4383,7 @@ impl App {
                 let device = match Self::validate_required_param(&params, 0, "device") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4413,7 +4406,7 @@ impl App {
                 let device = match Self::validate_required_param(&params, 0, "device") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4494,7 +4487,7 @@ impl App {
                 let bootloader_type = match Self::validate_required_param(&params, 0, "bootloader type") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4502,7 +4495,7 @@ impl App {
                 let disk = match Self::validate_required_param(&params, 1, "disk") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4536,7 +4529,7 @@ impl App {
                 let username = match Self::validate_required_param(&params, 0, "username") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4560,7 +4553,7 @@ impl App {
                 let username = match Self::validate_required_param(&params, 0, "username") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4576,7 +4569,7 @@ impl App {
                 let interface = match Self::validate_required_param(&params, 0, "interface") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4626,7 +4619,7 @@ impl App {
                 let action = match Self::validate_required_param(&params, 0, "action") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4674,7 +4667,7 @@ impl App {
                 let device = match Self::validate_required_param(&params, 1, "device") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4746,7 +4739,7 @@ impl App {
                 let target_user = match Self::validate_required_param(&params, 1, "target user") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4766,7 +4759,7 @@ impl App {
                 let repo_url = match Self::validate_required_param(&params, 0, "repository URL") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4774,7 +4767,7 @@ impl App {
                 let target_user = match Self::validate_required_param(&params, 1, "target user") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4796,7 +4789,7 @@ impl App {
                 let user = match Self::validate_required_param(&params, 0, "user") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
@@ -4804,7 +4797,7 @@ impl App {
                 let command = match Self::validate_required_param(&params, 1, "command") {
                     Ok(v) => v,
                     Err(e) => {
-                        let mut state = self.lock_state_mut()?;
+                        let mut state = self.lock_state()?;
                         state.status_message = e;
                         return Ok(());
                     }
