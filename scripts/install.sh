@@ -190,6 +190,15 @@ WANT_HOME_PARTITION="$(echo "$SEPARATE_HOME" | tr '[:upper:]' '[:lower:]')"
 WANT_SWAP="$(echo "$SWAP" | tr '[:upper:]' '[:lower:]')"
 [[ "$WANT_SWAP" == "yes" ]] || WANT_SWAP="no"
 
+# For RAID strategies, parse comma-separated INSTALL_DISK into RAID_DEVICES array
+if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
+    IFS=',' read -ra RAID_DEVICES <<< "$INSTALL_DISK"
+    export RAID_DEVICES
+    RAID_LEVEL="${RAID_LEVEL:-raid1}"
+    export RAID_LEVEL
+    log_info "RAID configuration: ${#RAID_DEVICES[@]} disks (${RAID_DEVICES[*]}), level: $RAID_LEVEL"
+fi
+
 # Export for strategy scripts
 export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP SWAP_SIZE
 export ROOT_SIZE HOME_SIZE
