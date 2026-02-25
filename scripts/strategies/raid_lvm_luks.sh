@@ -214,8 +214,8 @@ execute_raid_lvm_luks_partitioning() {
 
     # Save RAID configuration
     log_info "Saving RAID configuration"
-    mkdir -p /mnt/etc/mdadm
-    mdadm --detail --scan > /mnt/etc/mdadm/mdadm.conf
+    mkdir -p /mnt/etc
+    mdadm --detail --scan > /mnt/etc/mdadm.conf
 
     # Generate crypttab entry for boot-time unlocking
     log_info "Generating crypttab entry..."

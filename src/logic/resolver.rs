@@ -196,6 +196,12 @@ fn desktop_to_profile(de: DesktopEnvironment) -> Profile {
         DesktopEnvironment::Gnome => Profile::Gnome,
         DesktopEnvironment::Kde => Profile::Kde,
         DesktopEnvironment::Hyprland => Profile::Hyprland,
+        DesktopEnvironment::Sway => Profile::Sway,
+        DesktopEnvironment::I3 => Profile::I3,
+        DesktopEnvironment::Xfce => Profile::Xfce,
+        DesktopEnvironment::Cinnamon => Profile::Cinnamon,
+        DesktopEnvironment::Mate => Profile::Mate,
+        DesktopEnvironment::Budgie => Profile::Budgie,
     }
 }
 
@@ -485,5 +491,11 @@ mod tests {
         assert_eq!(desktop_to_profile(DesktopEnvironment::Gnome), Profile::Gnome);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Kde), Profile::Kde);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Hyprland), Profile::Hyprland);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Sway), Profile::Sway);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::I3), Profile::I3);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Xfce), Profile::Xfce);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Cinnamon), Profile::Cinnamon);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Mate), Profile::Mate);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Budgie), Profile::Budgie);
     }
 }

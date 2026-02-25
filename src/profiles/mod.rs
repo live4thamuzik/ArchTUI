@@ -14,6 +14,12 @@
 //! | Gnome     | GNOME desktop environment | GDM |
 //! | Kde       | KDE Plasma desktop | SDDM |
 //! | Hyprland  | Hyprland Wayland compositor | SDDM |
+//! | Sway      | Sway Wayland compositor | SDDM |
+//! | I3        | i3 window manager (X11) | LightDM |
+//! | Xfce      | XFCE desktop | LightDM |
+//! | Cinnamon  | Cinnamon desktop | LightDM |
+//! | Mate      | MATE desktop | LightDM |
+//! | Budgie    | Budgie desktop | LightDM |
 //!
 //! # Package List Philosophy
 //!
@@ -61,6 +67,18 @@ pub enum Profile {
     /// XFCE desktop environment.
     /// Lightweight, traditional desktop.
     Xfce,
+
+    /// Cinnamon desktop environment.
+    /// Traditional desktop based on GNOME technologies.
+    Cinnamon,
+
+    /// MATE desktop environment.
+    /// Traditional desktop forked from GNOME 2.
+    Mate,
+
+    /// Budgie desktop environment.
+    /// Modern, simple desktop by Solus.
+    Budgie,
 }
 
 impl Profile {
@@ -240,6 +258,60 @@ impl Profile {
                 "firefox",
                 "thunar-archive-plugin",
             ],
+
+            Profile::Cinnamon => &[
+                // Cinnamon desktop
+                "cinnamon",
+                "nemo-fileroller",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Mate => &[
+                // MATE desktop
+                "mate",
+                "mate-extra",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Budgie => &[
+                // Budgie desktop
+                "budgie-desktop",
+                "budgie-extras",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Utilities
+                "firefox",
+            ],
         }
     }
 
@@ -256,6 +328,9 @@ impl Profile {
             Profile::Sway => Some("sddm"),
             Profile::I3 => Some("lightdm"),
             Profile::Xfce => Some("lightdm"),
+            Profile::Cinnamon => Some("lightdm"),
+            Profile::Mate => Some("lightdm"),
+            Profile::Budgie => Some("lightdm"),
         }
     }
 
@@ -266,7 +341,8 @@ impl Profile {
         match self {
             Profile::Minimal => &["NetworkManager"],
             Profile::Gnome | Profile::Kde => &["NetworkManager"],
-            Profile::Hyprland | Profile::Sway | Profile::I3 | Profile::Xfce => {
+            Profile::Hyprland | Profile::Sway | Profile::I3 | Profile::Xfce
+            | Profile::Cinnamon | Profile::Mate | Profile::Budgie => {
                 &["NetworkManager"]
             }
         }
@@ -282,6 +358,15 @@ impl Profile {
         matches!(self, Profile::Hyprland | Profile::Sway | Profile::I3)
     }
 
+    /// Check if this profile is a traditional desktop environment.
+    pub fn is_traditional_de(&self) -> bool {
+        matches!(
+            self,
+            Profile::Gnome | Profile::Kde | Profile::Xfce
+            | Profile::Cinnamon | Profile::Mate | Profile::Budgie
+        )
+    }
+
     /// Get a human-readable description of the profile.
     pub fn description(&self) -> &'static str {
         match self {
@@ -292,6 +377,9 @@ impl Profile {
             Profile::Sway => "Sway Wayland compositor (i3-compatible)",
             Profile::I3 => "i3 window manager (X11 tiling)",
             Profile::Xfce => "XFCE desktop environment (lightweight)",
+            Profile::Cinnamon => "Cinnamon desktop environment (traditional)",
+            Profile::Mate => "MATE desktop environment (GNOME 2 fork)",
+            Profile::Budgie => "Budgie desktop environment (modern, simple)",
         }
     }
 }
