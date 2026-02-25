@@ -2813,9 +2813,13 @@ impl App {
                             encryption_value
                         );
                     }
-                    // Clear encryption password when encryption is disabled
+                    // Mark encryption password as N/A when encryption is disabled, clear when enabled
                     if encryption_value == "No" {
                         if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
+                            pass_opt.value = "N/A".to_string();
+                        }
+                    } else if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
+                        if pass_opt.value == "N/A" {
                             pass_opt.value = String::new();
                         }
                     }
@@ -3088,13 +3092,23 @@ impl App {
                 }
                 "Encryption" => {
                     if value.to_lowercase() == "no" {
-                        // Clear encryption password when encryption is disabled
+                        // Mark encryption password as N/A when encryption is disabled
                         if let Some(pass_option) = state
                             .config
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "Encryption Password")
                         {
+                            pass_option.value = "N/A".to_string();
+                        }
+                    } else if let Some(pass_option) = state
+                        .config
+                        .options
+                        .iter_mut()
+                        .find(|opt| opt.name == "Encryption Password")
+                    {
+                        // Restore password field when encryption is re-enabled
+                        if pass_option.value == "N/A" {
                             pass_option.value = String::new();
                         }
                     }

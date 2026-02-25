@@ -381,7 +381,13 @@ fn create_config_item(
     } else {
         // Special display logic for different field types
         match option.name.as_str() {
-            "User Password" | "Root Password" => "***".to_string(),
+            "User Password" | "Root Password" | "Encryption Password" => {
+                if option.value == "N/A" {
+                    "N/A".to_string()
+                } else {
+                    "***".to_string()
+                }
+            }
             "Additional Pacman Packages" | "Additional AUR Packages" => {
                 if option.value.is_empty() {
                     "[Press Enter]".to_string()
