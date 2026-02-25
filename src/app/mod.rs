@@ -2543,6 +2543,35 @@ impl App {
                             .to_string();
                 }
             }
+            "Separate Home Partition" => {
+                // Plain RAID strategies can't support separate home partitions
+                let is_plain_raid = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    let strat = state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Partitioning Strategy")
+                        .map(|opt| opt.value.clone())
+                        .unwrap_or_default();
+                    strat == "auto_raid" || strat == "auto_raid_luks"
+                };
+
+                if is_plain_raid {
+                    if let Ok(mut state) = self.lock_state_mut() {
+                        state.status_message =
+                            "Separate home not available for RAID without LVM."
+                                .to_string();
+                    }
+                } else {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                }
+            }
             _ => {
                 // Use predefined options for selection fields
                 let options = InputHandler::get_predefined_options(&option.name);
@@ -2848,7 +2877,7 @@ impl App {
                 }
                 "Separate Home Partition" => {
                     if value.to_lowercase() == "no" {
-                        // No home: root takes remaining, home size not applicable
+                        // No home: root takes remaining, home size/filesystem not applicable
                         if let Some(root_opt) = state
                             .config
                             .options
@@ -2864,6 +2893,14 @@ impl App {
                             .find(|opt| opt.name == "Home Size")
                         {
                             home_opt.value = "N/A".to_string();
+                        }
+                        if let Some(home_fs_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Home Filesystem")
+                        {
+                            home_fs_opt.value = "N/A".to_string();
                         }
                     } else if value.to_lowercase() == "yes" {
                         // With home: root gets fixed default, home takes remaining
@@ -2883,11 +2920,60 @@ impl App {
                         {
                             home_opt.value = "Remaining".to_string();
                         }
+                        // Restore home filesystem to match root filesystem
+                        let root_fs = state
+                            .config
+                            .options
+                            .iter()
+                            .find(|opt| opt.name == "Root Filesystem")
+                            .map(|opt| opt.value.clone())
+                            .unwrap_or_else(|| "ext4".to_string());
+                        if let Some(home_fs_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Home Filesystem")
+                        {
+                            home_fs_opt.value = root_fs;
+                        }
                     }
                 }
                 "Partitioning Strategy" => {
-                    // When switching to LVM without home, ensure root size is usable
-                    if value.contains("lvm") {
+                    let is_plain_raid = (value == "auto_raid" || value == "auto_raid_luks")
+                        && !value.contains("lvm");
+
+                    if is_plain_raid {
+                        // Plain RAID without LVM can't support separate home partitions
+                        // (data partition takes entire disk, no room for home partition)
+                        if let Some(home_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Separate Home Partition")
+                        {
+                            home_opt.value = "No".to_string();
+                        }
+                        // Cascade: root takes remaining, home not applicable
+                        if let Some(root_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Root Size")
+                        {
+                            root_opt.value = "Remaining".to_string();
+                        }
+                        for name in &["Home Size", "Home Filesystem"] {
+                            if let Some(opt) = state
+                                .config
+                                .options
+                                .iter_mut()
+                                .find(|o| o.name == *name)
+                            {
+                                opt.value = "N/A".to_string();
+                            }
+                        }
+                    } else if value.contains("lvm") {
+                        // When switching to LVM without home, ensure root size is usable
                         let home_enabled = state
                             .config
                             .options

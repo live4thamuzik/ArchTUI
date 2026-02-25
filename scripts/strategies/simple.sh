@@ -166,39 +166,15 @@ execute_simple_partitioning() {
     root_device=$(get_partition_path "$INSTALL_DISK" "$root_part_num")
     boot_device=$(get_partition_path "$INSTALL_DISK" "$boot_part_num")
 
-    # Handle Btrfs subvolumes if needed
+    # Mount root (setup_btrfs_subvolumes handles its own mount/remount cycle)
     if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
-        log_info "Setting up Btrfs subvolumes..."
-        # Temporarily mount to create subvolumes
-        mount "$root_device" /mnt
-        btrfs subvolume create /mnt/@
-        btrfs subvolume create /mnt/@var
-        btrfs subvolume create /mnt/@tmp
-        btrfs subvolume create /mnt/@snapshots
-        btrfs subvolume create /mnt/@cache
-        btrfs subvolume create /mnt/@log
-        if [ "$WANT_HOME_PARTITION" != "yes" ]; then
-            btrfs subvolume create /mnt/@home
-        fi
-        umount /mnt
-
-        # Remount with subvolume
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@ "$root_device" /mnt
-        mkdir -p /mnt/{var,tmp,.snapshots,boot,efi,var/cache,var/log}
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@var "$root_device" /mnt/var
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp "$root_device" /mnt/tmp
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots "$root_device" /mnt/.snapshots
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache "$root_device" /mnt/var/cache
-        mount -o compress=zstd,noatime,space_cache=v2,subvol=@log "$root_device" /mnt/var/log
-        if [ "$WANT_HOME_PARTITION" != "yes" ]; then
-            mkdir -p /mnt/home
-            mount -o compress=zstd,noatime,space_cache=v2,subvol=@home "$root_device" /mnt/home
-        fi
+        local include_home="yes"
+        [ "$WANT_HOME_PARTITION" = "yes" ] && include_home="no"
+        setup_btrfs_subvolumes "$root_device" "$include_home"
     else
-        # Standard mount for ext4/xfs
         safe_mount "$root_device" "/mnt"
-        mkdir -p /mnt/boot /mnt/efi
     fi
+    mkdir -p /mnt/boot /mnt/efi
 
     # Mount boot
     safe_mount "$boot_device" "/mnt/boot"
