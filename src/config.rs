@@ -143,7 +143,7 @@ impl Default for Configuration {
                     "How to partition the disk",
                     "",
                 ),
-                ConfigOption::new("Encryption", false, "Enable disk encryption", "Auto"),
+                ConfigOption::new("Encryption", false, "Enable disk encryption", "No"),
                 ConfigOption::new(
                     "Encryption Password",
                     false,
@@ -163,8 +163,8 @@ impl Default for Configuration {
                     "Home partition filesystem",
                     "ext4",
                 ),
-                ConfigOption::new("Swap", false, "Enable swap partition", "Yes"),
-                ConfigOption::new("Swap Size", false, "Swap partition size", "2GB"),
+                ConfigOption::new("Swap", false, "Enable swap partition", "No"),
+                ConfigOption::new("Swap Size", false, "Swap partition size", "N/A"),
                 ConfigOption::new("Root Size", false, "Root partition size", "50GB"),
                 ConfigOption::new("Home Size", false, "Home partition size", "Remaining"),
                 ConfigOption::new("Btrfs Snapshots", false, "Enable Btrfs snapshots", "No"),
@@ -188,7 +188,7 @@ impl Default for Configuration {
                     "Time Sync (NTP)",
                     false,
                     "Enable NTP time synchronization",
-                    "Yes",
+                    "No",
                 ),
                 // System Packages (22-26)
                 ConfigOption::new(
@@ -198,7 +198,7 @@ impl Default for Configuration {
                     "United States",
                 ),
                 ConfigOption::new("Kernel", true, "Linux kernel to install", "linux"),
-                ConfigOption::new("Multilib", false, "Enable multilib repository", "Yes"),
+                ConfigOption::new("Multilib", false, "Enable multilib repository", "No"),
                 ConfigOption::new(
                     "Additional Pacman Packages",
                     false,
@@ -213,12 +213,12 @@ impl Default for Configuration {
                 ConfigOption::new("User Password", true, "User account password", ""),
                 ConfigOption::new("Root Password", true, "Root account password", ""),
                 // Package Management (31-33)
-                ConfigOption::new("AUR Helper", false, "AUR package helper", "paru"),
+                ConfigOption::new("AUR Helper", false, "AUR package helper", "none"),
                 ConfigOption::new("Additional AUR Packages", false, "Extra AUR packages", ""),
                 ConfigOption::new("Flatpak", false, "Enable Flatpak support", "No"),
                 // Boot Configuration (34-37)
                 ConfigOption::new("Bootloader", true, "Boot loader", "grub"),
-                ConfigOption::new("OS Prober", false, "Enable OS detection", "Yes"),
+                ConfigOption::new("OS Prober", false, "Enable OS detection", "No"),
                 ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
                 ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "PolyDark"),
                 // Desktop Environment (38-39)
@@ -227,7 +227,7 @@ impl Default for Configuration {
                 // Boot Splash and Final Setup (40-44)
                 ConfigOption::new("Plymouth", false, "Boot splash screen", "No"),
                 ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "arch-glow"),
-                ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot", "Yes"),
+                ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot", "No"),
                 ConfigOption::new(
                     "Git Repository",
                     false,
