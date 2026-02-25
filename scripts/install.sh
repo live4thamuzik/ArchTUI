@@ -366,6 +366,41 @@ validate_configuration() {
         return 1
     fi
 
+    # Validate partitioning strategy
+    case "$PARTITIONING_STRATEGY" in
+        auto_simple|auto_simple_luks|auto_lvm|auto_luks_lvm|auto_raid|auto_raid_luks|auto_raid_lvm|auto_raid_lvm_luks|manual) ;;
+        *) log_error "Unknown partitioning strategy: $PARTITIONING_STRATEGY"; return 1 ;;
+    esac
+
+    # Validate filesystem types
+    for _fs_check in "$ROOT_FILESYSTEM" "$HOME_FILESYSTEM"; do
+        case "$_fs_check" in
+            ext4|xfs|btrfs|fat32|"") ;;
+            *) log_error "Unknown filesystem type: $_fs_check"; return 1 ;;
+        esac
+    done
+
+    # Validate bootloader
+    case "$BOOTLOADER" in
+        grub|systemd-boot) ;;
+        *) log_error "Unknown bootloader: $BOOTLOADER"; return 1 ;;
+    esac
+
+    # LUKS strategies require encryption password
+    if [[ "$PARTITIONING_STRATEGY" == *"luks"* && -z "${ENCRYPTION_PASSWORD:-}" ]]; then
+        log_error "LUKS strategy requires ENCRYPTION_PASSWORD to be set"
+        return 1
+    fi
+
+    # RAID strategies require at least 2 disks
+    if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
+        IFS=',' read -ra _raid_count_check <<< "$INSTALL_DISK"
+        if [[ ${#_raid_count_check[@]} -lt 2 ]]; then
+            log_error "RAID strategies require at least 2 disks (found ${#_raid_count_check[@]})"
+            return 1
+        fi
+    fi
+
     # systemd-boot requires kernels on FAT32 (ESP at /boot)
     # Our auto_* strategies create ESP at /efi + ext4 /boot — incompatible
     if [[ "$BOOTLOADER" == "systemd-boot" && "$PARTITIONING_STRATEGY" == auto_* ]]; then

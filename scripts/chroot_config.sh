@@ -1360,8 +1360,8 @@ configure_snapper() {
 
     # Install snapper and related packages
     pacman -S --noconfirm --needed snapper snap-pac || {
-        log_warn "Failed to install snapper packages"
-        return 0
+        log_error "Failed to install snapper packages"
+        return 1
     }
 
     # Install grub-btrfs for boot integration if using GRUB
@@ -1391,16 +1391,24 @@ configure_snapper() {
     if btrfs subvolume delete /.snapshots 2>/dev/null; then
         log_info "Removed snapper-created .snapshots subvolume"
     fi
-    mkdir -p /.snapshots
+    mkdir -p /.snapshots || {
+        log_error "Failed to create /.snapshots directory"
+        return 1
+    }
 
     # Remount @snapshots subvolume
     if grep -q "@snapshots" /etc/fstab; then
-        mount /.snapshots || log_warn "Failed to remount @snapshots"
+        mount /.snapshots || {
+            log_error "Failed to remount @snapshots subvolume"
+            return 1
+        }
         log_info "Remounted @snapshots subvolume"
+    else
+        log_warn "No @snapshots entry in fstab — snapshots will not use dedicated subvolume"
     fi
 
     # Set proper permissions
-    chmod 750 /.snapshots
+    chmod 750 /.snapshots || log_warn "Failed to set permissions on /.snapshots"
 
     # Configure snapper settings
     if [[ -f /etc/snapper/configs/root ]]; then
@@ -1459,12 +1467,12 @@ configure_snapper() {
     fi
 
     # Enable snapper timers
-    systemctl enable snapper-timeline.timer 2>/dev/null || true
-    systemctl enable snapper-cleanup.timer 2>/dev/null || true
+    systemctl enable snapper-timeline.timer 2>/dev/null || log_warn "Failed to enable snapper-timeline.timer"
+    systemctl enable snapper-cleanup.timer 2>/dev/null || log_warn "Failed to enable snapper-cleanup.timer"
 
     # Enable grub-btrfs path monitoring if installed
     if [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]]; then
-        systemctl enable grub-btrfsd.service 2>/dev/null || true
+        systemctl enable grub-btrfsd.service 2>/dev/null || log_warn "Failed to enable grub-btrfsd.service"
         log_info "Enabled grub-btrfs daemon for boot menu updates"
     fi
 
