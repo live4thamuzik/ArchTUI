@@ -283,6 +283,7 @@ impl Installer {
                     .installer_output
                     .push(format!("ERROR: Failed to wait for installer: {}", e));
                 state.status_message = format!("Installation error: {}", e);
+                state.mode = crate::app::AppMode::Complete;
             }
             }
         });

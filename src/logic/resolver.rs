@@ -118,7 +118,12 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         packages.push("btrfs-progs");
     }
 
-    // 10. Additional user-specified packages
+    // 10. RAID tools (if RAID strategy selected)
+    if config.partitioning_strategy.requires_raid() {
+        packages.push("mdadm");
+    }
+
+    // 11. Additional user-specified packages
     let additional = parse_package_list(&config.additional_packages);
 
     // Deduplicate and sort
