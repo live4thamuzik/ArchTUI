@@ -342,6 +342,9 @@ impl UiRenderer {
                         AppMode::NetworkTools => {
                             menus::render_network_tools_menu_in_area(f, state, content_area, &self.header)
                         }
+                        AppMode::GuidedInstaller => {
+                            installer::render_configuration_ui_in_area(f, state, content_area, &self.header)
+                        }
                         _ => menus::render_tools_menu_in_area(f, state, content_area, &self.header),
                     }
                 } else {

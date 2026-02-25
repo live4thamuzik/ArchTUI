@@ -213,9 +213,10 @@ impl FloatingWindow {
         let inner_area = block.inner(content_area);
         f.render_widget(block, content_area);
 
-        // Render content
+        // Render content (clamp so scroll can't exceed content bounds)
         let visible_height = inner_area.height as usize;
-        let start = self.scroll_state.offset;
+        let max_offset = content.len().saturating_sub(visible_height);
+        let start = self.scroll_state.offset.min(max_offset);
         let end = (start + visible_height).min(content.len());
 
         let visible_lines: Vec<Line> = content[start..end].to_vec();

@@ -61,7 +61,8 @@ execute_raid_lvm_luks_partitioning() {
     partprobe
     
     # Create RAID arrays
-    log_info "Creating RAID arrays"
+    local raid_level="${RAID_LEVEL:-raid1}"
+    log_info "Creating RAID arrays (level: $raid_level)"
     
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Create RAID arrays for XBOOTLDR and data
@@ -69,21 +70,20 @@ execute_raid_lvm_luks_partitioning() {
         DATA_PARTS=()
         
         for disk in "${RAID_DEVICES[@]}"; do
-            XBOOTLDR_PARTS+=("${disk}2")
-            DATA_PARTS+=("${disk}3")
+            XBOOTLDR_PARTS+=("$(get_partition_path "$disk" 2)")
+            DATA_PARTS+=("$(get_partition_path "$disk" 3)")
         done
-        
+
         # Create XBOOTLDR RAID1 array
         log_info "Creating XBOOTLDR RAID1 array"
         mdadm --create --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
-        if [[ ${#RAID_DEVICES[@]} -eq 2 ]]; then
-            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        else
-            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        fi
+        mdadm --create --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+
+        # Wait for RAID arrays to be ready
+        mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
 
         # Format XBOOTLDR
         format_filesystem "/dev/md/XBOOTLDR" "ext4"
@@ -94,8 +94,8 @@ execute_raid_lvm_luks_partitioning() {
         DATA_PARTS=()
 
         for disk in "${RAID_DEVICES[@]}"; do
-            BOOT_PARTS+=("${disk}2")
-            DATA_PARTS+=("${disk}3")
+            BOOT_PARTS+=("$(get_partition_path "$disk" 2)")
+            DATA_PARTS+=("$(get_partition_path "$disk" 3)")
         done
 
         # Create boot RAID1 array
@@ -104,11 +104,10 @@ execute_raid_lvm_luks_partitioning() {
 
         # Create data RAID array
         log_info "Creating data RAID array"
-        if [[ ${#RAID_DEVICES[@]} -eq 2 ]]; then
-            mdadm --create --verbose --level=1 --raid-devices=2 /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        else
-            mdadm --create --verbose --level=5 --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
-        fi
+        mdadm --create --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+
+        # Wait for RAID arrays to be ready
+        mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
         
         # Format boot
         format_filesystem "/dev/md/BOOT" "ext4"
@@ -116,16 +115,16 @@ execute_raid_lvm_luks_partitioning() {
     
     # Set up LUKS encryption on data RAID array using helper function (non-interactive)
     local encrypted_dev
-    encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptdata")
+    encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptlvm")
     
     # Set up LVM on encrypted RAID array
     log_info "Setting up LVM on encrypted RAID array"
 
     # Create physical volume
-    pvcreate /dev/mapper/cryptdata || error_exit "Failed to create physical volume on encrypted RAID."
+    pvcreate /dev/mapper/cryptlvm || error_exit "Failed to create physical volume on encrypted RAID."
 
     # Create volume group
-    vgcreate archvg /dev/mapper/cryptdata || error_exit "Failed to create volume group on encrypted RAID."
+    vgcreate archvg /dev/mapper/cryptlvm || error_exit "Failed to create volume group on encrypted RAID."
 
     # Create swap logical volume FIRST (fixed size, before root/home)
     if [[ "$WANT_SWAP" == "yes" ]]; then
@@ -182,11 +181,13 @@ execute_raid_lvm_luks_partitioning() {
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Mount ESP and XBOOTLDR
         safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
-        safe_mount "${RAID_DEVICES[0]}1" "/mnt/efi"
+        local efi_part
+        efi_part=$(get_partition_path "${RAID_DEVICES[0]}" 1)
+        safe_mount "$efi_part" "/mnt/efi"
 
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/XBOOTLDR"
-        capture_device_info "efi" "${RAID_DEVICES[0]}1"
+        capture_device_info "efi" "$efi_part"
         capture_device_info "root" "/dev/archvg/root"
         capture_device_info "luks" "/dev/md/DATA"
     else
@@ -218,7 +219,7 @@ execute_raid_lvm_luks_partitioning() {
     # Generate crypttab entry for boot-time unlocking
     log_info "Generating crypttab entry..."
     mkdir -p /mnt/etc
-    generate_crypttab "/dev/md/DATA" "cryptdata"
+    generate_crypttab "/dev/md/DATA" "cryptlvm"
 
     log_info "RAID + LVM + LUKS partitioning completed successfully"
 }

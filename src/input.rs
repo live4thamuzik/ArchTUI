@@ -189,9 +189,11 @@ impl InputDialog {
                     scroll_state.move_down();
                 }
                 crossterm::event::KeyCode::Enter => {
-                    return InputResult::Confirm(
-                        available_disks[scroll_state.selected_index].clone(),
-                    );
+                    if !available_disks.is_empty() {
+                        return InputResult::Confirm(
+                            available_disks[scroll_state.selected_index].clone(),
+                        );
+                    }
                 }
                 crossterm::event::KeyCode::Esc => {
                     return InputResult::Cancel;
@@ -1271,6 +1273,13 @@ impl InputHandler {
             "Boot Mode" => BootMode::iter().map(|v| v.to_string()).collect(),
             "Secure Boot" => Toggle::iter().rev().map(|v| v.to_string()).collect(), // No first
             "Partitioning Strategy" => PartitionScheme::iter().map(|v| v.to_string()).collect(),
+            "RAID Level" => vec![
+                "raid0".to_string(),
+                "raid1".to_string(),
+                "raid5".to_string(),
+                "raid6".to_string(),
+                "raid10".to_string(),
+            ],
             "Encryption" => AutoToggle::iter().map(|v| v.to_string()).collect(),
             "Root Filesystem" => Filesystem::iter()
                 .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs))

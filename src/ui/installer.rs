@@ -335,7 +335,7 @@ pub fn render_completion_ui_in_area(
     f.render_widget(output_list, inner_area);
 
     // Navigation hint
-    let hint = Paragraph::new(" Press B to return to menu | Enter to return to menu | Q to quit ")
+    let hint = Paragraph::new(" Press Enter or B to return to menu | Q to quit ")
         .style(Style::default().fg(Colors::FG_MUTED))
         .alignment(Alignment::Center);
     f.render_widget(hint, chunks[4]);

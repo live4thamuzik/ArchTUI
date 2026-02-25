@@ -273,6 +273,12 @@ main() {
     log_info "Phase 4: Partitioning disk..."
     partition_disk || error_exit "Disk partitioning failed"
 
+    # Pre-flight: verify network connectivity before downloading packages
+    log_info "Verifying network connectivity..."
+    if ! curl -s --max-time 10 --head https://archlinux.org >/dev/null 2>&1; then
+        error_exit "No network connectivity — pacstrap requires internet access. Check your connection and try again."
+    fi
+
     # Phase 5: Install base system (pacstrap)
     log_info "Phase 5: Installing base system..."
     install_base_system || error_exit "Base system installation failed"

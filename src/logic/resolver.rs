@@ -299,7 +299,7 @@ mod tests {
         config.multilib = Toggle::No;
         let packages = resolve_packages(&config);
 
-        assert!(packages.contains(&"intel-ucode".to_string()));
+        assert!(packages.contains(&"xf86-video-intel".to_string()));
         assert!(packages.contains(&"mesa".to_string()));
         assert!(packages.contains(&"vulkan-intel".to_string()));
     }

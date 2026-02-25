@@ -143,6 +143,7 @@ impl Default for Configuration {
                     "How to partition the disk",
                     "",
                 ),
+                ConfigOption::new("RAID Level", false, "RAID array level", "N/A"),
                 ConfigOption::new("Encryption", false, "Enable disk encryption", "No"),
                 ConfigOption::new(
                     "Encryption Password",
@@ -259,6 +260,7 @@ impl Configuration {
                 "Keymap" => "KEYMAP",
                 "Disk" => "INSTALL_DISK",
                 "Partitioning Strategy" => "PARTITIONING_STRATEGY",
+                "RAID Level" => "RAID_LEVEL",
                 "Encryption" => "ENCRYPTION",
                 "Root Filesystem" => "ROOT_FILESYSTEM",
                 "Separate Home Partition" => "SEPARATE_HOME",

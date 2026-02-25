@@ -286,7 +286,7 @@ enable_base_services() {
     systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
 
     # Time synchronization
-    case "${TIME_SYNC:-systemd-timesyncd}" in
+    case "${TIME_SYNC:-No}" in
         "systemd-timesyncd"|"Yes")
             systemctl enable systemd-timesyncd.service 2>/dev/null || true
             ;;
@@ -295,6 +295,9 @@ enable_base_services() {
             ;;
         "chrony")
             systemctl enable chronyd.service 2>/dev/null || true
+            ;;
+        "No"|"")
+            log_info "Time synchronization disabled by user"
             ;;
     esac
 
@@ -802,7 +805,7 @@ configure_grub_theme() {
         return 0
     fi
 
-    local theme_name="${GRUB_THEME_SELECTION:-none}"
+    local theme_name="${GRUB_THEME_SELECTION:-PolyDark}"
     if [[ "$theme_name" == "none" || -z "$theme_name" ]]; then
         log_info "No GRUB theme selected"
         return 0

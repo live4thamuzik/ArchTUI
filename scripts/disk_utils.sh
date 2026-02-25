@@ -69,9 +69,28 @@ get_partition_path() {
 get_swap_size_mib() {
     # shellcheck disable=SC2120
 
-    # Priority 1: User-specified SWAP_SIZE from TUI (e.g., "2GB", "4096MB", "8G", "512M")
+    # Priority 1: User-specified SWAP_SIZE from TUI (e.g., "2GB", "4096MB", "8G", "512M", "Equal to RAM", "Double RAM")
     local user_swap="${SWAP_SIZE:-}"
     if [[ -n "$user_swap" ]]; then
+        # Handle sentinel values first
+        local upper_swap="${user_swap^^}"
+        if [[ "$upper_swap" == "EQUAL TO RAM" || "$upper_swap" == "DOUBLE RAM" ]]; then
+            local ram_kb
+            ram_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+            local ram_mib=$(( ram_kb / 1024 ))
+            if (( ram_mib == 0 )); then
+                log_warn "Cannot detect RAM size, falling back to default swap"
+                echo "$DEFAULT_SWAP_SIZE_MIB"
+                return
+            fi
+            if [[ "$upper_swap" == "DOUBLE RAM" ]]; then
+                echo $(( ram_mib * 2 ))
+            else
+                echo "$ram_mib"
+            fi
+            return
+        fi
+
         local size_val size_unit
         # Extract numeric part and unit
         size_val="${user_swap//[^0-9]/}"
