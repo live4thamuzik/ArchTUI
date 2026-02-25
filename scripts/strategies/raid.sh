@@ -123,6 +123,11 @@ execute_raid_partitioning() {
         safe_mount "/dev/md0" "/mnt"
     fi
     
+    # Create swap file if requested (non-LVM RAID uses swapfile since array is a single device)
+    if [ "$WANT_SWAP" = "yes" ]; then
+        create_swapfile "$(get_swap_size_mib)"
+    fi
+
     # Capture UUIDs for bootloader config
     ROOT_UUID=$(get_device_uuid "/dev/md0")
     export ROOT_UUID

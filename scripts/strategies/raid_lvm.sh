@@ -117,16 +117,17 @@ execute_raid_lvm_partitioning() {
     log_info "Setting up LVM on RAID array"
 
     # Create physical volume
-    pvcreate /dev/md/DATA
+    pvcreate /dev/md/DATA || error_exit "Failed to create physical volume on RAID array."
 
     # Create volume group
-    vgcreate archvg /dev/md/DATA
+    vgcreate archvg /dev/md/DATA || error_exit "Failed to create volume group on RAID array."
 
     # Create swap logical volume FIRST (fixed size, before root/home)
     if [[ "$WANT_SWAP" == "yes" ]]; then
         log_info "Creating swap logical volume"
-        lvcreate -L "$(get_swap_size_mib)M" -n swap archvg
-        mkswap /dev/archvg/swap
+        lvcreate -L "$(get_swap_size_mib)M" -n swap archvg || error_exit "Failed to create swap logical volume."
+        mkswap /dev/archvg/swap || error_exit "Failed to create swap filesystem."
+        swapon /dev/archvg/swap || log_warn "Failed to activate swap"
         SWAP_UUID=$(get_device_uuid "/dev/archvg/swap")
         export SWAP_UUID
     fi
@@ -141,22 +142,22 @@ execute_raid_lvm_partitioning() {
             log_warn "Root=Remaining with separate home: falling back to ${DEFAULT_ROOT_SIZE_MIB}MiB root"
             root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
         fi
-        lvcreate -L "${root_size_mib}M" -n root archvg
+        lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
 
         log_info "Creating home logical volume"
         local home_size_mib
         home_size_mib=$(get_home_size_mib)
         if [[ "$home_size_mib" == "REMAINING" ]]; then
-            lvcreate -l 100%FREE -n home archvg
+            lvcreate -l 100%FREE -n home archvg || error_exit "Failed to create home logical volume."
         else
-            lvcreate -L "${home_size_mib}M" -n home archvg
+            lvcreate -L "${home_size_mib}M" -n home archvg || error_exit "Failed to create home logical volume."
         fi
         format_filesystem "/dev/archvg/home" "$HOME_FILESYSTEM_TYPE"
     else
         if [[ "$root_size_mib" == "REMAINING" ]]; then
-            lvcreate -l 100%FREE -n root archvg
+            lvcreate -l 100%FREE -n root archvg || error_exit "Failed to create root logical volume."
         else
-            lvcreate -L "${root_size_mib}M" -n root archvg
+            lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
         fi
     fi
 
@@ -170,24 +171,21 @@ execute_raid_lvm_partitioning() {
         [[ "$WANT_HOME_PARTITION" == "yes" ]] && include_home="no"
         setup_btrfs_subvolumes "/dev/archvg/root" "$include_home"
     else
-        mount /dev/archvg/root /mnt
+        safe_mount "/dev/archvg/root" "/mnt"
     fi
-    
+
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Mount ESP and XBOOTLDR
-        mkdir -p /mnt/efi /mnt/boot
-        mount /dev/md/XBOOTLDR /mnt/boot
-        
-        # Mount ESP on first disk
-        mount "${RAID_DEVICES[0]}1" /mnt/efi
-        
+        safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
+        safe_mount "${RAID_DEVICES[0]}1" "/mnt/efi"
+
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/XBOOTLDR"
+        capture_device_info "efi" "${RAID_DEVICES[0]}1"
         capture_device_info "root" "/dev/archvg/root"
     else
         # BIOS: Mount boot
-        mkdir -p /mnt/boot
-        mount /dev/md/BOOT /mnt/boot
+        safe_mount "/dev/md/BOOT" "/mnt/boot"
 
         # Capture UUIDs for configuration
         capture_device_info "boot" "/dev/md/BOOT"
@@ -196,8 +194,7 @@ execute_raid_lvm_partitioning() {
 
     # Mount home if created
     if [[ "$WANT_HOME_PARTITION" == "yes" ]]; then
-        mkdir -p /mnt/home
-        mount /dev/archvg/home /mnt/home
+        safe_mount "/dev/archvg/home" "/mnt/home"
         capture_device_info "home" "/dev/archvg/home"
     fi
     
