@@ -113,18 +113,14 @@ execute_raid_partitioning() {
     # Format RAID array
     format_filesystem "/dev/md0" "$ROOT_FILESYSTEM_TYPE"
     capture_device_info "root" "/dev/md0"
-    safe_mount "/dev/md0" "/mnt"
-    
-    # Handle Btrfs subvolumes if needed
+
+    # Mount root (setup_btrfs_subvolumes handles its own mount/remount cycle)
     if [ "$ROOT_FILESYSTEM_TYPE" = "btrfs" ]; then
-        log_info "Creating Btrfs subvolumes..."
-        btrfs subvolume create /mnt/@
-        btrfs subvolume create /mnt/@home
-        btrfs subvolume create /mnt/@var
-        btrfs subvolume create /mnt/@tmp
-        btrfs subvolume create /mnt/@snapshots
-        btrfs subvolume create /mnt/@cache
-        btrfs subvolume create /mnt/@log
+        local include_home="yes"
+        [ "$WANT_HOME_PARTITION" = "yes" ] && include_home="no"
+        setup_btrfs_subvolumes "/dev/md0" "$include_home"
+    else
+        safe_mount "/dev/md0" "/mnt"
     fi
     
     # Separate home partition (if requested)

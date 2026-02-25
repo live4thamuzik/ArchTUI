@@ -305,11 +305,20 @@ pub mod gpu_packages {
     /// Nvidia proprietary driver packages.
     pub const NVIDIA: &[&str] = &["nvidia", "nvidia-utils", "nvidia-settings", "lib32-nvidia-utils"];
 
+    /// Nvidia open-source kernel module packages.
+    pub const NVIDIA_OPEN: &[&str] = &["nvidia-open", "nvidia-utils", "nvidia-settings", "lib32-nvidia-utils"];
+
     /// AMD open-source driver packages (mesa-based).
     pub const AMD: &[&str] = &["mesa", "xf86-video-amdgpu", "vulkan-radeon", "lib32-mesa"];
 
     /// Intel integrated graphics packages.
     pub const INTEL: &[&str] = &["mesa", "intel-ucode", "vulkan-intel", "lib32-mesa"];
+
+    /// Nouveau open-source Nvidia driver packages.
+    pub const NOUVEAU: &[&str] = &["mesa", "xf86-video-nouveau", "lib32-mesa"];
+
+    /// No GPU driver packages.
+    pub const NONE: &[&str] = &[];
 
     /// Fallback packages when GPU is auto-detected at runtime.
     pub const AUTO: &[&str] = &["mesa"];

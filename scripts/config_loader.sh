@@ -67,6 +67,8 @@ load_config_from_json() {
     export ENCRYPTION_PASSWORD="$(jq -r '.encryption_password // ""' "$config_file")"
     export SWAP="$(jq -r '.swap // "Yes"' "$config_file")"
     export SWAP_SIZE="$(jq -r '.swap_size // "2GB"' "$config_file")"
+    export ROOT_SIZE="$(jq -r '.root_size // "50GB"' "$config_file")"
+    export HOME_SIZE="$(jq -r '.home_size // "Remaining"' "$config_file")"
     export TIMEZONE_REGION="$(jq -r '.timezone_region // "UTC"' "$config_file")"
     export TIMEZONE="$(jq -r '.timezone // "UTC"' "$config_file")"
     export LOCALE="$(jq -r '.locale // "en_US.UTF-8"' "$config_file")"
@@ -102,8 +104,12 @@ load_config_from_json() {
     # Convert TUI variables to internal Bash variables (as done in install.sh)
     export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
     export HOME_FILESYSTEM_TYPE="$HOME_FILESYSTEM"
-    export WANT_HOME_PARTITION="$SEPARATE_HOME"
-    export WANT_SWAP="$SWAP"
+    WANT_HOME_PARTITION="$(echo "$SEPARATE_HOME" | tr '[:upper:]' '[:lower:]')"
+    [[ "$WANT_HOME_PARTITION" == "yes" ]] || WANT_HOME_PARTITION="no"
+    export WANT_HOME_PARTITION
+    WANT_SWAP="$(echo "$SWAP" | tr '[:upper:]' '[:lower:]')"
+    [[ "$WANT_SWAP" == "yes" ]] || WANT_SWAP="no"
+    export WANT_SWAP
     export WANT_SEPARATE_BOOT="$([ "$BOOT_MODE" = "UEFI" ] && echo "yes" || echo "no")"
 
     # Legacy compatibility aliases

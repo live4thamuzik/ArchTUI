@@ -481,6 +481,8 @@ mod tests {
         assert!(env_vars.contains(&("SYSTEM_HOSTNAME".to_string(), "archtest".to_string())));
         assert!(env_vars.contains(&("MAIN_USERNAME".to_string(), "testuser".to_string())));
         assert!(env_vars.contains(&("ROOT_FILESYSTEM".to_string(), "ext4".to_string())));
+        assert!(env_vars.contains(&("ROOT_SIZE".to_string(), "50GB".to_string())));
+        assert!(env_vars.contains(&("HOME_SIZE".to_string(), "Remaining".to_string())));
     }
 
     #[test]
@@ -602,6 +604,8 @@ mod tests {
         assert_eq!(loaded.desktop_environment, original.desktop_environment);
         assert_eq!(loaded.display_manager, original.display_manager);
         assert_eq!(loaded.plymouth_theme, original.plymouth_theme);
+        assert_eq!(loaded.root_size, original.root_size);
+        assert_eq!(loaded.home_size, original.home_size);
     }
 
     #[test]

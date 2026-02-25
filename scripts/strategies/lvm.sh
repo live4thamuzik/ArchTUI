@@ -62,6 +62,10 @@ execute_lvm_partitioning() {
     if [ "$WANT_SWAP" = "yes" ]; then
         local swap_size_mib=$(get_swap_size_mib)
         create_swap_partition "$INSTALL_DISK" "$part_num" "$swap_size_mib"
+        local swap_device
+        swap_device=$(get_partition_path "$INSTALL_DISK" "$part_num")
+        SWAP_UUID=$(get_device_uuid "$swap_device")
+        export SWAP_UUID
         current_start_mib=$((current_start_mib + swap_size_mib))
         part_num=$((part_num + 1))
     fi

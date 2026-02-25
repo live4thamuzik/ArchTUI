@@ -121,22 +121,15 @@ execute_raid_luks_partitioning() {
     log_info "Formatting encrypted RAID array"
     format_filesystem "/dev/mapper/cryptdata" "$ROOT_FILESYSTEM_TYPE"
     
-    # Create swap if requested
-    if [[ "$WANT_SWAP" == "yes" ]]; then
-        log_info "Creating swap on encrypted RAID array"
-        if [[ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]]; then
-            # Create swap subvolume for Btrfs
-            mount /dev/mapper/cryptdata /mnt
-            btrfs subvolume create /mnt/@swap
-            umount /mnt
-        fi
-        # Note: For non-btrfs, swap will be created as a file or using LVM on the encrypted volume
-        # Creating a separate LUKS device for swap on the same RAID array is not practical
-    fi
-    
     # Mount filesystems
     log_info "Mounting filesystems"
-    mount /dev/mapper/cryptdata /mnt
+    if [[ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]]; then
+        local include_home="yes"
+        [[ "$WANT_HOME_PARTITION" == "yes" ]] && include_home="no"
+        setup_btrfs_subvolumes "/dev/mapper/cryptdata" "$include_home"
+    else
+        mount /dev/mapper/cryptdata /mnt
+    fi
     
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
         # UEFI: Mount ESP and XBOOTLDR
