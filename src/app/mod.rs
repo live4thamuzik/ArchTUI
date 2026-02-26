@@ -1583,7 +1583,7 @@ impl App {
                     }
                     3 => {
                         // Network Diagnostics - no parameters needed
-                        let sa = NetworkDiagnosticsArgs { action: "basic".into() };
+                        let sa = NetworkDiagnosticsArgs { action: "info".into() };
                         self.execute_via_script_args(
                             sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
                             "network diagnostics", sa.is_destructive(), true,
@@ -2437,7 +2437,7 @@ impl App {
             }
             "Additional Pacman Packages" | "Additional AUR Packages" => {
                 self.input_handler
-                    .start_package_selection(option.name.clone(), option.value);
+                    .start_package_selection(option.name.clone(), option.get_value());
             }
             "Timezone Region" => {
                 let options = InputHandler::get_predefined_options(&option.name);

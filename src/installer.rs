@@ -281,6 +281,9 @@ impl Installer {
                         "Installation failed with exit code: {}",
                         exit_code
                     ));
+                    state.installer_output.push(
+                        "Check /var/log/archtui/ or /tmp/install-*.log for full details".to_string()
+                    );
                     state.mode = crate::app::AppMode::Complete;
                 }
             }

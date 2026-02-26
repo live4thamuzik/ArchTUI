@@ -1,6 +1,6 @@
 #!/bin/bash
 # network_diagnostics.sh - Comprehensive network diagnostics
-# Usage: ./network_diagnostics.sh --action basic|detailed|troubleshoot
+# Usage: ./network_diagnostics.sh --action info|basic|detailed|troubleshoot
 
 set -euo pipefail
 
@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help)
-            echo "Usage: $0 --action <basic|detailed|troubleshoot>"
+            echo "Usage: $0 --action <info|basic|detailed|troubleshoot>"
             echo "Comprehensive network diagnostics"
             exit 0
             ;;
@@ -51,6 +51,44 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Function to show structured interface summary (static info only, no tests)
+show_interface_summary() {
+    log_info "Network Interfaces:"
+    echo
+
+    for iface in $(ip -o link show | awk -F': ' '{print $2}' | grep -v '^lo$'); do
+        local state mac ip_addr cidr broadcast
+        state=$(ip -o link show "$iface" | grep -o 'state [A-Z]*' | awk '{print $2}')
+        mac=$(ip -o link show "$iface" | grep -oP 'link/ether \K[^ ]+')
+        ip_addr=$(ip -4 -o addr show "$iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+        cidr=$(ip -4 -o addr show "$iface" 2>/dev/null | awk '{print $4}' | cut -d/ -f2 | head -1)
+        broadcast=$(ip -4 -o addr show "$iface" 2>/dev/null | grep -oP 'brd \K[^ ]+' | head -1)
+
+        echo "  Interface:  $iface"
+        echo "  State:      ${state:-UNKNOWN}"
+        echo "  MAC:        ${mac:-N/A}"
+        echo "  IP:         ${ip_addr:-N/A}"
+        echo "  Broadcast:  ${broadcast:-N/A}"
+        echo "  Subnet:     /${cidr:-N/A}"
+        echo
+    done
+
+    # Default gateway
+    local gateway
+    gateway=$(ip route show default 2>/dev/null | awk '{print $3}' | head -1)
+    echo "  Gateway:    ${gateway:-N/A}"
+}
+
+# Function to show DNS configuration (nameservers only, no resolution tests)
+show_dns_config() {
+    log_info "DNS Servers:"
+    if [[ -f /etc/resolv.conf ]]; then
+        grep '^nameserver' /etc/resolv.conf | awk '{print "  " $2}'
+    else
+        echo "  N/A"
+    fi
+}
 
 # Function to show network interfaces
 show_interfaces() {
@@ -272,6 +310,13 @@ log_info "Network Diagnostics - $(date)"
 echo "=========================================="
 
 case "$ACTION" in
+    info)
+        # Static network info only — no tests
+        show_interface_summary
+        echo
+        show_dns_config
+        ;;
+
     basic)
         show_interfaces
         echo
@@ -306,7 +351,7 @@ case "$ACTION" in
         ;;
     
     *)
-        error_exit "Invalid action: $ACTION. Use basic, detailed, or troubleshoot"
+        error_exit "Invalid action: $ACTION. Use info, basic, detailed, or troubleshoot"
         ;;
 esac
 

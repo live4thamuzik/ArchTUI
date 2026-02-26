@@ -60,6 +60,8 @@ trap cleanup_on_exit EXIT
 # Signal traps: exit with 128+signal to trigger EXIT trap (avoids double cleanup)
 trap 'exit 143' SIGTERM
 trap 'exit 130' SIGINT
+# ERR trap: print file:line context before set -e kills the script
+trap 'echo "FATAL: Command failed at ${BASH_SOURCE[0]}:${LINENO}: $(sed -n "${LINENO}p" "${BASH_SOURCE[0]}" 2>/dev/null || echo "unknown")" >&2' ERR
 
 # Debug: Show script startup
 echo "=== INSTALLATION ENGINE STARTED ==="
@@ -113,6 +115,10 @@ echo "Credentials validated from environment."
 
 # Initialize logging
 setup_logging
+
+echo "=========================================="
+echo "Log file: ${LOG_FILE:-/tmp/archtui-install.log}"
+echo "=========================================="
 
 # Set log level (can be overridden by environment variable)
 export LOG_LEVEL="${LOG_LEVEL:-INFO}"

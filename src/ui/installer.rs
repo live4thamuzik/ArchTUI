@@ -334,8 +334,8 @@ pub fn render_completion_ui_in_area(
     let output_list = List::new(tail);
     f.render_widget(output_list, inner_area);
 
-    // Navigation hint
-    let hint = Paragraph::new(" Press Enter or B to return to menu | Q to quit ")
+    // Navigation hint with log path
+    let hint = Paragraph::new(" Log: /var/log/archtui/ or /tmp/ | Enter/B = menu | Q = quit ")
         .style(Style::default().fg(Colors::FG_MUTED))
         .alignment(Alignment::Center);
     f.render_widget(hint, chunks[4]);
