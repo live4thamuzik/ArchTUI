@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-# Get script directory (we're running from /root inside chroot)
-SCRIPT_DIR="/root"
+# Get script directory (we're running from / inside chroot)
+SCRIPT_DIR="/"
 
 # Source utility functions if available (using source_or_die pattern)
 if [[ -f "$SCRIPT_DIR/utils.sh" ]]; then
