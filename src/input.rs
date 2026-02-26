@@ -306,8 +306,10 @@ impl InputDialog {
                                     // Extract package name from search result
                                     let package_name = &selected_result.name;
 
-                                    // Toggle selection
-                                    let is_already_selected = package_list.contains(package_name);
+                                    // Toggle selection (exact word match, not substring)
+                                    let is_already_selected = package_list
+                                        .split_whitespace()
+                                        .any(|p| p == package_name);
                                     if is_already_selected {
                                         // Remove package
                                         let new_list = package_list

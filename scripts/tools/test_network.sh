@@ -66,41 +66,55 @@ done
 # Default hosts for testing
 DEFAULT_HOSTS=("8.8.8.8" "1.1.1.1" "google.com" "archlinux.org")
 
-# Function to test ping connectivity
+# Function to test ping connectivity (verbose — shows command + output + return code)
 test_ping() {
     local target="$1"
-    log_info "Testing ping connectivity to $target..."
-    
-    if ping -c 3 -W "$TIMEOUT" "$target" >/dev/null 2>&1; then
-        log_success "Ping to $target successful"
+    log_info "$ ping -c 3 -W $TIMEOUT $target"
+    if ping -c 3 -W "$TIMEOUT" "$target"; then
+        log_success "  → Return: 0 (OK)"
         return 0
     else
-        log_error "Ping to $target failed"
+        local rc=$?
+        log_error "  → Return: $rc (FAILED)"
         return 1
     fi
 }
 
-# Function to test DNS resolution
+# Function to test DNS resolution (verbose — shows command + output + return code)
 test_dns() {
     local target="$1"
-    log_info "Testing DNS resolution for $target..."
+    log_info "$ getent hosts $target"
 
-    # Use getent (always available) for DNS resolution
     local ip=""
-    if ip=$(getent hosts "$target" 2>/dev/null | awk '{print $1; exit}'); then
-        if [[ -n "$ip" ]]; then
-            log_success "DNS resolution for $target successful: $ip"
+    if ip=$(getent hosts "$target" 2>&1); then
+        echo "$ip"
+        local resolved
+        resolved=$(echo "$ip" | awk '{print $1; exit}')
+        if [[ -n "$resolved" ]]; then
+            log_success "  → Return: 0 (OK) — resolved to $resolved"
             return 0
         fi
+    else
+        local rc=$?
+        echo "$ip"
+        log_error "  → Return: $rc (FAILED)"
     fi
 
     # Fallback to dig if available
     if command -v dig >/dev/null 2>&1; then
-        if ip=$(dig +short "$target" 2>/dev/null | head -1); then
-            if [[ -n "$ip" ]]; then
-                log_success "DNS resolution for $target successful: $ip"
+        log_info "$ dig +short $target"
+        if ip=$(dig +short "$target" 2>&1); then
+            echo "$ip"
+            local first
+            first=$(echo "$ip" | head -1)
+            if [[ -n "$first" ]]; then
+                log_success "  → Return: 0 (OK) — resolved to $first"
                 return 0
             fi
+        else
+            local rc=$?
+            echo "$ip"
+            log_error "  → Return: $rc (FAILED)"
         fi
     fi
 
@@ -108,28 +122,37 @@ test_dns() {
     return 1
 }
 
-# Function to test HTTP connectivity
+# Function to test HTTP connectivity (verbose — shows command + output + return code)
 test_http() {
     local target="$1"
-    log_info "Testing HTTP connectivity to $target..."
-    
+
     # Try curl first
     if command -v curl >/dev/null 2>&1; then
-        if curl -s --connect-timeout "$TIMEOUT" "http://$target" >/dev/null 2>&1; then
-            log_success "HTTP connectivity to $target successful (curl)"
+        log_info "$ curl -sv --connect-timeout $TIMEOUT http://$target"
+        if curl -sv --connect-timeout "$TIMEOUT" "http://$target" 2>&1 | head -30; then
+            log_success "  → Return: 0 (OK)"
             return 0
+        else
+            local rc=$?
+            log_error "  → Return: $rc (FAILED)"
+            return 1
         fi
     fi
-    
-    # Try wget if curl fails
+
+    # Try wget if curl not available
     if command -v wget >/dev/null 2>&1; then
-        if wget --timeout="$TIMEOUT" --spider "http://$target" >/dev/null 2>&1; then
-            log_success "HTTP connectivity to $target successful (wget)"
+        log_info "$ wget --timeout=$TIMEOUT --spider http://$target"
+        if wget --timeout="$TIMEOUT" --spider "http://$target" 2>&1; then
+            log_success "  → Return: 0 (OK)"
             return 0
+        else
+            local rc=$?
+            log_error "  → Return: $rc (FAILED)"
+            return 1
         fi
     fi
-    
-    log_error "HTTP connectivity to $target failed"
+
+    log_error "No HTTP client available (curl/wget)"
     return 1
 }
 
@@ -199,10 +222,6 @@ test_specific() {
 echo "=========================================="
 log_info "Network Connectivity Test - $(date)"
 echo "=========================================="
-
-# Show network information
-get_network_info
-echo
 
 # Determine targets
 if [[ -n "$HOST" ]]; then
