@@ -65,6 +65,8 @@ done
 
 # Default hosts for testing
 DEFAULT_HOSTS=("8.8.8.8" "1.1.1.1" "google.com" "archlinux.org")
+# HTTP targets — actual web servers only (DNS resolvers don't serve HTTP)
+HTTP_HOSTS=("google.com" "archlinux.org" "1.1.1.1")
 
 # Function to test ping connectivity (verbose — shows command + output + return code)
 test_ping() {
@@ -262,9 +264,14 @@ case "$ACTION" in
         fi
         echo
         
-        # Test HTTP
+        # Test HTTP — use web servers only (DNS resolvers don't serve port 80)
         log_info "=== HTTP TESTS ==="
-        if test_specific "http" "${targets[@]}"; then
+        if [[ -n "$HOST" ]]; then
+            http_targets=("$HOST")
+        else
+            http_targets=("${HTTP_HOSTS[@]}")
+        fi
+        if test_specific "http" "${http_targets[@]}"; then
             http_success=1
         fi
         echo
