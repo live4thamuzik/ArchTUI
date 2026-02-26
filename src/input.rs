@@ -369,13 +369,20 @@ impl InputDialog {
                                 };
 
                                 match result {
-                                    Ok(packages) => {
+                                    Ok(mut packages) => {
                                         if packages.is_empty() {
                                             output_lines.push(format!(
                                                 "No packages found matching: {}",
                                                 search_term
                                             ));
                                         } else {
+                                            // Sort: exact name match first, then alphabetical
+                                            let term = search_term.to_lowercase();
+                                            packages.sort_by(|a, b| {
+                                                let a_exact = a.name.to_lowercase() == term;
+                                                let b_exact = b.name.to_lowercase() == term;
+                                                b_exact.cmp(&a_exact).then(a.name.cmp(&b.name))
+                                            });
                                             search_results.extend(packages);
                                         }
                                     }
@@ -1208,15 +1215,7 @@ impl InputHandler {
     /// Start a package selection dialog
     pub fn start_package_selection(&mut self, field_name: String, current_packages: String) {
         let is_pacman = field_name.contains("Pacman");
-        let output_lines = vec![
-            "Available commands:".to_string(),
-            "".to_string(),
-            "search <term> - Search for packages".to_string(),
-            "add <package> - Add package to installation list".to_string(),
-            "remove <package> - Remove package from installation list".to_string(),
-            "list - Show current package list".to_string(),
-            "done - Finish package selection".to_string(),
-        ];
+        let output_lines = Vec::new();
 
         let input_type = InputType::PackageSelection {
             field_name: field_name.clone(),
