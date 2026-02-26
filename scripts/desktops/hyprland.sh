@@ -9,7 +9,7 @@ install_hyprland() {
     echo "Installing Hyprland Wayland Compositor..."
 
     # Install Hyprland core and utilities
-    pacman -S --noconfirm --needed \
+    pacman -S \
         hyprland \
         xdg-desktop-portal-hyprland \
         waybar \
@@ -21,7 +21,8 @@ install_hyprland() {
         slurp \
         wf-recorder \
         kitty \
-        sddm || {
+        sddm \
+        --noconfirm --needed || {
         echo "ERROR: Failed to install Hyprland packages"
         return 1
     }

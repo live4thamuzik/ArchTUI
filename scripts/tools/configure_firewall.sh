@@ -96,11 +96,11 @@ install_firewall() {
     case "$FIREWALL_TYPE" in
         iptables)
             log_info "Installing iptables..."
-            pacman -Sy --noconfirm iptables
+            pacman -Sy iptables --noconfirm
             ;;
         ufw)
             log_info "Installing UFW..."
-            pacman -Sy --noconfirm ufw
+            pacman -Sy ufw --noconfirm
             ;;
         *)
             error_exit "Invalid firewall type: $FIREWALL_TYPE. Use iptables or ufw"

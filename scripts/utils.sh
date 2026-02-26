@@ -285,7 +285,7 @@ check_and_install_dependencies() {
 
     if [[ ${#unique_packages[@]} -gt 0 ]]; then
         log_info "Installing: ${unique_packages[*]}"
-        if ! pacman -Sy --noconfirm "${unique_packages[@]}" 2>&1; then
+        if ! pacman -Sy "${unique_packages[@]}" --noconfirm 2>&1; then
             log_error "Failed to install dependencies: ${unique_packages[*]}"
             return 1
         fi

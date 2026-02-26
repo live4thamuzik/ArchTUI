@@ -9,11 +9,12 @@ install_xfce() {
     echo "Installing XFCE Desktop Environment..."
 
     # Install XFCE packages
-    pacman -S --noconfirm --needed \
+    pacman -S \
         xfce4 \
         xfce4-goodies \
         lightdm \
-        lightdm-gtk-greeter || {
+        lightdm-gtk-greeter \
+        --noconfirm --needed || {
         echo "ERROR: Failed to install XFCE packages"
         return 1
     }

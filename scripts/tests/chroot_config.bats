@@ -91,7 +91,7 @@ teardown() {
 }
 
 @test "configure_plymouth installs plymouth package when enabled" {
-    grep -q 'pacman -S --noconfirm --needed plymouth' "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q 'pacman -S plymouth --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_plymouth sets theme with plymouth-set-default-theme" {
@@ -111,7 +111,7 @@ teardown() {
 }
 
 @test "configure_snapper installs snapper packages" {
-    grep -q 'pacman -S --noconfirm --needed snapper snap-pac' "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q 'pacman -S snapper snap-pac --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_snapper creates snapper config for root" {
@@ -136,7 +136,7 @@ teardown() {
 }
 
 @test "configure_secure_boot installs sbctl" {
-    grep -q 'pacman -S --noconfirm --needed sbctl' "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q 'pacman -S sbctl --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_secure_boot creates keys" {

@@ -9,7 +9,7 @@ install_i3() {
     echo "Installing i3 Window Manager..."
 
     # Install i3 core and utilities
-    pacman -S --noconfirm --needed \
+    pacman -S \
         i3-wm \
         i3status \
         i3lock \
@@ -19,7 +19,8 @@ install_i3() {
         picom \
         alacritty \
         lightdm \
-        lightdm-gtk-greeter || {
+        lightdm-gtk-greeter \
+        --noconfirm --needed || {
         echo "ERROR: Failed to install i3 packages"
         return 1
     }

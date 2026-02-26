@@ -9,7 +9,7 @@ install_kde() {
     echo "Installing KDE Plasma Desktop Environment..."
 
     # Install KDE Plasma packages
-    pacman -S --noconfirm --needed plasma kde-applications sddm || {
+    pacman -S plasma kde-applications sddm --noconfirm --needed || {
         echo "ERROR: Failed to install KDE packages"
         return 1
     }

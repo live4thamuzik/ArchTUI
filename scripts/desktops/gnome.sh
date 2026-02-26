@@ -9,7 +9,7 @@ install_gnome() {
     echo "Installing GNOME Desktop Environment..."
 
     # Install GNOME packages
-    pacman -S --noconfirm --needed gnome gnome-extra || {
+    pacman -S gnome gnome-extra --noconfirm --needed || {
         echo "ERROR: Failed to install GNOME packages"
         return 1
     }

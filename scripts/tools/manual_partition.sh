@@ -89,7 +89,7 @@ fi
 # Check if cfdisk is available
 if ! command -v cfdisk >/dev/null 2>&1; then
     log_info "Installing util-linux (contains cfdisk)..."
-    pacman -Sy --noconfirm util-linux
+    pacman -Sy util-linux --noconfirm
 fi
 
 # Launch cfdisk
