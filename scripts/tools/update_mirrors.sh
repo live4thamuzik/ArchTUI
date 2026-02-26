@@ -47,6 +47,8 @@ source_or_die() {
 }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
+require_root
+
 # --- Argument Parsing ---
 LIMIT="20"
 SORT="rate"

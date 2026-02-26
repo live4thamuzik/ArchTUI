@@ -143,6 +143,13 @@ error_exit() {
     exit 1
 }
 
+# Require root privileges — exits with clear error if not root
+require_root() {
+    if [[ "$(id -u)" -ne 0 ]]; then
+        error_exit "This operation requires root privileges. Run with sudo or as root."
+    fi
+}
+
 execute_non_critical() {
     local desc="$1"
     shift

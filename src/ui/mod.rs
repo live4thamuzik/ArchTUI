@@ -305,7 +305,30 @@ impl UiRenderer {
                 menus::render_network_tools_menu_in_area(f, state, content_area, &self.header);
             }
             AppMode::ToolDialog => {
-                dialogs::render_tool_dialog_in_area(f, state, content_area);
+                // Render background menu, then tool dialog as overlay
+                if let Some(ref pre_mode) = state.pre_dialog_mode {
+                    match pre_mode {
+                        AppMode::DiskTools => {
+                            menus::render_disk_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::SystemTools => {
+                            menus::render_system_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::UserTools => {
+                            menus::render_user_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::NetworkTools => {
+                            menus::render_network_tools_menu_in_area(f, state, content_area, &self.header)
+                        }
+                        AppMode::GuidedInstaller => {
+                            installer::render_configuration_ui_in_area(f, state, content_area, &self.header)
+                        }
+                        _ => menus::render_tools_menu_in_area(f, state, content_area, &self.header),
+                    }
+                } else {
+                    menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                }
+                dialogs::render_tool_dialog(f, state);
             }
             AppMode::Installation => {
                 installer::render_installation_ui_in_area(f, state, content_area, &self.header);

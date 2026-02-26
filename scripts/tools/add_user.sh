@@ -35,6 +35,8 @@ source_or_die() {
 }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
+require_root
+
 # Default values
 USERNAME=""
 FULL_NAME=""

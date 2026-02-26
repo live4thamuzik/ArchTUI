@@ -30,6 +30,8 @@ source_or_die() {
 }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
+require_root
+
 # Default values
 ACTION=""
 ENABLE_ROOT_LOGIN=false

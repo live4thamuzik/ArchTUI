@@ -14,7 +14,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -80,53 +80,102 @@ pub fn render_file_browser(f: &mut Frame, state: &AppState) {
     }
 }
 
-/// Render tool dialog in specified area
-pub fn render_tool_dialog_in_area(f: &mut Frame, state: &AppState, area: Rect) {
-    // Render background
-    let bg = Block::default().style(Style::default().bg(Colors::SELECTED_FG));
-    f.render_widget(bg, area);
-
-    // Delegate to tool dialog renderer
-    render_tool_dialog(f, state);
+/// Convert snake_case tool name to Title Case display name
+/// Recognizes common acronyms: IP, EFI, SSH, URL, JSON, DNS, UUID, AUR, USB
+fn snake_to_title_case(s: &str) -> String {
+    s.split('_')
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            // Check for known acronyms (case-insensitive match)
+            match w.to_ascii_lowercase().as_str() {
+                "ip" => "IP".to_string(),
+                "efi" => "EFI".to_string(),
+                "ssh" => "SSH".to_string(),
+                "url" => "URL".to_string(),
+                "json" => "JSON".to_string(),
+                "dns" => "DNS".to_string(),
+                "uuid" => "UUID".to_string(),
+                "aur" => "AUR".to_string(),
+                "usb" => "USB".to_string(),
+                _ => {
+                    let mut chars = w.chars();
+                    match chars.next() {
+                        Some(c) => {
+                            let upper: String = c.to_uppercase().collect();
+                            format!("{}{}", upper, chars.as_str())
+                        }
+                        None => String::new(),
+                    }
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
-/// Render tool parameter dialog
+/// Render tool parameter dialog as a floating overlay
 pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
     if let Some(ref dialog) = state.tool_dialog {
         let area = f.area();
 
-        // Create a centered dialog box
+        // Centered dialog box — same sizing approach as FloatingWindow
         let dialog_width = (area.width * 3 / 4).min(80);
-        let dialog_height = (area.height * 3 / 4).min(20);
-        let dialog_x = (area.width - dialog_width) / 2;
-        let dialog_y = (area.height - dialog_height) / 2;
+        let param_count = dialog.parameters.len() as u16;
+        // Height: 2 border + params + 1 separator + 3 desc + 1 instructions
+        let dialog_height = (param_count + 7).min(area.height.saturating_sub(4));
+        let dialog_x = area.width.saturating_sub(dialog_width) / 2;
+        let dialog_y = area.height.saturating_sub(dialog_height) / 2;
 
         let dialog_rect = Rect::new(dialog_x, dialog_y, dialog_width, dialog_height);
 
-        // Draw dialog background
-        f.render_widget(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!("Configure {}", dialog.tool_name))
-                .style(Style::default().bg(Colors::FG_MUTED)),
-            dialog_rect,
+        // Clear whatever is underneath
+        f.render_widget(Clear, dialog_rect);
+
+        // Title: "Configure Network" instead of "Configure configure_network"
+        let title = format!(" {} ", snake_to_title_case(&dialog.tool_name));
+
+        // Outer block — matches FloatingWindow style: cyan borders, dark bg
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Colors::PRIMARY))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Colors::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(Colors::BG_PRIMARY));
+        f.render_widget(block, dialog_rect);
+
+        // Inner area (inside borders)
+        let inner = Rect::new(
+            dialog_rect.x + 1,
+            dialog_rect.y + 1,
+            dialog_rect.width.saturating_sub(2),
+            dialog_rect.height.saturating_sub(2),
         );
 
-        // Render parameter list
-        let param_area = Rect::new(
-            dialog_x + 2,
-            dialog_y + 2,
-            dialog_width.saturating_sub(4),
-            dialog_height.saturating_sub(6),
-        );
+        // 3-part vertical layout: params | separator+description | instructions
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(3),    // Parameter list
+                Constraint::Length(3), // Description area
+                Constraint::Length(1), // Instructions
+            ])
+            .split(inner);
+
+        // --- Parameter list ---
+        // Find the longest label to align values
+        let label_width = dialog.parameters.iter().map(|p| {
+            let label = snake_to_title_case(&p.name);
+            // "▸ " (2) + label + " *" (2 if required, 0 otherwise) + ":  " (3)
+            2 + label.len() + if p.required { 2 } else { 0 } + 3
+        }).max().unwrap_or(10);
 
         let mut param_items = Vec::new();
         for (i, param) in dialog.parameters.iter().enumerate() {
-            let style = if i == dialog.current_param {
-                Style::default().fg(Colors::SECONDARY)
-            } else {
-                Style::default()
-            };
+            let is_selected = i == dialog.current_param;
 
             let raw_value = if i < dialog.param_values.len() {
                 &dialog.param_values[i]
@@ -136,46 +185,89 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
 
             // Format display value based on parameter type
             let display_value = match &param.param_type {
-                ToolParameter::Password(_) => "*".repeat(raw_value.len()),
+                ToolParameter::Password(_) => {
+                    let masked = "*".repeat(raw_value.len());
+                    if is_selected {
+                        format!("{}_", masked)
+                    } else {
+                        masked
+                    }
+                }
                 ToolParameter::Selection(options, _) => {
-                    // Show selection with arrow indicators
                     let current_val = if raw_value.is_empty() {
+                        // SAFETY: options guaranteed non-empty by get_tool_parameters
                         options.first().map(|s| s.as_str()).unwrap_or("")
                     } else {
                         raw_value
                     };
-                    if i == dialog.current_param {
+                    if is_selected {
                         format!("< {} >", current_val)
                     } else {
                         current_val.to_string()
                     }
                 }
-                _ => raw_value.to_string(),
+                _ => {
+                    if is_selected {
+                        format!("{}_", raw_value)
+                    } else {
+                        raw_value.to_string()
+                    }
+                }
+            };
+
+            // Build label: "▸ Config Type *:  " or "  Config Type:   "
+            let indicator = if is_selected { "▸ " } else { "  " };
+            let label_text = snake_to_title_case(&param.name);
+            let required_marker = if param.required { " *" } else { "" };
+            let label = format!("{}{}{}:", indicator, label_text, required_marker);
+            // Pad label to align values
+            let padded_label = format!("{:<width$}", label, width = label_width);
+
+            let label_style = if is_selected {
+                Style::default()
+                    .fg(Colors::PRIMARY)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Colors::FG_SECONDARY)
+            };
+
+            let value_style = if is_selected {
+                Style::default().fg(Colors::SECONDARY)
+            } else {
+                Style::default().fg(Colors::FG_PRIMARY)
             };
 
             param_items.push(ListItem::new(Line::from(vec![
-                Span::styled(format!("{}: ", param.name), Style::default().fg(Colors::PRIMARY)),
-                Span::styled(display_value, style),
+                Span::styled(padded_label, label_style),
+                Span::styled(display_value, value_style),
             ])));
         }
 
-        let param_list =
-            List::new(param_items).highlight_style(Style::default().fg(Colors::SECONDARY));
+        let param_list = List::new(param_items);
+        f.render_widget(param_list, chunks[0]);
 
-        f.render_widget(param_list, param_area);
+        // --- Description area (separator + selected param description) ---
+        let desc_text = if dialog.current_param < dialog.parameters.len() {
+            dialog.parameters[dialog.current_param].description.clone()
+        } else {
+            String::new()
+        };
 
-        // Render instructions
-        let instruction_area = Rect::new(
-            dialog_x + 2,
-            dialog_y + dialog_height.saturating_sub(3),
-            dialog_width.saturating_sub(4),
-            1,
-        );
+        let desc_block = Block::default()
+            .borders(Borders::TOP)
+            .border_style(Style::default().fg(Colors::FG_MUTED));
+        let desc = Paragraph::new(desc_text)
+            .block(desc_block)
+            .style(Style::default().fg(Colors::FG_SECONDARY).bg(Colors::BG_PRIMARY))
+            .wrap(Wrap { trim: true });
+        f.render_widget(desc, chunks[1]);
 
+        // --- Instructions ---
         f.render_widget(
-            Paragraph::new("Enter: Next/Execute | Left/Right: Change option | Esc: Back")
-                .style(Style::default().fg(Colors::FG_SECONDARY)),
-            instruction_area,
+            Paragraph::new("Enter: Execute | ↑↓: Navigate | ←→: Change | Esc: Back")
+                .style(Style::default().fg(Colors::FG_MUTED))
+                .alignment(Alignment::Center),
+            chunks[2],
         );
     }
 }

@@ -30,6 +30,8 @@ source_or_die() {
 }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
+require_root
+
 # Default values
 ROOT_PATH="/mnt"
 MOUNT_SYSTEMS=true
