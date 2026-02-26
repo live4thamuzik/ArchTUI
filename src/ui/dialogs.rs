@@ -284,66 +284,72 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
     if let Some(ref mut dialog) = input_handler.current_dialog {
         let area = f.area();
 
-        // Fill entire screen with black background
-        let background = Block::default()
-            .borders(Borders::NONE)
-            .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::SELECTED_FG));
-        f.render_widget(background, area);
-
-        // Calculate dialog size and position (centered)
-        let dialog_width = 80;
-        let dialog_height = 25;
-        let x = (area.width.saturating_sub(dialog_width)) / 2;
-        let y = (area.height.saturating_sub(dialog_height)) / 2;
+        // Dynamic dialog sizing — use available space, cap at reasonable maximums
+        let dialog_width = (area.width * 85 / 100).clamp(40, 120);
+        let dialog_height = (area.height * 80 / 100).clamp(10, 35);
+        let x = area.width.saturating_sub(dialog_width) / 2;
+        let y = area.height.saturating_sub(dialog_height) / 2;
 
         let dialog_area = Rect::new(x, y, dialog_width, dialog_height);
 
-        // Create dialog layout
+        // Clear whatever is underneath (overlay, not full-screen fill)
+        f.render_widget(Clear, dialog_area);
+
+        // Outer block — matches ToolDialog/FloatingWindow: cyan border, dark bg, bold title
+        let title = format!(" {} ", dialog.title);
+        let outer_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Colors::PRIMARY))
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Colors::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .title_bottom(Line::from(Span::styled(
+                format!(" {} ", dialog.instructions),
+                Style::default().fg(Colors::FG_MUTED),
+            )))
+            .style(Style::default().bg(Colors::BG_PRIMARY));
+        f.render_widget(outer_block, dialog_area);
+
+        // Inner area (inside borders + padding: 1 top, 2 horizontal)
+        let inner = Rect::new(
+            dialog_area.x.saturating_add(3),
+            dialog_area.y.saturating_add(2),
+            dialog_area.width.saturating_sub(6),
+            dialog_area.height.saturating_sub(4),
+        );
+
+        // 3-chunk layout: Content + spacer + Status bar
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3), // Title
-                Constraint::Length(3), // Instructions
                 Constraint::Min(0),    // Content
-                Constraint::Length(3), // Buttons/status
+                Constraint::Length(1), // Spacer
+                Constraint::Length(1), // Status bar
             ])
-            .split(dialog_area);
+            .split(inner);
 
-        // Render dialog with black background and white border
-        let dialog_bg = Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::FG_PRIMARY));
-        f.render_widget(dialog_bg, dialog_area);
-
-        // Title
-        let title = Paragraph::new(dialog.title.clone())
-            .block(Block::default().borders(Borders::NONE))
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Colors::SECONDARY));
-        f.render_widget(title, chunks[0]);
-
-        // Instructions
-        let instructions = Paragraph::new(dialog.instructions.clone())
-            .block(Block::default().borders(Borders::NONE))
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Colors::FG_PRIMARY));
-        f.render_widget(instructions, chunks[1]);
+        let content_area = chunks[0];
 
         // Content based on input type
         let selected_index = dialog.input_type.get_selected_index();
         match &mut dialog.input_type {
             crate::input::InputType::TextInput { .. } => {
                 let input_text = dialog.get_display_value();
-                let input_display = if input_text.is_empty() {
-                    "Enter value...".to_string()
+                let display_text = if input_text.is_empty() {
+                    Span::styled("Enter value..._", Style::default().fg(Colors::FG_MUTED))
                 } else {
-                    input_text
+                    Span::styled(
+                        format!("{}_", input_text),
+                        Style::default().fg(Colors::FG_PRIMARY),
+                    )
                 };
 
-                let input_widget = Paragraph::new(input_display)
-                    .block(Block::default().borders(Borders::ALL).title("Input"))
-                    .style(Style::default().fg(Colors::SUCCESS));
-                f.render_widget(input_widget, chunks[2]);
+                let input_widget = Paragraph::new(Line::from(display_text))
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+                f.render_widget(input_widget, content_area);
             }
             crate::input::InputType::Selection {
                 scroll_state,
@@ -357,18 +363,26 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                     .skip(start)
                     .take(end - start)
                     .map(|(index, option)| {
-                        let style = if index == selected_index {
-                            Style::default().fg(Colors::SECONDARY)
+                        let (indicator, style) = if index == selected_index {
+                            (
+                                "▸ ",
+                                Style::default()
+                                    .fg(Colors::SECONDARY)
+                                    .add_modifier(Modifier::BOLD),
+                            )
                         } else {
-                            Style::default()
+                            ("  ", Style::default().fg(Colors::FG_PRIMARY))
                         };
-                        ListItem::new(option.clone()).style(style)
+                        ListItem::new(Line::from(vec![
+                            Span::styled(indicator, style),
+                            Span::styled(option.clone(), style),
+                        ]))
                     })
                     .collect();
 
                 let list = List::new(items)
-                    .block(Block::default().borders(Borders::ALL).title("Options"));
-                f.render_widget(list, chunks[2]);
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+                f.render_widget(list, content_area);
             }
             crate::input::InputType::DiskSelection {
                 available_disks, ..
@@ -377,21 +391,26 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                     .iter()
                     .enumerate()
                     .map(|(index, disk)| {
-                        let style = if index == selected_index {
-                            Style::default().fg(Colors::SECONDARY)
+                        let (indicator, style) = if index == selected_index {
+                            (
+                                "▸ ",
+                                Style::default()
+                                    .fg(Colors::SECONDARY)
+                                    .add_modifier(Modifier::BOLD),
+                            )
                         } else {
-                            Style::default()
+                            ("  ", Style::default().fg(Colors::FG_PRIMARY))
                         };
-                        ListItem::new(disk.clone()).style(style)
+                        ListItem::new(Line::from(vec![
+                            Span::styled(indicator, style),
+                            Span::styled(disk.clone(), style),
+                        ]))
                     })
                     .collect();
 
-                let list = List::new(items).block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title("Available Disks"),
-                );
-                f.render_widget(list, chunks[2]);
+                let list = List::new(items)
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+                f.render_widget(list, content_area);
             }
             crate::input::InputType::PackageSelection {
                 current_input,
@@ -404,61 +423,59 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                 is_pacman,
                 ..
             } => {
-                let title = if *is_pacman {
-                    "Interactive Pacman Package Selection"
-                } else {
-                    "Interactive AUR Package Selection"
-                };
-
-                let block = Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .title_style(
-                        Style::default()
-                            .fg(Colors::PRIMARY)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .title_bottom("Type commands, Enter to execute, Esc to exit")
-                    .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::FG_PRIMARY));
-
                 if *show_search_results && !search_results.is_empty() {
                     // Display search results with scrolling
                     let package_items: Vec<ListItem> = search_results
                         .iter()
                         .map(|p| {
-                            let status = if p.installed { "[I]" } else { "[ ]" };
+                            // Check if this package is already selected — exact word match
+                            let is_selected =
+                                package_list.split_whitespace().any(|pkg| pkg == p.name);
 
-                            // Check if this package is already selected in our config
-                            let is_selected = package_list.contains(&p.name);
-                            let selection_indicator = if is_selected { "✓" } else { " " };
+                            // Single bracket indicator: [✓] selected, [I] installed, [ ] neither
+                            let status = if is_selected {
+                                "[✓]"
+                            } else if p.installed {
+                                "[I]"
+                            } else {
+                                "[ ]"
+                            };
 
                             let text = format!(
-                                "{} {} {}/{} ({}) - {}",
+                                "{} {}/{} ({}) - {}",
                                 status,
-                                selection_indicator,
                                 p.repo,
                                 p.name,
                                 p.version,
                                 p.description
                             );
 
-                            // Style selected packages differently
                             let style = if is_selected {
                                 Style::default()
                                     .fg(Colors::SUCCESS)
                                     .add_modifier(Modifier::BOLD)
                             } else {
-                                Style::default()
+                                Style::default().fg(Colors::FG_PRIMARY)
                             };
 
                             ListItem::new(text).style(style)
                         })
                         .collect();
 
+                    let search_hint = Line::from(Span::styled(
+                        " ↑↓ Navigate | Enter: Toggle | Esc: Back ",
+                        Style::default().fg(Colors::FG_MUTED),
+                    ));
+
+                    // Inner block for search results — no double border, just a separator hint
+                    let results_block = Block::default()
+                        .borders(Borders::TOP)
+                        .border_style(Style::default().fg(Colors::FG_MUTED))
+                        .title_top(search_hint)
+                        .style(Style::default().bg(Colors::BG_PRIMARY));
+
                     let search_list = List::new(package_items)
-                        .block(block.title(
-                            "Search Results - ↑↓ Navigate | Enter Toggle Selection | Esc Exit",
-                        ))
+                        .block(results_block)
                         .highlight_style(
                             Style::default()
                                 .fg(Colors::SUCCESS_LIGHT)
@@ -466,57 +483,94 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                         )
                         .highlight_symbol(">> ");
 
-                    f.render_stateful_widget(search_list, chunks[2], list_state);
+                    f.render_stateful_widget(search_list, content_area, list_state);
                 } else {
-                    // Display normal command interface (like old version)
-                    let max_visible_lines: usize = 15;
+                    // Command mode: compact help bar at top, output+prompt below
+                    let cmd_chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(2), // Help bar + separator
+                            Constraint::Min(0),   // Output + prompt
+                        ])
+                        .split(content_area);
+
+                    // Compact command reference
+                    let help_line = Line::from(vec![
+                        Span::styled("search ", Style::default().fg(Colors::PRIMARY)),
+                        Span::styled("<term>  ", Style::default().fg(Colors::FG_MUTED)),
+                        Span::styled("add ", Style::default().fg(Colors::PRIMARY)),
+                        Span::styled("<pkg>  ", Style::default().fg(Colors::FG_MUTED)),
+                        Span::styled("remove ", Style::default().fg(Colors::PRIMARY)),
+                        Span::styled("<pkg>  ", Style::default().fg(Colors::FG_MUTED)),
+                        Span::styled("list  ", Style::default().fg(Colors::PRIMARY)),
+                        Span::styled("done", Style::default().fg(Colors::PRIMARY)),
+                    ]);
+                    let help_block = Block::default()
+                        .borders(Borders::BOTTOM)
+                        .border_style(Style::default().fg(Colors::FG_MUTED))
+                        .style(Style::default().bg(Colors::BG_PRIMARY));
+                    let help_widget = Paragraph::new(help_line).block(help_block);
+                    f.render_widget(help_widget, cmd_chunks[0]);
+
+                    // Output lines + prompt
+                    let output_area = cmd_chunks[1];
+                    let visible_height = output_area.height as usize;
                     let mut list_items: Vec<ListItem> = output_lines
                         .iter()
                         .skip(*scroll_offset)
-                        .take(max_visible_lines.saturating_sub(1))
-                        .map(|line| ListItem::new(line.as_str()))
+                        .take(visible_height.saturating_sub(1))
+                        .map(|line| {
+                            ListItem::new(line.as_str())
+                                .style(Style::default().fg(Colors::FG_PRIMARY))
+                        })
                         .collect();
 
-                    // Add current input line
+                    // Add current input line with prompt
                     let prompt = if *is_pacman {
                         "Package selection> "
                     } else {
                         "AUR package selection> "
                     };
-                    let input_line = format!("{}{}", prompt, current_input);
-                    list_items.push(
-                        ListItem::new(input_line).style(Style::default().fg(Colors::SECONDARY)),
-                    );
+                    let input_line = Line::from(vec![
+                        Span::styled(prompt, Style::default().fg(Colors::SECONDARY)),
+                        Span::styled(
+                            format!("{}_", current_input),
+                            Style::default().fg(Colors::FG_PRIMARY),
+                        ),
+                    ]);
+                    list_items.push(ListItem::new(input_line));
 
                     let list = List::new(list_items)
-                        .block(block)
-                        .style(Style::default().bg(Colors::SELECTED_FG).fg(Colors::FG_PRIMARY));
+                        .style(Style::default().bg(Colors::BG_PRIMARY));
 
-                    f.render_widget(list, chunks[2]);
+                    f.render_widget(list, output_area);
                 }
             }
             crate::input::InputType::Warning { message, .. } => {
-                // Render warning message with proper formatting
                 let warning_text = message.join("\n");
                 let warning_widget = Paragraph::new(warning_text)
-                    .block(Block::default().borders(Borders::ALL).title("⚠️  WARNING"))
-                    .style(Style::default().fg(Colors::ERROR))
+                    .style(Style::default().fg(Colors::ERROR).bg(Colors::BG_PRIMARY))
                     .alignment(Alignment::Center)
-                    .wrap(ratatui::widgets::Wrap { trim: true });
-                f.render_widget(warning_widget, chunks[2]);
+                    .wrap(Wrap { trim: true });
+                f.render_widget(warning_widget, content_area);
             }
             crate::input::InputType::PasswordInput { .. } => {
                 let input_text = dialog.get_display_value();
-                let input_display = if input_text.is_empty() {
-                    "Enter password...".to_string()
+                let display_text = if input_text.is_empty() {
+                    Span::styled(
+                        "Enter password..._",
+                        Style::default().fg(Colors::FG_MUTED),
+                    )
                 } else {
-                    input_text
+                    Span::styled(
+                        format!("{}_", input_text),
+                        Style::default().fg(Colors::FG_PRIMARY),
+                    )
                 };
 
-                let input_widget = Paragraph::new(input_display)
-                    .block(Block::default().borders(Borders::ALL).title("Password"))
-                    .style(Style::default().fg(Colors::SUCCESS));
-                f.render_widget(input_widget, chunks[2]);
+                let input_widget = Paragraph::new(Line::from(display_text))
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+                f.render_widget(input_widget, content_area);
             }
             crate::input::InputType::MultiDiskSelection {
                 selected_disks,
@@ -526,44 +580,67 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut InputHandler) {
                 max_disks,
                 ..
             } => {
-                // Create list items with selection status
+                // Selection counter as a separator line at top
+                let counter_text = format!(
+                    " Selected: {}/{} (Min: {}, Max: {}) ",
+                    selected_disks.len(),
+                    max_disks,
+                    min_disks,
+                    max_disks
+                );
+                let counter_block = Block::default()
+                    .borders(Borders::BOTTOM)
+                    .border_style(Style::default().fg(Colors::FG_MUTED))
+                    .title_top(Span::styled(
+                        counter_text,
+                        Style::default()
+                            .fg(Colors::PRIMARY)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+
+                // Split content: 1 line for counter, rest for list
+                let multi_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(2), Constraint::Min(0)])
+                    .split(content_area);
+
+                f.render_widget(counter_block, multi_chunks[0]);
+
                 let items: Vec<ListItem> = available_disks
                     .iter()
                     .enumerate()
                     .map(|(i, disk)| {
                         let is_selected = selected_disks.contains(disk);
-                        let status = if is_selected { "[X]" } else { "[ ]" };
+                        let status = if is_selected { "[✓]" } else { "[ ]" };
                         let item_text = format!("{} {}", status, disk);
 
-                        ListItem::new(item_text).style(if i == scroll_state.selected_index {
-                            Style::default().fg(Colors::SECONDARY).bg(Colors::FG_MUTED)
+                        let style = if i == scroll_state.selected_index {
+                            Style::default()
+                                .fg(Colors::SECONDARY)
+                                .add_modifier(Modifier::BOLD)
                         } else if is_selected {
                             Style::default().fg(Colors::SUCCESS)
                         } else {
                             Style::default().fg(Colors::FG_PRIMARY)
-                        })
+                        };
+
+                        ListItem::new(item_text).style(style)
                     })
                     .collect();
 
                 let list = List::new(items)
-                    .block(Block::default().borders(Borders::ALL).title(format!(
-                        "Selected: {}/{} (Min: {}, Max: {})",
-                        selected_disks.len(),
-                        max_disks,
-                        min_disks,
-                        max_disks
-                    )))
-                    .highlight_style(Style::default().fg(Colors::SECONDARY).bg(Colors::FG_MUTED));
-
-                f.render_widget(list, chunks[2]);
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+                f.render_widget(list, multi_chunks[1]);
             }
         }
 
-        // Status/buttons
-        let status = Paragraph::new("Enter: Confirm | Esc: Cancel")
-            .block(Block::default().borders(Borders::NONE))
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Colors::PRIMARY));
-        f.render_widget(status, chunks[3]);
+        // Status bar — matches ToolDialog/FloatingWindow style
+        f.render_widget(
+            Paragraph::new("Enter: Confirm | Esc: Cancel")
+                .style(Style::default().fg(Colors::FG_MUTED))
+                .alignment(Alignment::Center),
+            chunks[2],
+        );
     }
 }
