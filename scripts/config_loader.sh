@@ -26,7 +26,7 @@ check_jq_available() {
         log_info "Note: The TUI (archtui) does not require jq - only direct bash script usage needs it"
         log_info "Attempting to install jq automatically..."
         if command -v pacman >/dev/null 2>&1; then
-            pacman -Sy --noconfirm jq
+            pacman -Sy jq --noconfirm
             if ! command -v jq >/dev/null 2>&1; then
                 error_exit "Failed to install jq. Run: pacman -S jq"
             fi

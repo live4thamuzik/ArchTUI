@@ -101,7 +101,7 @@ fi
 case "$ACTION" in
     install)
         log_info "Installing OpenSSH server..."
-        if pacman -Sy --noconfirm openssh; then
+        if pacman -Sy openssh --noconfirm; then
             log_success "OpenSSH server installed successfully"
         else
             log_error "Failed to install OpenSSH server"

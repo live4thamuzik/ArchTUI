@@ -76,7 +76,7 @@ install_packages() {
     log_info "Installing $description (${#packages[@]} packages)..."
     log_info "Packages: ${packages[*]}"
 
-    pacman -S --noconfirm --needed "${packages[@]}" 2>&1 | while IFS= read -r line; do
+    pacman -S "${packages[@]}" --noconfirm --needed 2>&1 | while IFS= read -r line; do
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*)
                 echo -e "${LOG_COLORS[ERROR]}  [pacman] $line${COLORS[RESET]}"
@@ -141,7 +141,7 @@ main() {
     if [[ "${MULTILIB:-No}" == "Yes" ]]; then
         log_info "Enabling multilib repository in chroot..."
         sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf
-        pacman -Sy --noconfirm || log_warn "Failed to sync multilib repository"
+        pacman -Sy || log_warn "Failed to sync multilib repository"
         log_success "Multilib repository enabled in chroot"
     fi
 
@@ -698,7 +698,7 @@ configure_grub_settings() {
 
         # Install os-prober if not present
         if ! command -v os-prober &>/dev/null; then
-            pacman -S --noconfirm --needed os-prober || log_warn "Failed to install os-prober"
+            pacman -S os-prober --noconfirm --needed || log_warn "Failed to install os-prober"
         fi
     fi
 
@@ -773,7 +773,7 @@ _grub_theme_git_clone() {
 
     if ! command -v git &>/dev/null; then
         log_warn "git not installed, cannot clone GRUB theme"
-        pacman -S --noconfirm --needed git || {
+        pacman -S git --noconfirm --needed || {
             log_error "Failed to install git for GRUB theme"
             return 1
         }
@@ -898,7 +898,7 @@ configure_secure_boot() {
     log_info "Configuring Secure Boot with sbctl..."
 
     # Install sbctl
-    pacman -S --noconfirm --needed sbctl || {
+    pacman -S sbctl --noconfirm --needed || {
         log_warn "Failed to install sbctl"
         return 0
     }
@@ -1133,41 +1133,41 @@ install_gpu_drivers() {
             # Auto-detect GPU
             if lspci | grep -qi nvidia; then
                 log_info "NVIDIA GPU detected"
-                pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings || true
+                pacman -S nvidia nvidia-utils nvidia-settings --noconfirm --needed || true
             fi
             if lspci | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
                 log_info "AMD GPU detected"
                 local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
                 [[ "$use_lib32" == "yes" ]] && amd_pkgs+=(lib32-mesa)
-                pacman -S --noconfirm --needed "${amd_pkgs[@]}" || true
+                pacman -S "${amd_pkgs[@]}" --noconfirm --needed || true
             fi
             if lspci | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; then
                 log_info "Intel GPU detected"
                 local intel_pkgs=(mesa xf86-video-intel vulkan-intel)
                 [[ "$use_lib32" == "yes" ]] && intel_pkgs+=(lib32-mesa)
-                pacman -S --noconfirm --needed "${intel_pkgs[@]}" || true
+                pacman -S "${intel_pkgs[@]}" --noconfirm --needed || true
             fi
             ;;
         "nvidia"|"NVIDIA")
-            pacman -S --noconfirm --needed nvidia nvidia-utils nvidia-settings || log_warn "Failed to install NVIDIA drivers"
+            pacman -S nvidia nvidia-utils nvidia-settings --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
             ;;
         "nvidia-open")
-            pacman -S --noconfirm --needed nvidia-open nvidia-utils nvidia-settings || log_warn "Failed to install NVIDIA-open drivers"
+            pacman -S nvidia-open nvidia-utils nvidia-settings --noconfirm --needed || log_warn "Failed to install NVIDIA-open drivers"
             ;;
         "amd"|"AMD")
             local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
             [[ "$use_lib32" == "yes" ]] && amd_pkgs+=(lib32-mesa)
-            pacman -S --noconfirm --needed "${amd_pkgs[@]}" || log_warn "Failed to install AMD drivers"
+            pacman -S "${amd_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install AMD drivers"
             ;;
         "intel"|"Intel")
             local intel_pkgs=(mesa xf86-video-intel vulkan-intel)
             [[ "$use_lib32" == "yes" ]] && intel_pkgs+=(lib32-mesa)
-            pacman -S --noconfirm --needed "${intel_pkgs[@]}" || log_warn "Failed to install Intel drivers"
+            pacman -S "${intel_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install Intel drivers"
             ;;
         "nouveau")
             local nouveau_pkgs=(mesa xf86-video-nouveau)
             [[ "$use_lib32" == "yes" ]] && nouveau_pkgs+=(lib32-mesa)
-            pacman -S --noconfirm --needed "${nouveau_pkgs[@]}" || log_warn "Failed to install Nouveau drivers"
+            pacman -S "${nouveau_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install Nouveau drivers"
             ;;
         "none"|"None")
             log_info "No GPU drivers selected"
@@ -1209,7 +1209,7 @@ install_aur_helper() {
     case "$helper" in
         "paru")
             # Install paru dependencies
-            pacman -S --noconfirm --needed base-devel git || { log_error "Failed to install paru dependencies"; rm -f "$sudoers_drop"; return 1; }
+            pacman -S base-devel git --noconfirm --needed || { log_error "Failed to install paru dependencies"; rm -f "$sudoers_drop"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
 set -e
@@ -1221,7 +1221,7 @@ AUREOF
             ;;
         "yay")
             # Install yay dependencies
-            pacman -S --noconfirm --needed base-devel git go || { log_error "Failed to install yay dependencies"; rm -f "$sudoers_drop"; return 1; }
+            pacman -S base-devel git go --noconfirm --needed || { log_error "Failed to install yay dependencies"; rm -f "$sudoers_drop"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
 set -e
@@ -1232,7 +1232,7 @@ makepkg -si --noconfirm
 AUREOF
             ;;
         "pikaur")
-            pacman -S --noconfirm --needed base-devel git python || { log_error "Failed to install pikaur dependencies"; rm -f "$sudoers_drop"; return 1; }
+            pacman -S base-devel git python --noconfirm --needed || { log_error "Failed to install pikaur dependencies"; rm -f "$sudoers_drop"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
 set -e
@@ -1264,7 +1264,7 @@ install_flatpak() {
 
     log_info "Installing Flatpak..."
 
-    pacman -S --noconfirm --needed flatpak || {
+    pacman -S flatpak --noconfirm --needed || {
         log_error "Failed to install flatpak"
         return 1
     }
@@ -1285,7 +1285,7 @@ install_additional_packages() {
         read -ra packages <<< "$ADDITIONAL_PACKAGES"
 
         if [[ ${#packages[@]} -gt 0 ]]; then
-            pacman -S --noconfirm --needed "${packages[@]}" || log_warn "Some packages may have failed to install"
+            pacman -S "${packages[@]}" --noconfirm --needed || log_warn "Some packages may have failed to install"
         fi
     fi
 
@@ -1306,7 +1306,7 @@ install_additional_packages() {
                 echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
                 chmod 440 "$sudoers_drop"
 
-                runuser -u "$MAIN_USERNAME" -- "$helper" -S --noconfirm "${aur_packages[@]}" || log_warn "Some AUR packages may have failed to install"
+                runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some AUR packages may have failed to install"
 
                 rm -f "$sudoers_drop"
             fi
@@ -1327,7 +1327,7 @@ configure_plymouth() {
     log_info "Configuring Plymouth..."
 
     # Install Plymouth if not already installed
-    pacman -S --noconfirm --needed plymouth || {
+    pacman -S plymouth --noconfirm --needed || {
         log_warn "Failed to install plymouth"
         return 0
     }
@@ -1362,14 +1362,14 @@ configure_snapper() {
     log_info "Configuring Snapper for Btrfs snapshots..."
 
     # Install snapper and related packages
-    pacman -S --noconfirm --needed snapper snap-pac || {
+    pacman -S snapper snap-pac --noconfirm --needed || {
         log_error "Failed to install snapper packages"
         return 1
     }
 
     # Install grub-btrfs for boot integration if using GRUB
     if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-        pacman -S --noconfirm --needed grub-btrfs || log_warn "grub-btrfs not available"
+        pacman -S grub-btrfs --noconfirm --needed || log_warn "grub-btrfs not available"
     fi
 
     # Remove the @snapshots mount if it exists (snapper will recreate it)
@@ -1466,7 +1466,7 @@ configure_snapper() {
     # Install btrfs-assistant if requested
     if [[ "${BTRFS_ASSISTANT:-No}" == "Yes" ]]; then
         log_info "Installing btrfs-assistant..."
-        pacman -S --noconfirm --needed btrfs-assistant || log_warn "Failed to install btrfs-assistant"
+        pacman -S btrfs-assistant --noconfirm --needed || log_warn "Failed to install btrfs-assistant"
     fi
 
     # Enable snapper timers

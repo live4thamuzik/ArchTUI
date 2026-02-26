@@ -9,11 +9,11 @@ install_none() {
     echo "No desktop environment requested - installing minimal system only"
 
     # Install basic terminal tools
-    pacman -S --noconfirm --needed \
+    pacman -S \
         nano \
-        vim \
         htop \
-        neofetch || {
+        neofetch \
+        --noconfirm --needed || {
         echo "WARN: Some basic packages failed to install, continuing..."
     }
 

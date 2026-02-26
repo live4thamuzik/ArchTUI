@@ -443,7 +443,7 @@ prepare_system() {
 
     # Update package database
     log_info "Updating package database (pacman -Sy)..."
-    pacman -Sy --noconfirm 2>&1 | while IFS= read -r line; do
+    pacman -Sy 2>&1 | while IFS= read -r line; do
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*)
                 echo -e "${RED}  [pacman] $line${RESET}"
@@ -607,7 +607,6 @@ install_base_system() {
     # Add essential packages
     local -a essential_packages=(
         "nano"
-        "vim"
         "neovim"
         "sudo"
         "networkmanager"
@@ -711,7 +710,7 @@ install_base_system() {
     fi
 
     # Run pacstrap with array expansion and show output
-    pacstrap -K --noconfirm /mnt "${all_packages[@]}" 2>&1 | while IFS= read -r line; do
+    pacstrap -K /mnt "${all_packages[@]}" --noconfirm --needed 2>&1 | while IFS= read -r line; do
         # Filter and format pacstrap output for readability with colors
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*|*"failed"*)
