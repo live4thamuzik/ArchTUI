@@ -9,7 +9,7 @@ cleanup_on_exit() {
     local exit_code=$?
 
     # SECURITY: Always clean up sensitive files (passwords in install_config.sh)
-    rm -f /mnt/root/install_config.sh 2>/dev/null || true
+    rm -f /mnt/install_config.sh 2>/dev/null || true
 
     # Only cleanup mounts/devices on error
     if [[ $exit_code -eq 0 ]]; then
@@ -764,11 +764,11 @@ configure_chroot() {
     log_info "This phase includes: timezone, locale, users, bootloader, desktop environment..."
 
     # Copy necessary scripts to target system
-    log_info "Copying configuration scripts to /mnt/root/..."
-    cp "$SCRIPT_DIR/chroot_config.sh" /mnt/root/ || error_exit "Failed to copy chroot_config.sh to /mnt/root/"
-    cp "$SCRIPT_DIR/utils.sh" /mnt/root/ || error_exit "Failed to copy utils.sh to /mnt/root/"
-    mkdir -p /mnt/root/desktops
-    cp -r "$SCRIPT_DIR/desktops/"* /mnt/root/desktops/ 2>/dev/null || true
+    log_info "Copying configuration scripts to /mnt/..."
+    cp "$SCRIPT_DIR/chroot_config.sh" /mnt/ || error_exit "Failed to copy chroot_config.sh to /mnt/"
+    cp "$SCRIPT_DIR/utils.sh" /mnt/ || error_exit "Failed to copy utils.sh to /mnt/"
+    mkdir -p /mnt/desktops
+    cp -r "$SCRIPT_DIR/desktops/"* /mnt/desktops/ 2>/dev/null || true
 
     # Copy Plymouth themes to target system BEFORE chroot (so configure_plymouth can find them)
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
@@ -783,8 +783,8 @@ configure_chroot() {
     fi
 
     # Make scripts executable
-    chmod +x /mnt/root/chroot_config.sh
-    chmod +x /mnt/root/utils.sh
+    chmod +x /mnt/chroot_config.sh
+    chmod +x /mnt/utils.sh
 
     # Validate UUIDs for encrypted installs
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] && [[ -z "${LUKS_UUID:-}" ]]; then
@@ -855,9 +855,9 @@ configure_chroot() {
         printf 'export WINDOWS_DETECTED=%q\n' "${WINDOWS_DETECTED:-}"
         printf 'export WINDOWS_EFI_PATH=%q\n' "${WINDOWS_EFI_PATH:-}"
         printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
-    } > /mnt/root/install_config.sh
+    } > /mnt/install_config.sh
 
-    chmod +x /mnt/root/install_config.sh
+    chmod +x /mnt/install_config.sh
 
     # Execute chroot configuration
     log_info "Entering chroot environment..."
@@ -865,13 +865,12 @@ configure_chroot() {
 
     arch-chroot /mnt /bin/bash -c "
         # Source config with error handling (source_or_die not available in chroot)
-        if [[ ! -f /root/install_config.sh ]]; then
-            echo 'FATAL: /root/install_config.sh not found' >&2
+        if [[ ! -f /install_config.sh ]]; then
+            echo 'FATAL: /install_config.sh not found' >&2
             exit 1
         fi
-        source /root/install_config.sh || { echo 'FATAL: Failed to source install_config.sh' >&2; exit 1; }
-        cd /root
-        ./chroot_config.sh
+        source /install_config.sh || { echo 'FATAL: Failed to source install_config.sh' >&2; exit 1; }
+        /chroot_config.sh
     " 2>&1 | while IFS= read -r line; do
         # Pass through colored output from chroot, or colorize based on content
         if [[ "$line" == *$'\033'* ]]; then
@@ -902,10 +901,10 @@ configure_chroot() {
     local chroot_exit=${PIPESTATUS[0]}
 
     # Clean up copied scripts
-    rm -f /mnt/root/chroot_config.sh
-    rm -f /mnt/root/utils.sh
-    rm -f /mnt/root/install_config.sh
-    rm -rf /mnt/root/desktops
+    rm -f /mnt/chroot_config.sh
+    rm -f /mnt/utils.sh
+    rm -f /mnt/install_config.sh
+    rm -rf /mnt/desktops
 
     if [[ $chroot_exit -ne 0 ]]; then
         log_error "Chroot configuration failed"
