@@ -48,6 +48,8 @@ source_or_die() {
 }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
+require_root
+
 # --- Environment Contract Enforcement ---
 if [[ "${CONFIRM_WIPE_DISK:-}" != "yes" ]]; then
     error_exit "CONFIRM_WIPE_DISK=yes is required. This script refuses to run without explicit environment confirmation."

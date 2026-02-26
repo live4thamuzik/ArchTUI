@@ -1745,6 +1745,7 @@ impl App {
                 // Clear tool dialog state
                 state.tool_dialog = None;
                 state.current_tool = None;
+                state.pre_dialog_mode = None;
             }
             // ToolExecution removed — tool execution uses FloatingOutput mode
             AppMode::Installation => {
@@ -3346,8 +3347,8 @@ impl App {
         match tool_name {
             "install_bootloader" => vec![
                 ToolParam {
-                    name: "type".to_string(),
-                    description: "Bootloader type (grub or systemd-boot)".to_string(),
+                    name: "bootloader".to_string(),
+                    description: "Bootloader to install (GRUB supports BIOS+UEFI, systemd-boot is UEFI only)".to_string(),
                     param_type: ToolParameter::Selection(
                         vec!["grub".to_string(), "systemd-boot".to_string()],
                         0,
@@ -3362,13 +3363,13 @@ impl App {
                 },
                 ToolParam {
                     name: "efi_path".to_string(),
-                    description: "EFI partition path (optional)".to_string(),
+                    description: "EFI system partition mount point (e.g., /boot/efi)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
                 },
                 ToolParam {
-                    name: "mode".to_string(),
-                    description: "Boot mode (uefi or bios, auto-detected if empty)".to_string(),
+                    name: "boot_mode".to_string(),
+                    description: "Boot mode — leave empty for auto-detection".to_string(),
                     param_type: ToolParameter::Selection(
                         vec!["".to_string(), "uefi".to_string(), "bios".to_string()],
                         0,
@@ -3377,14 +3378,14 @@ impl App {
                 },
                 ToolParam {
                     name: "repair".to_string(),
-                    description: "Repair existing bootloader installation".to_string(),
+                    description: "Repair existing bootloader instead of fresh install".to_string(),
                     param_type: ToolParameter::Boolean(false),
                     required: false,
                 },
             ],
             "generate_fstab" => vec![ToolParam {
                 name: "root".to_string(),
-                description: "Root partition path (e.g., /mnt)".to_string(),
+                description: "Mounted root path to generate fstab from (e.g., /mnt)".to_string(),
                 param_type: ToolParameter::Text("".to_string()),
                 required: true,
             }],
@@ -3397,7 +3398,7 @@ impl App {
                 },
                 ToolParam {
                     name: "filesystem".to_string(),
-                    description: "Filesystem type".to_string(),
+                    description: "Filesystem type to format the partition with".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "ext4".to_string(),
@@ -3426,7 +3427,7 @@ impl App {
                 },
                 ToolParam {
                     name: "method".to_string(),
-                    description: "Wipe method".to_string(),
+                    description: "quick: signatures only | secure: full wipe | auto: detect SSD/HDD".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "quick".to_string(),
@@ -3456,7 +3457,7 @@ impl App {
             "mount" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform".to_string(),
+                    description: "mount: attach device | umount: detach | list: show mounts | info: device details".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "mount".to_string(),
@@ -3470,25 +3471,25 @@ impl App {
                 },
                 ToolParam {
                     name: "target".to_string(),
-                    description: "Device path (e.g., /dev/sda1) or mountpoint path".to_string(),
+                    description: "Device path for mount/info (e.g., /dev/sda1) or mountpoint for umount".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
                 ToolParam {
                     name: "destination".to_string(),
-                    description: "Destination directory (for mount action)".to_string(),
+                    description: "Mount destination directory (e.g., /mnt)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
                 },
                 ToolParam {
-                    name: "readonly".to_string(),
-                    description: "Mount as read-only".to_string(),
+                    name: "read_only".to_string(),
+                    description: "Mount filesystem as read-only".to_string(),
                     param_type: ToolParameter::Boolean(false),
                     required: false,
                 },
                 ToolParam {
                     name: "force".to_string(),
-                    description: "Force operation (unmount if busy)".to_string(),
+                    description: "Force lazy unmount if device is busy".to_string(),
                     param_type: ToolParameter::Boolean(false),
                     required: false,
                 },
@@ -3501,8 +3502,8 @@ impl App {
                     required: true,
                 },
                 ToolParam {
-                    name: "no_mount".to_string(),
-                    description: "Skip mounting /proc, /sys, /dev".to_string(),
+                    name: "skip_mount".to_string(),
+                    description: "Skip mounting /proc, /sys, /dev (if already mounted)".to_string(),
                     param_type: ToolParameter::Boolean(false),
                     required: false,
                 },
@@ -3574,7 +3575,7 @@ impl App {
                 },
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform".to_string(),
+                    description: "configure: set IP | status/info: view state | enable/disable: toggle interface".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "configure".to_string(),
@@ -3589,7 +3590,7 @@ impl App {
                 },
                 ToolParam {
                     name: "config_type".to_string(),
-                    description: "Configuration type (for configure action)".to_string(),
+                    description: "DHCP for automatic or static for manual IP assignment".to_string(),
                     param_type: ToolParameter::Selection(
                         vec!["".to_string(), "dhcp".to_string(), "static".to_string()],
                         0,
@@ -3618,7 +3619,7 @@ impl App {
             "manage_services" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform".to_string(),
+                    description: "enable/disable: persist across reboots | status: check state | list: show all".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "enable".to_string(),
@@ -3632,7 +3633,7 @@ impl App {
                 },
                 ToolParam {
                     name: "service".to_string(),
-                    description: "Service name (e.g., NetworkManager, sshd)".to_string(),
+                    description: "Systemd service name (e.g., NetworkManager, sshd, bluetooth)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
@@ -3640,7 +3641,7 @@ impl App {
             "manage_groups" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform".to_string(),
+                    description: "add: add user to group | remove: remove from group | list: show memberships".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "add".to_string(),
@@ -3653,13 +3654,13 @@ impl App {
                 },
                 ToolParam {
                     name: "user".to_string(),
-                    description: "Username".to_string(),
+                    description: "Target username to modify group membership for".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
                 ToolParam {
                     name: "group".to_string(),
-                    description: "Group name (e.g., wheel, audio, video)".to_string(),
+                    description: "Group name (e.g., wheel, audio, video, docker)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
@@ -3667,7 +3668,7 @@ impl App {
             "configure_ssh" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform".to_string(),
+                    description: "status: check sshd | install: install openssh | enable/disable: toggle service".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "status".to_string(),
@@ -3684,7 +3685,7 @@ impl App {
             "configure_firewall" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "Action to perform".to_string(),
+                    description: "status: show rules | enable: apply defaults | disable: permissive | rules: list numbered".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "status".to_string(),
@@ -3700,7 +3701,7 @@ impl App {
             "encrypt_device" => vec![
                 ToolParam {
                     name: "action".to_string(),
-                    description: "LUKS action to perform".to_string(),
+                    description: "format: encrypt device | open: unlock encrypted device | close: lock device".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "format".to_string(),
@@ -3813,7 +3814,7 @@ impl App {
                     required: true,
                 },
                 ToolParam {
-                    name: "workdir".to_string(),
+                    name: "work_dir".to_string(),
                     description: "Working directory inside chroot (optional)".to_string(),
                     param_type: ToolParameter::Text("".to_string()),
                     required: false,
@@ -3837,7 +3838,7 @@ impl App {
                 },
                 ToolParam {
                     name: "sort".to_string(),
-                    description: "Sort method for mirrors".to_string(),
+                    description: "rate: download speed | age: last sync time | score: mirror score".to_string(),
                     param_type: ToolParameter::Selection(
                         vec![
                             "rate".to_string(),
@@ -3887,6 +3888,7 @@ impl App {
                 let current_tool = state.current_tool.clone();
                 state.tool_dialog = None;
                 state.current_tool = None;
+                state.pre_dialog_mode = None;
                 // Go back to appropriate tool menu
                 if let Some(ref tool_name) = current_tool {
                     match tool_name.as_str() {
@@ -4042,6 +4044,10 @@ impl App {
             .collect();
 
         let mut state = self.lock_state()?;
+        // Save current mode so the UI can render it behind the dialog
+        if state.pre_dialog_mode.is_none() {
+            state.pre_dialog_mode = Some(state.mode.clone());
+        }
         state.current_tool = Some(tool_name.to_string());
         state.tool_dialog = Some(ToolDialogState {
             tool_name: tool_name.to_string(),
