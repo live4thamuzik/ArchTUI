@@ -64,8 +64,8 @@ fn test_app_state_default_no_dialogs() {
 #[test]
 fn test_app_state_default_installer_button_is_start() {
     let state = AppState::default();
-    // 1 = Start Install button (not 0 = Test Config)
-    assert_eq!(state.installer_button_selection, 1);
+    // 2 = Start Install button (0 = Test Config, 1 = Export Config)
+    assert_eq!(state.installer_button_selection, 2);
 }
 
 #[test]

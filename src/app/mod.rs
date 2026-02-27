@@ -811,8 +811,17 @@ impl App {
         {
             let mut state = self.lock_state()?;
             if state.config_scroll.selected_index == state.config.options.len() {
-                state.installer_button_selection =
-                    if state.installer_button_selection == 0 { 1 } else { 0 };
+                match key_event.code {
+                    KeyCode::Left => {
+                        state.installer_button_selection =
+                            state.installer_button_selection.saturating_sub(1);
+                    }
+                    KeyCode::Right | KeyCode::Tab => {
+                        state.installer_button_selection =
+                            (state.installer_button_selection + 1).min(2);
+                    }
+                    _ => {}
+                }
             }
             return Ok(false);
         }
@@ -1614,15 +1623,16 @@ impl App {
 
     /// Handle guided installer enter (original logic)
     fn handle_guided_installer_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (should_open_input, should_start_installation, should_test_config) = {
+        let (should_open_input, should_start_installation, should_test_config, should_export_config) = {
             let state = self.lock_state()?;
             if state.config_scroll.selected_index == state.config.options.len() {
                 match state.installer_button_selection {
-                    0 => (false, false, true),  // Test Config
-                    _ => (false, true, false),   // Start Install
+                    0 => (false, false, true, false),  // Test Config
+                    1 => (false, false, false, true),   // Export Config
+                    _ => (false, true, false, false),   // Start Install
                 }
             } else {
-                (true, false, false) // Open input dialog
+                (true, false, false, false) // Open input dialog
             }
         };
 
@@ -1632,6 +1642,10 @@ impl App {
 
         if should_test_config {
             self.generate_test_config_summary()?;
+        }
+
+        if should_export_config {
+            self.export_config()?;
         }
 
         // Start installation if needed - show confirmation dialog first
@@ -2034,6 +2048,32 @@ impl App {
         state.dry_run_scroll_offset = 0;
         state.mode = AppMode::DryRunSummary;
         state.status_message = "Test Config - review your settings (B to go back)".to_string();
+        Ok(())
+    }
+
+    /// Export current configuration to a JSON file in the working directory
+    fn export_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let file_config = {
+            let state = self.lock_state()?;
+            crate::config_file::InstallationConfig::from(&state.config)
+        };
+
+        let export_path = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("archtui-config.json");
+
+        let mut state = self.lock_state()?;
+        match file_config.save_to_file(&export_path) {
+            Ok(()) => {
+                info!("Exported config to: {}", export_path.display());
+                state.status_message =
+                    format!("Config exported to {}", export_path.display());
+            }
+            Err(e) => {
+                log::error!("Failed to export config: {}", e);
+                state.status_message = format!("Export failed: {}", e);
+            }
+        }
         Ok(())
     }
 
