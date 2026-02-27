@@ -72,7 +72,7 @@ fi
 log_info "Running as user '$USER' in chroot '$ROOT': $CMD"
 
 if [[ -n "$WORKDIR" ]]; then
-    arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd '$WORKDIR' && $CMD"
+    arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd $(printf '%q' "$WORKDIR") && $CMD"
 else
     arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "$CMD"
 fi

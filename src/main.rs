@@ -577,9 +577,10 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&add_user_args)?;
             }
-            crate::cli::UserToolCommands::ResetPassword { username } => {
+            crate::cli::UserToolCommands::ResetPassword { username, password } => {
                 let reset_args = ResetPasswordArgs {
                     username: username.clone(),
+                    password: password.clone(),
                 };
                 execute_tool(&reset_args)?;
             }

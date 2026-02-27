@@ -159,6 +159,7 @@ execute_raid_luks_partitioning() {
     # Create swap file if requested (non-LVM RAID+LUKS uses swapfile since array is a single device)
     if [[ "$WANT_SWAP" == "yes" ]]; then
         create_swapfile "$(get_swap_size_mib)"
+        capture_device_info "swap" "/mnt/swapfile"
     fi
 
     # Capture UUIDs for bootloader config

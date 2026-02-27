@@ -206,7 +206,7 @@ case "$ACTION" in
         log_info "📌 Mount Status:"
         if mountpoint -q "$DEVICE" 2>/dev/null; then
             log_success "  ✅ Device is mounted"
-            mount | grep "$DEVICE" | sed 's/^/  /'
+            mount | grep -F "$DEVICE" | sed 's/^/  /'
         else
             log_info "  ℹ️  Device is not mounted"
         fi
@@ -264,8 +264,8 @@ case "$ACTION" in
         # Check if device is already mounted
         if mountpoint -q "$DEVICE" 2>/dev/null; then
             log_warning "⚠️  Device $DEVICE is already mounted"
-            mount | grep "$DEVICE" | sed 's/^/  /'
-            
+            mount | grep -F "$DEVICE" | sed 's/^/  /'
+
             if [[ "$FORCE" == true ]]; then
                 log_info "Force mode enabled - unmounting first..."
                 umount "$DEVICE" || {
@@ -285,7 +285,7 @@ case "$ACTION" in
         # Check if mountpoint is already in use
         if mountpoint -q "$MOUNTPOINT" 2>/dev/null; then
             log_warning "⚠️  Mountpoint $MOUNTPOINT is already in use"
-            mount | grep "$MOUNTPOINT" | sed 's/^/  /'
+            mount | grep -F "$MOUNTPOINT" | sed 's/^/  /'
             
             if [[ "$FORCE" == true ]]; then
                 log_info "Force mode enabled - unmounting mountpoint first..."
@@ -352,7 +352,7 @@ case "$ACTION" in
         
         # Show mount information
         log_info "📊 Mount Information:"
-        mount | grep "$DEVICE" | sed 's/^/  /'
+        mount | grep -F "$DEVICE" | sed 's/^/  /'
         df -h "$MOUNTPOINT" | sed 's/^/  /'
         ;;
     umount)
@@ -381,7 +381,7 @@ case "$ACTION" in
         
         # Show current mount information
         log_info "📌 Current mount information:"
-        mount | grep "$TARGET" | sed 's/^/  /'
+        mount | grep -F "$TARGET" | sed 's/^/  /'
         
         # Check for busy filesystem
         if lsof "$TARGET" >/dev/null 2>&1; then

@@ -364,10 +364,12 @@ configure_static() {
         log_info "Setting DNS servers: $dns"
         # Note: This is a temporary configuration
         # For persistent DNS, /etc/resolv.conf would need to be configured
-        echo "nameserver $(echo "$dns" | cut -d',' -f1)" > /etc/resolv.conf
-        if [[ "$dns" == *,* ]]; then
-            echo "nameserver $(echo "$dns" | cut -d',' -f2)" >> /etc/resolv.conf
-        fi
+        {
+            echo "nameserver $(echo "$dns" | cut -d',' -f1)"
+            if [[ "$dns" == *,* ]]; then
+                echo "nameserver $(echo "$dns" | cut -d',' -f2)"
+            fi
+        } > /etc/resolv.conf
         log_success "✅ DNS servers configured (temporary)"
     fi
     

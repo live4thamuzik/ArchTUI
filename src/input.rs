@@ -156,20 +156,21 @@ impl InputDialog {
                     scroll_state.page_down();
                 }
                 crossterm::event::KeyCode::Enter => {
-                    let selected_option = &options[scroll_state.selected_index];
-                    // Skip warning lines - they start with ⚠️ or are empty or contain warning text
-                    if selected_option.starts_with("⚠️")
-                        || selected_option.is_empty()
-                        || selected_option.contains("WARNING")
-                        || selected_option.contains("Make sure")
-                        || selected_option.contains("See:")
-                        || selected_option.contains("BIOS/Legacy")
-                        || selected_option.contains("motherboard")
-                    {
-                        // Don't select warning lines, just move to next option
-                        scroll_state.move_down();
-                    } else {
-                        return InputResult::Confirm(selected_option.clone());
+                    if let Some(selected_option) = options.get(scroll_state.selected_index) {
+                        // Skip warning lines - they start with ⚠️ or are empty or contain warning text
+                        if selected_option.starts_with("⚠️")
+                            || selected_option.is_empty()
+                            || selected_option.contains("WARNING")
+                            || selected_option.contains("Make sure")
+                            || selected_option.contains("See:")
+                            || selected_option.contains("BIOS/Legacy")
+                            || selected_option.contains("motherboard")
+                        {
+                            // Don't select warning lines, just move to next option
+                            scroll_state.move_down();
+                        } else {
+                            return InputResult::Confirm(selected_option.clone());
+                        }
                     }
                 }
                 crossterm::event::KeyCode::Esc => {
@@ -189,10 +190,8 @@ impl InputDialog {
                     scroll_state.move_down();
                 }
                 crossterm::event::KeyCode::Enter => {
-                    if !available_disks.is_empty() {
-                        return InputResult::Confirm(
-                            available_disks[scroll_state.selected_index].clone(),
-                        );
+                    if let Some(disk) = available_disks.get(scroll_state.selected_index) {
+                        return InputResult::Confirm(disk.clone());
                     }
                 }
                 crossterm::event::KeyCode::Esc => {
@@ -216,11 +215,12 @@ impl InputDialog {
                 }
                 crossterm::event::KeyCode::Char(' ') => {
                     // Toggle selection
-                    let selected_disk = &available_disks[scroll_state.selected_index];
-                    if selected_disks.contains(selected_disk) {
-                        selected_disks.retain(|d| d != selected_disk);
-                    } else if selected_disks.len() < *max_disks {
-                        selected_disks.push(selected_disk.clone());
+                    if let Some(selected_disk) = available_disks.get(scroll_state.selected_index) {
+                        if selected_disks.contains(selected_disk) {
+                            selected_disks.retain(|d| d != selected_disk);
+                        } else if selected_disks.len() < *max_disks {
+                            selected_disks.push(selected_disk.clone());
+                        }
                     }
                 }
                 crossterm::event::KeyCode::Enter => {

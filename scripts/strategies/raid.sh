@@ -83,7 +83,7 @@ execute_raid_partitioning() {
     mdadm --create --run --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
     
     # Wait for RAID to be ready
-    sleep 5
+    sleep 2
     mdadm --wait /dev/md0 || error_exit "RAID array not ready."
     
     # --- Phase 3: Format and mount root FIRST ---
@@ -125,6 +125,7 @@ execute_raid_partitioning() {
     # Create swap file if requested (non-LVM RAID uses swapfile since array is a single device)
     if [ "$WANT_SWAP" = "yes" ]; then
         create_swapfile "$(get_swap_size_mib)"
+        capture_device_info "swap" "/mnt/swapfile"
     fi
 
     # Capture UUIDs for bootloader config

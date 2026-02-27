@@ -19,6 +19,8 @@ use crate::script_traits::ScriptArgs;
 pub struct ResetPasswordArgs {
     /// Username to reset password for.
     pub username: String,
+    /// New password (passed via env var, never on CLI).
+    pub password: String,
 }
 
 impl ScriptArgs for ResetPasswordArgs {
@@ -27,7 +29,7 @@ impl ScriptArgs for ResetPasswordArgs {
     }
 
     fn get_env_vars(&self) -> Vec<(String, String)> {
-        vec![]
+        vec![("USER_PASSWORD".to_string(), self.password.clone())]
     }
 
     fn script_name(&self) -> &'static str {

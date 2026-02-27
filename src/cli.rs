@@ -226,6 +226,9 @@ pub enum UserToolCommands {
         /// Username to reset password for
         #[arg(short, long)]
         username: String,
+        /// New password
+        #[arg(short, long)]
+        password: String,
     },
     /// Manage user groups
     Groups {

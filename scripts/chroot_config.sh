@@ -1204,12 +1204,13 @@ install_aur_helper() {
     # which would hang waiting for a password since stdin is not a terminal
     local sudoers_drop="/etc/sudoers.d/temp-aur-build"
     echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
-    chmod 440 "$sudoers_drop"
+    chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
+    trap 'rm -f "$sudoers_drop"' RETURN
 
     case "$helper" in
         "paru")
             # Install paru dependencies
-            pacman -S base-devel git --noconfirm --needed || { log_error "Failed to install paru dependencies"; rm -f "$sudoers_drop"; return 1; }
+            pacman -S base-devel git --noconfirm --needed || { log_error "Failed to install paru dependencies"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
 set -e
@@ -1221,7 +1222,7 @@ AUREOF
             ;;
         "yay")
             # Install yay dependencies
-            pacman -S base-devel git go --noconfirm --needed || { log_error "Failed to install yay dependencies"; rm -f "$sudoers_drop"; return 1; }
+            pacman -S base-devel git go --noconfirm --needed || { log_error "Failed to install yay dependencies"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
 set -e
@@ -1232,7 +1233,7 @@ makepkg -si --noconfirm
 AUREOF
             ;;
         "pikaur")
-            pacman -S base-devel git python --noconfirm --needed || { log_error "Failed to install pikaur dependencies"; rm -f "$sudoers_drop"; return 1; }
+            pacman -S base-devel git python --noconfirm --needed || { log_error "Failed to install pikaur dependencies"; return 1; }
 
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
 set -e
@@ -1246,9 +1247,6 @@ AUREOF
             log_warn "Unknown AUR helper: $helper"
             ;;
     esac
-
-    # Revoke temporary passwordless sudo
-    rm -f "$sudoers_drop"
 
     # Cleanup build artifacts
     rm -rf "$build_dir"
@@ -1304,11 +1302,10 @@ install_additional_packages() {
                 # NOPASSWD needed — AUR helpers call sudo pacman internally
                 local sudoers_drop="/etc/sudoers.d/temp-aur-packages"
                 echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
-                chmod 440 "$sudoers_drop"
+                chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
+                trap 'rm -f "$sudoers_drop"' RETURN
 
                 runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some AUR packages may have failed to install"
-
-                rm -f "$sudoers_drop"
             fi
         else
             log_warn "AUR packages requested but no AUR helper available"

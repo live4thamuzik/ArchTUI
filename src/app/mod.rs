@@ -3560,12 +3560,20 @@ impl App {
                     required: false,
                 },
             ],
-            "reset_password" => vec![ToolParam {
-                name: "username".to_string(),
-                description: "Username to reset password for".to_string(),
-                param_type: ToolParameter::Text("".to_string()),
-                required: true,
-            }],
+            "reset_password" => vec![
+                ToolParam {
+                    name: "username".to_string(),
+                    description: "Username to reset password for".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "password".to_string(),
+                    description: "New password".to_string(),
+                    param_type: ToolParameter::Password("".to_string()),
+                    required: true,
+                },
+            ],
             "configure_network" => vec![
                 ToolParam {
                     name: "interface".to_string(),
@@ -4564,7 +4572,15 @@ impl App {
                         return Ok(());
                     }
                 };
-                let sa = ResetPasswordArgs { username };
+                let password = match Self::validate_required_param(&params, 1, "password") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state()?;
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let sa = ResetPasswordArgs { username, password };
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
                     "reset password", sa.is_destructive(), false,

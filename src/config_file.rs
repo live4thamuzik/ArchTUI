@@ -71,7 +71,8 @@ pub struct InstallationConfig {
     // Boot configuration
     pub bootloader: Bootloader,
     pub os_prober: Toggle,
-    pub grub_themes: Toggle,
+    #[serde(alias = "grub_themes")]
+    pub grub_theme: Toggle,
     pub grub_theme_selection: GrubTheme,
 
     // Desktop
@@ -310,7 +311,7 @@ impl InstallationConfig {
             ("FLATPAK".to_string(), self.flatpak.to_string()),
             ("BOOTLOADER".to_string(), self.bootloader.to_string()),
             ("OS_PROBER".to_string(), self.os_prober.to_string()),
-            ("GRUB_THEME".to_string(), self.grub_themes.to_string()),
+            ("GRUB_THEME".to_string(), self.grub_theme.to_string()),
             (
                 "GRUB_THEME_SELECTION".to_string(),
                 self.grub_theme_selection.to_string(),
@@ -384,7 +385,7 @@ impl Default for InstallationConfig {
             flatpak: Toggle::No,
             bootloader: Bootloader::Grub,
             os_prober: Toggle::No,
-            grub_themes: Toggle::No,
+            grub_theme: Toggle::No,
             grub_theme_selection: GrubTheme::PolyDark,
             desktop_environment: DesktopEnvironment::None,
             display_manager: DisplayManager::None,
@@ -461,7 +462,7 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             flatpak: parse_or_default(&get_value("Flatpak")),
             bootloader: parse_or_default(&get_value("Bootloader")),
             os_prober: parse_or_default(&get_value("OS Prober")),
-            grub_themes: parse_or_default(&get_value("GRUB Theme")),
+            grub_theme: parse_or_default(&get_value("GRUB Theme")),
             grub_theme_selection: parse_or_default(&get_value("GRUB Theme Selection")),
             desktop_environment: parse_or_default(&get_value("Desktop Environment")),
             display_manager: parse_or_default(&get_value("Display Manager")),
