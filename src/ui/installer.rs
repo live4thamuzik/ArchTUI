@@ -410,14 +410,18 @@ fn create_config_item(
     ListItem::new(text).style(style)
 }
 
-/// Render action buttons (Test Config + Start Install) - Sprint 8
+/// Render action buttons (Test Config + Export Config + Start Install)
 fn render_start_button(f: &mut Frame, area: Rect, state: &AppState) {
     let is_button_row = state.config_scroll.selected_index == state.config.options.len();
 
-    // Split area into two buttons
+    // Split area into three buttons
     let button_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+            Constraint::Percentage(33),
+        ])
         .split(area);
 
     // Test Config button (index 0)
@@ -442,8 +446,30 @@ fn render_start_button(f: &mut Frame, area: Rect, state: &AppState) {
         .style(test_style);
     f.render_widget(test_button, button_chunks[0]);
 
-    // Start Install button (index 1)
-    let start_selected = is_button_row && state.installer_button_selection == 1;
+    // Export Config button (index 1)
+    let export_selected = is_button_row && state.installer_button_selection == 1;
+    let export_text = if export_selected {
+        "  EXPORT CONFIG (Enter)  "
+    } else {
+        "  EXPORT CONFIG  "
+    };
+    let export_style = if export_selected {
+        Style::default()
+            .fg(Colors::BG_PRIMARY)
+            .bg(Colors::PRIMARY)
+    } else if is_button_row {
+        Style::default().fg(Colors::PRIMARY)
+    } else {
+        Style::default().fg(Colors::FG_MUTED)
+    };
+    let export_button = Paragraph::new(export_text)
+        .block(Block::default().borders(Borders::ALL))
+        .alignment(Alignment::Center)
+        .style(export_style);
+    f.render_widget(export_button, button_chunks[1]);
+
+    // Start Install button (index 2)
+    let start_selected = is_button_row && state.installer_button_selection == 2;
     let start_text = if start_selected {
         "  START INSTALLATION (Enter)  "
     } else {
@@ -462,7 +488,7 @@ fn render_start_button(f: &mut Frame, area: Rect, state: &AppState) {
         .block(Block::default().borders(Borders::ALL))
         .alignment(Alignment::Center)
         .style(start_style);
-    f.render_widget(start_button, button_chunks[1]);
+    f.render_widget(start_button, button_chunks[2]);
 }
 
 /// Render dry-run summary in specified area (Sprint 8)
