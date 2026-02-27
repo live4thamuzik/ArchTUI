@@ -48,10 +48,12 @@ ArchTUI is a hybrid Rust/Bash application for installing Arch Linux. The archite
 ## Directory Structure
 
 ```
-archinstall/
+ArchTUI/
 ├── src/                      # Rust source code
 │   ├── main.rs              # CLI entry point and event loop
-│   ├── app.rs               # Application state machine (3,335 LOC)
+│   ├── app/                 # Application state machine
+│   │   ├── mod.rs           # Event loop, input handling, mode dispatch
+│   │   └── state.rs         # AppState, AppMode, shared state
 │   ├── ui/                  # UI rendering (modular)
 │   │   ├── mod.rs           # Main renderer dispatcher
 │   │   ├── menus.rs         # Menu rendering
@@ -73,10 +75,11 @@ archinstall/
 │   ├── disk_utils.sh        # Disk operations
 │   ├── disk_strategies.sh   # Strategy dispatcher
 │   ├── utils.sh             # Common utilities
-│   ├── config_loader.sh     # JSON config loader
+│   ├── config_loader.sh     # JSON config → environment variables
+│   ├── run_as_user.sh       # Unprivileged execution helper
 │   ├── strategies/          # Partitioning strategies (9)
 │   ├── desktops/            # DE installation scripts (6)
-│   ├── tools/               # System admin tools (19)
+│   ├── tools/               # System admin tools (26)
 │   └── tests/               # BATS test suite
 │
 ├── tests/                    # Rust integration tests
@@ -88,7 +91,7 @@ archinstall/
 
 ### Rust Frontend
 
-#### Application State (`app.rs`)
+#### Application State (`app/`)
 The central state machine managing 13+ application modes:
 - `MainMenu` - Entry point
 - `GuidedInstaller` - Step-by-step configuration
@@ -123,7 +126,10 @@ Reusable UI widgets:
 - `install.sh` - Orchestrates the installation phases
 - `install_wrapper.sh` - Wraps output for TUI consumption
 - `chroot_config.sh` - Runs inside chroot for system setup
+- `config_loader.sh` - Loads JSON config into environment variables
 - `disk_utils.sh` - Partition detection, formatting, mounting
+- `disk_strategies.sh` - Strategy dispatcher
+- `run_as_user.sh` - Runs commands as unprivileged user (AUR helpers, dotfiles)
 - `utils.sh` - Logging, validation, common functions
 
 #### Partitioning Strategies (`strategies/`)
@@ -140,6 +146,7 @@ Nine disk layout options:
 
 #### Desktop Environments (`desktops/`)
 - `gnome.sh`, `kde.sh`, `hyprland.sh`, `i3.sh`, `xfce.sh`, `none.sh`
+- Sway, Cinnamon, Mate, and Budgie are defined as enums in `types.rs` and handled via package lists in `chroot_config.sh` (no dedicated scripts)
 
 ## Data Flow
 
@@ -226,5 +233,5 @@ Key variables:
 
 ### Adding a System Tool
 1. Create `scripts/tools/category/new_tool.sh`
-2. Add to appropriate menu in `app.rs`
+2. Add to appropriate menu in `app/mod.rs`
 3. Add description in `ui/descriptions.rs`
