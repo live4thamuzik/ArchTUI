@@ -375,10 +375,10 @@ create_esp_partition() {
     log_info "Creating ESP partition: $part_device (${size_mib}MiB)"
     
     sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${EFI_PARTITION_TYPE}" -c "${part_num}:EFI" "$disk"
-    
-    # Wait for device node
-    sleep 1
-    
+
+    # Wait for udev to create device node
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
+
     mkfs.fat -F32 "$part_device"
 }
 
@@ -395,11 +395,11 @@ create_boot_partition() {
     # Use standard Linux partition type (8300), NOT XBOOTLDR (EA00)
     sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:BOOT" "$disk"
 
-    # Wait for device node
-    sleep 1
+    # Wait for udev to create device node
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
 
-    # Format as ext4 (standard for /boot)
-    mkfs.ext4 -L BOOT "$part_device"
+    # Format as ext4 (standard for /boot) — -F prevents interactive prompt
+    mkfs.ext4 -F -L BOOT "$part_device"
 }
 
 create_bios_boot_partition() {
@@ -408,7 +408,8 @@ create_bios_boot_partition() {
     
     log_info "Creating BIOS Boot partition: partition $part_num"
     sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" -c "${part_num}:BIOSBOOT" "$disk"
-    sleep 1
+    # Wait for udev to create device node
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
 }
 
 create_swap_partition() {
@@ -624,8 +625,13 @@ get_device_uuid() {
         return 1
     }
     if [[ -z "$uuid" ]]; then
-        log_error "Device $device has no UUID (not formatted?)"
-        return 1
+        # UUID not yet populated — wait for udev and retry once
+        udevadm settle --timeout=5 2>/dev/null || true
+        uuid=$(lsblk -n -o UUID "$device" 2>/dev/null) || true
+        if [[ -z "$uuid" ]]; then
+            log_error "Device $device has no UUID (not formatted?)"
+            return 1
+        fi
     fi
     echo "$uuid"
 }
@@ -929,13 +935,14 @@ sync_partitions() {
     # Inform kernel of partition table changes
     partprobe "$disk" 2>/dev/null || true
 
-    # Give kernel time to create device nodes
-    sleep 1
+    # Wait for udev to finish creating device nodes and populating attributes
+    # Critical for NVMe/USB where device nodes appear asynchronously
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
 
-    # Alternative method if partprobe fails
+    # Verify device is visible
     if ! lsblk "$disk" &>/dev/null; then
         blockdev --rereadpt "$disk" 2>/dev/null || true
-        sleep 1
+        udevadm settle --timeout=10 2>/dev/null || sleep 2
     fi
 
     log_info "Partition table synced"

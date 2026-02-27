@@ -808,8 +808,6 @@ configure_chroot() {
         printf '#!/bin/bash\n'
         printf '# Auto-generated configuration for chroot\n'
         printf 'export MAIN_USERNAME=%q\n' "$MAIN_USERNAME"
-        printf 'export MAIN_USER_PASSWORD=%q\n' "$MAIN_USER_PASSWORD"
-        printf 'export ROOT_PASSWORD=%q\n' "$ROOT_PASSWORD"
         printf 'export SYSTEM_HOSTNAME=%q\n' "$SYSTEM_HOSTNAME"
         printf 'export TIMEZONE_REGION=%q\n' "$TIMEZONE_REGION"
         printf 'export TIMEZONE=%q\n' "$TIMEZONE"
@@ -839,7 +837,6 @@ configure_chroot() {
         printf 'export INSTALL_DISK=%q\n' "$INSTALL_DISK"
         printf 'export PARTITIONING_STRATEGY=%q\n' "$PARTITIONING_STRATEGY"
         printf 'export ENCRYPTION=%q\n' "$ENCRYPTION"
-        printf 'export ENCRYPTION_PASSWORD=%q\n' "$ENCRYPTION_PASSWORD"
         printf 'export ROOT_FILESYSTEM=%q\n' "$ROOT_FILESYSTEM"
         printf 'export HOME_FILESYSTEM=%q\n' "$HOME_FILESYSTEM"
         printf 'export BTRFS_SNAPSHOTS=%q\n' "$BTRFS_SNAPSHOTS"
@@ -863,7 +860,11 @@ configure_chroot() {
     log_info "Entering chroot environment..."
     log_info "Running chroot_config.sh inside /mnt..."
 
+    MAIN_USER_PASSWORD="$MAIN_USER_PASSWORD" \
+    ROOT_PASSWORD="$ROOT_PASSWORD" \
+    ENCRYPTION_PASSWORD="${ENCRYPTION_PASSWORD:-}" \
     arch-chroot /mnt /bin/bash -c "
+        export MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
         # Source config with error handling (source_or_die not available in chroot)
         if [[ ! -f /install_config.sh ]]; then
             echo 'FATAL: /install_config.sh not found' >&2
