@@ -423,12 +423,12 @@ create_swap_partition() {
     log_info "Creating Swap partition: $part_device (${size_mib}MiB)"
     
     sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${SWAP_PARTITION_TYPE}" -c "${part_num}:SWAP" "$disk"
-    
-    # Wait for device node
-    sleep 1
-    
-    mkswap "$part_device"
-    swapon "$part_device"
+
+    # Wait for udev to create device node
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
+
+    mkswap "$part_device" || { log_error "Failed to format swap on $part_device"; return 1; }
+    swapon "$part_device" || log_warn "Failed to activate swap on $part_device"
 }
 
 create_root_partition() {
@@ -443,9 +443,10 @@ create_root_partition() {
     
     # Use remaining space (0)
     sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$disk"
-    
-    sleep 1
-    
+
+    # Wait for udev to create device node
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
+
     format_filesystem "$part_device" "$filesystem"
 }
 
@@ -462,8 +463,10 @@ create_home_partition() {
     # This implies root didn't take 100%. Logic for splitting root/home should be in strategy.
     # For now, assumes we are appending to disk.
     sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$disk"
-    
-    sleep 1
+
+    # Wait for udev to create device node
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
+
     format_filesystem "$part_device" "$filesystem"
 }
 
