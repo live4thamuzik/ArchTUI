@@ -136,7 +136,7 @@ impl InstallationConfig {
             anyhow::bail!("Install disk must be specified");
         }
 
-        // Validate hostname (RFC 1123: 1-63 chars, alphanumeric + hyphens, no leading/trailing hyphen)
+        // Validate hostname (RFC 1123: 1-63 chars, lowercase + digits + hyphens + underscores)
         let hostname = self.hostname.trim();
         if hostname.is_empty() {
             anyhow::bail!("Hostname must be specified");
@@ -145,21 +145,18 @@ impl InstallationConfig {
             anyhow::bail!("Hostname must be at most 63 characters long (RFC 1123)");
         }
         if let Some(first_char) = hostname.chars().next() {
-            if !first_char.is_ascii_alphanumeric() {
-                anyhow::bail!("Hostname must start with a letter or digit");
+            if !first_char.is_ascii_lowercase() && first_char != '_' {
+                anyhow::bail!("Hostname must start with a lowercase letter or underscore");
             }
-        }
-        if hostname.ends_with('-') {
-            anyhow::bail!("Hostname must not end with a hyphen");
         }
         if !hostname
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
         {
-            anyhow::bail!("Hostname can only contain letters, numbers, and hyphens");
+            anyhow::bail!("Hostname can only contain lowercase letters, numbers, hyphens, and underscores");
         }
 
-        // Validate username (3-32 chars, start with letter, alphanumeric + underscore)
+        // Validate username (3-32 chars, start with lowercase letter, lowercase + digits + underscore)
         let username = self.username.trim();
         if username.is_empty() {
             anyhow::bail!("Username must be specified");
@@ -168,15 +165,15 @@ impl InstallationConfig {
             anyhow::bail!("Username must be 3-32 characters long");
         }
         if let Some(first_char) = username.chars().next() {
-            if !first_char.is_ascii_alphabetic() {
-                anyhow::bail!("Username must start with a letter");
+            if !first_char.is_ascii_lowercase() {
+                anyhow::bail!("Username must start with a lowercase letter");
             }
         }
         if !username
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         {
-            anyhow::bail!("Username can only contain letters, numbers, and underscores");
+            anyhow::bail!("Username can only contain lowercase letters, numbers, and underscores");
         }
 
         // Validate passwords (non-empty, no whitespace)
@@ -714,21 +711,28 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_hostname_trailing_hyphen() {
+    fn test_validation_hostname_trailing_hyphen_allowed() {
         let mut config = create_test_config();
-        config.hostname = "hostname-".to_string(); // Trailing hyphen is invalid
+        config.hostname = "hostname-".to_string(); // Trailing hyphen is valid in our rules
         let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("hyphen"));
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn test_validation_hostname_special_chars() {
+    fn test_validation_hostname_underscore_allowed() {
         let mut config = create_test_config();
-        config.hostname = "host_name".to_string(); // Underscores not allowed per RFC 1123
+        config.hostname = "host_name".to_string(); // Underscores allowed
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validation_hostname_uppercase_rejected() {
+        let mut config = create_test_config();
+        config.hostname = "HostName".to_string(); // Uppercase not allowed
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("letters, numbers"));
+        assert!(result.unwrap_err().to_string().contains("lowercase"));
     }
 
     #[test]
@@ -746,7 +750,7 @@ mod tests {
         config.username = "1user".to_string();
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("start with a letter"));
+        assert!(result.unwrap_err().to_string().contains("start with a lowercase letter"));
     }
 
     #[test]

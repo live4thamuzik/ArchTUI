@@ -850,7 +850,9 @@ impl App {
                 self.move_to_last();
             }
             KeyCode::Enter => {
-                self.handle_enter()?;
+                if self.handle_enter()? {
+                    return Ok(true);
+                }
             }
             _ => {}
         }
@@ -1037,8 +1039,8 @@ impl App {
     //
     // =========================================================================
 
-    /// Handle Enter key press
-    fn handle_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    /// Handle Enter key press. Returns true if the app should quit.
+    fn handle_enter(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let current_mode = {
             let state = self.lock_state()?;
             state.mode.clone()
@@ -1046,7 +1048,9 @@ impl App {
 
         match current_mode {
             AppMode::MainMenu => {
-                self.handle_main_menu_selection()?;
+                if self.handle_main_menu_selection()? {
+                    return Ok(true);
+                }
             }
             AppMode::ToolsMenu => {
                 self.handle_tools_menu_selection()?;
@@ -1100,7 +1104,7 @@ impl App {
             }
         }
 
-        Ok(())
+        Ok(false)
     }
 
     // =========================================================================
@@ -1325,7 +1329,7 @@ impl App {
     // =========================================================================
 
     /// Handle main menu selection
-    fn handle_main_menu_selection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_main_menu_selection(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let selection = {
             let state = self.lock_state()?;
             state.main_menu_selection
@@ -1355,11 +1359,11 @@ impl App {
             }
             3 => {
                 // Quit
-                return Ok(());
+                return Ok(true);
             }
             _ => {}
         }
-        Ok(())
+        Ok(false)
     }
 
     /// Handle tools menu selection
@@ -4743,10 +4747,10 @@ impl App {
                 }
             }
             "enable_services" => {
-                // params: root, services (comma-separated)
+                // params: services (index 0), root (index 1) — matches dialog definition order
                 let sa = EnableServicesArgs {
-                    root: PathBuf::from(params.first().filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
-                    services: params.get(1).map(|s| s.split(',').map(|v| v.trim().to_string()).collect()).unwrap_or_default(),
+                    services: params.first().map(|s| s.split(',').map(|v| v.trim().to_string()).collect()).unwrap_or_default(),
+                    root: PathBuf::from(params.get(1).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
                 };
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),

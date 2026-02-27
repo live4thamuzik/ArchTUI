@@ -577,16 +577,24 @@ setup_btrfs_subvolumes() {
         return 1
     }
 
-    # Create mount point directories
-    mkdir -p /mnt/{var,tmp,.snapshots,boot,efi,var/cache,var/log} || {
+    # Create top-level mount point directories (inside @ subvolume)
+    mkdir -p /mnt/{var,tmp,.snapshots,boot,efi} || {
         log_error "Failed to create mount point directories"
         return 1
     }
 
-    # Mount other subvolumes
+    # Mount @var, @tmp, @snapshots first (top-level subvolumes)
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@var "$device" /mnt/var || { log_error "Failed to mount @var subvolume"; return 1; }
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp "$device" /mnt/tmp || { log_error "Failed to mount @tmp subvolume"; return 1; }
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots "$device" /mnt/.snapshots || { log_error "Failed to mount @snapshots subvolume"; return 1; }
+
+    # Create nested dirs inside @var (now a real mount, not hidden by @)
+    mkdir -p /mnt/var/cache /mnt/var/log || {
+        log_error "Failed to create nested mount point directories"
+        return 1
+    }
+
+    # Mount @cache, @log inside @var
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache "$device" /mnt/var/cache || { log_error "Failed to mount @cache subvolume"; return 1; }
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@log "$device" /mnt/var/log || { log_error "Failed to mount @log subvolume"; return 1; }
 
@@ -623,14 +631,14 @@ get_device_uuid() {
         return 1
     fi
     local uuid
-    uuid=$(lsblk -n -o UUID "$device" 2>/dev/null) || {
+    uuid=$(lsblk -n -d -o UUID "$device" 2>/dev/null) || {
         log_error "Failed to get UUID for $device"
         return 1
     }
     if [[ -z "$uuid" ]]; then
         # UUID not yet populated — wait for udev and retry once
         udevadm settle --timeout=5 2>/dev/null || true
-        uuid=$(lsblk -n -o UUID "$device" 2>/dev/null) || true
+        uuid=$(lsblk -n -d -o UUID "$device" 2>/dev/null) || true
         if [[ -z "$uuid" ]]; then
             log_error "Device $device has no UUID (not formatted?)"
             return 1

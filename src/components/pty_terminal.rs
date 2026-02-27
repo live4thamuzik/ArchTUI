@@ -142,6 +142,7 @@ impl PtyTerminal {
         // Set up shared state
         self.writer = Some(writer);
         self.child = Some(child);
+        // SAFETY: lock is never poisoned — no panic path while holding lock
         *self.running.lock().unwrap() = true;
 
         // Spawn reader thread
@@ -154,15 +155,18 @@ impl PtyTerminal {
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         // EOF - process ended
+                        // SAFETY: lock is never poisoned — no panic path while holding lock
                         *running.lock().unwrap() = false;
                         break;
                     }
                     Ok(n) => {
+                        // SAFETY: lock is never poisoned — no panic path while holding lock
                         let mut buffer = output_buffer.lock().unwrap();
                         buffer.extend_from_slice(&buf[..n]);
                     }
                     Err(e) => {
                         log::warn!("PTY read error: {}", e);
+                        // SAFETY: lock is never poisoned — no panic path while holding lock
                         *running.lock().unwrap() = false;
                         break;
                     }
@@ -176,6 +180,7 @@ impl PtyTerminal {
     /// Process any pending output and update the parser
     pub fn process_output(&mut self) {
         let data: Vec<u8> = {
+            // SAFETY: lock is never poisoned — no panic path while holding lock
             let mut buffer = self.output_buffer.lock().unwrap();
             std::mem::take(&mut *buffer)
         };
@@ -210,6 +215,7 @@ impl PtyTerminal {
     /// Check if the terminal is still running
     pub fn is_running(&mut self) -> bool {
         // First check our flag
+        // SAFETY: lock is never poisoned — no panic path while holding lock
         let flag = *self.running.lock().unwrap();
         if !flag {
             return false;
@@ -220,12 +226,15 @@ impl PtyTerminal {
             // try_wait returns Ok(Some(status)) if exited, Ok(None) if still running
             match child.try_wait() {
                 Ok(Some(status)) => {
+                    // SAFETY: lock is never poisoned — no panic path while holding lock
                     *self.exit_status.lock().unwrap() = Some(status);
+                    // SAFETY: lock is never poisoned — no panic path while holding lock
                     *self.running.lock().unwrap() = false;
                     false
                 }
                 Ok(None) => true,
                 Err(_) => {
+                    // SAFETY: lock is never poisoned — no panic path while holding lock
                     *self.running.lock().unwrap() = false;
                     false
                 }
@@ -237,6 +246,7 @@ impl PtyTerminal {
 
     /// Get the exit status if the process has completed
     pub fn exit_status(&self) -> Option<portable_pty::ExitStatus> {
+        // SAFETY: lock is never poisoned — no panic path while holding lock
         self.exit_status.lock().unwrap().clone()
     }
 
@@ -337,6 +347,7 @@ impl PtyTerminal {
         if let Some(ref mut child) = self.child {
             let _ = child.kill();
         }
+        // SAFETY: lock is never poisoned — no panic path while holding lock
         *self.running.lock().unwrap() = false;
     }
 }

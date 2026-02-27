@@ -58,12 +58,19 @@ impl ConfigOption {
         }
         // Add specific validation based on field type
         match self.name.as_str() {
-            "Username" | "Hostname" => {
+            "Hostname" => {
+                let value = self.get_value();
+                !value.is_empty()
+                    && value.len() <= 63
+                    && value.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c == '_')
+                    && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+            }
+            "Username" => {
                 let value = self.get_value();
                 value.len() >= 3
                     && value.len() <= 32
-                    && value.chars().next().is_some_and(|c| c.is_alphabetic())
-                    && value.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    && value.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                    && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
             }
             "User Password" | "Root Password" => {
                 let value = self.get_value();
