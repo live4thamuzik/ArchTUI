@@ -244,16 +244,17 @@ pub fn render_installation_ui_in_area(
     header.render_title(f, chunks[1], "Arch Linux Installation Progress");
     render_progress_bar(f, chunks[2], state.installation_progress as u16);
 
-    // Status line showing current phase
+    // Status line showing current phase — explicit background prevents ghosting
     let status_style = if state.installation_progress >= 100 {
-        Style::default().fg(Colors::SUCCESS)
+        Style::default().fg(Colors::SUCCESS).bg(Colors::BG_PRIMARY)
     } else {
-        Style::default().fg(Colors::SECONDARY)
+        Style::default().fg(Colors::SECONDARY).bg(Colors::BG_PRIMARY)
     };
     let status_line = Paragraph::new(Line::from(vec![
-        Span::styled(" Status: ", Style::default().fg(Colors::FG_MUTED)),
+        Span::styled(" Status: ", Style::default().fg(Colors::FG_MUTED).bg(Colors::BG_PRIMARY)),
         Span::styled(&state.status_message, status_style),
-    ]));
+    ]))
+    .style(Style::default().bg(Colors::BG_PRIMARY));
     f.render_widget(status_line, chunks[3]);
 
     render_installer_output(
