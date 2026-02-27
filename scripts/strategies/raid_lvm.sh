@@ -20,18 +20,18 @@ execute_raid_lvm_partitioning() {
         error_exit "RAID + LVM requires at least 2 disks, but only ${#RAID_DEVICES[@]} provided"
     fi
     
-    # Detect boot mode
+    # Detect boot mode — use local vars to avoid writing to readonly constants from disk_utils.sh
+    local esp_type xbootldr_type
     if [[ "$BOOT_MODE" == "UEFI" ]]; then
         log_info "UEFI boot mode detected - using GPT partition tables"
         PARTITION_TABLE="gpt"
-        # shellcheck disable=SC2153  # EFI_PARTITION_TYPE is defined in disk_utils.sh
-        ESP_PARTITION_TYPE="$EFI_PARTITION_TYPE"
-        XBOOTLDR_PARTITION_TYPE="$XBOOTLDR_PARTITION_TYPE"
+        esp_type="$EFI_PARTITION_TYPE"
+        xbootldr_type="$XBOOTLDR_PARTITION_TYPE"
     else
         log_info "BIOS boot mode detected - using MBR partition tables"
         PARTITION_TABLE="mbr"
-        ESP_PARTITION_TYPE=""
-        XBOOTLDR_PARTITION_TYPE=""
+        esp_type="$BIOS_BOOT_PARTITION_TYPE"
+        xbootldr_type="8300"
     fi
     
     # Create partitions on all disks
@@ -42,14 +42,14 @@ execute_raid_lvm_partitioning() {
         if [[ "$PARTITION_TABLE" == "gpt" ]]; then
             # UEFI: ESP + XBOOTLDR + RAID member
             sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
-            sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$ESP_PARTITION_TYPE" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
-            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$XBOOTLDR_PARTITION_TYPE" --change-name=2:XBOOTLDR "$disk" || error_exit "Failed to create XBOOTLDR on $disk"
+            sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
+            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$xbootldr_type" --change-name=2:XBOOTLDR "$disk" || error_exit "Failed to create XBOOTLDR on $disk"
             sgdisk --new=3:0:0 --typecode=3:"$LVM_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member on $disk"
         else
             # BIOS: BIOS boot (EF02) + boot + RAID member
             sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
-            sgdisk --new=1:0:+${BIOS_BOOT_PART_SIZE_MIB}MiB --typecode=1:"$BIOS_BOOT_PARTITION_TYPE" --change-name=1:BIOSBOOT "$disk" || error_exit "Failed to create BIOS boot partition on $disk"
-            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:8300 --change-name=2:BOOT "$disk" || error_exit "Failed to create boot partition on $disk"
+            sgdisk --new=1:0:+${BIOS_BOOT_PART_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:BIOSBOOT "$disk" || error_exit "Failed to create BIOS boot partition on $disk"
+            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$xbootldr_type" --change-name=2:BOOT "$disk" || error_exit "Failed to create boot partition on $disk"
             sgdisk --new=3:0:0 --typecode=3:"$LVM_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member partition on $disk"
         fi
         

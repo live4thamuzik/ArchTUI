@@ -110,7 +110,7 @@ cleanup_clone() {
         rm -rf "$CLONE_DIR"
     fi
 }
-trap 'cleanup_clone; cleanup_and_exit EXIT' EXIT
+trap 'cleanup_clone' EXIT
 
 # Clone the repository
 GIT_ARGS=(clone --depth 1)

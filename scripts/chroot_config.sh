@@ -79,13 +79,13 @@ install_packages() {
     pacman -S "${packages[@]}" --noconfirm --needed 2>&1 | while IFS= read -r line; do
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*)
-                echo -e "${LOG_COLORS[ERROR]}  [pacman] $line${COLORS[RESET]}"
+                echo -e "\033[91m  [pacman] $line\033[0m"
                 ;;
             *"warning"*|*"Warning"*|*"WARNING"*)
-                echo -e "${LOG_COLORS[WARN]}  [pacman] $line${COLORS[RESET]}"
+                echo -e "\033[33m  [pacman] $line\033[0m"
                 ;;
             *"downloading"*|*"installing"*|*"::"*|*"Packages"*|*"Total"*)
-                echo -e "${LOG_COLORS[COMMAND]}  [pacman] $line${COLORS[RESET]}"
+                echo -e "\033[2m\033[36m  [pacman] $line\033[0m"
                 ;;
         esac
     done
@@ -360,7 +360,9 @@ configure_mkinitcpio() {
 
     # Add Plymouth hook BEFORE encrypt (per Arch Wiki: "place plymouth before the encrypt hook")
     # Do NOT use deprecated plymouth-encrypt - use separate hooks
+    # Install plymouth BEFORE adding hook so hook files exist when mkinitcpio -P runs
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        pacman -S plymouth --noconfirm --needed || log_warn "Failed to install plymouth"
         hooks="$hooks plymouth"
         log_info "Added plymouth hook (before encrypt per Arch Wiki)"
     fi

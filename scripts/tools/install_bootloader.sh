@@ -235,7 +235,7 @@ case "$BOOTLOADER_TYPE" in
         cat > "$ROOT_PATH/boot/loader/loader.conf" << EOF
 default arch
 timeout 4
-editor  yes
+editor  no
 auto-entries yes
 auto-firmware yes
 EOF
@@ -248,7 +248,7 @@ EOF
         ROOT_PARTITION=""
         _ROOT_PART_SIZE=0
         
-        for part in "${TARGET_DISK}"{1..9}; do
+        while IFS= read -r part; do
             if [[ -b "$part" ]]; then
                 PART_TYPE=$(blkid -s TYPE -o value "$part" 2>/dev/null || echo "")
                 if [[ "$PART_TYPE" == "ext4" || "$PART_TYPE" == "xfs" || "$PART_TYPE" == "btrfs" ]]; then
@@ -260,7 +260,7 @@ EOF
                     fi
                 fi
             fi
-        done
+        done < <(lsblk -ln -o PATH "$TARGET_DISK" | tail -n +2)
         
         if [[ -n "$ROOT_PARTITION" ]]; then
             ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PARTITION")
@@ -269,12 +269,14 @@ EOF
             error_exit "Could not find root partition for systemd-boot entry"
         fi
         
-        cat > "$ROOT_PATH/boot/loader/entries/arch.conf" << EOF
-title   Arch Linux
-linux   /vmlinuz-linux
-initrd  /initramfs-linux.img
-options root=UUID=$ROOT_UUID rw
-EOF
+        {
+            echo "title   Arch Linux"
+            echo "linux   /vmlinuz-linux"
+            [[ -f "$ROOT_PATH/boot/intel-ucode.img" ]] && echo "initrd  /intel-ucode.img"
+            [[ -f "$ROOT_PATH/boot/amd-ucode.img" ]] && echo "initrd  /amd-ucode.img"
+            echo "initrd  /initramfs-linux.img"
+            echo "options root=UUID=$ROOT_UUID rw"
+        } > "$ROOT_PATH/boot/loader/entries/arch.conf"
         
         # Update firmware boot manager
         log_info "🔄 Updating firmware boot manager..."

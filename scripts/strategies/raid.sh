@@ -60,11 +60,7 @@ execute_raid_partitioning() {
         current_start_mib=$((current_start_mib + 1024))
         
         # 4. Data partition on each disk (takes rest of disk) - IN RAID
-        if [ "$BOOT_MODE" = "UEFI" ]; then
-            sgdisk -n "$data_part_num:0:0" -t "$data_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create data partition on $disk."
-        else
-            sgdisk -n "$data_part_num:0:0" -t "$data_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create data partition on $disk."
-        fi
+        sgdisk -n "$data_part_num:0:0" -t "$data_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create data partition on $disk."
         
         sync_partitions "$disk"
     done

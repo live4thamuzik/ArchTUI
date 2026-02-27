@@ -624,6 +624,8 @@ install_base_system() {
         # Network discovery (mDNS/Bonjour)
         "avahi"
         "nss-mdns"
+        # PCI detection (required for GPU auto-detection in chroot)
+        "pciutils"
     )
 
     # Add filesystem tools based on selected filesystems
@@ -642,6 +644,10 @@ install_base_system() {
                 ;;
         esac
     done
+    # Add dosfstools for UEFI (FAT32 ESP needs fsck.fat)
+    if [[ "$BOOT_MODE" == "UEFI" ]]; then
+        fs_packages+=("dosfstools")
+    fi
     # Deduplicate
     mapfile -t fs_packages < <(printf '%s\n' "${fs_packages[@]}" | sort -u)
 
