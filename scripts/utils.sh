@@ -196,8 +196,73 @@ setup_logging() {
     if ! mkdir -p "$log_dir" 2>/dev/null; then
         log_dir="/tmp"
     fi
-    export LOG_FILE="${log_dir}/install-$(date +%Y%m%d-%H%M%S).log"
+    local timestamp
+    timestamp="$(date +%Y%m%d-%H%M%S)"
+    export LOG_FILE="${log_dir}/install-${timestamp}.log"
     log_info "Logging initialized: $LOG_FILE"
+
+    # VERBOSE mode: enable set -x trace to a separate log file via BASH_XTRACEFD
+    if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
+        export VERBOSE_LOG_FILE="${log_dir}/install-${timestamp}-verbose.log"
+        # Open fd 3 for the verbose trace log
+        exec 3>>"$VERBOSE_LOG_FILE"
+        export BASH_XTRACEFD=3
+        # Readable trace prefix: [script:line] before each traced command
+        export PS4='+[${BASH_SOURCE[0]##*/}:${LINENO}] '
+        set -x
+        log_info "Verbose logging enabled: $VERBOSE_LOG_FILE"
+    fi
+}
+
+# Dump all configuration env vars to the log file (passwords redacted)
+# Called after setup_logging to capture the full config snapshot
+dump_config() {
+    local timestamp
+    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+    {
+        echo "[$timestamp] === CONFIGURATION DUMP ==="
+        local var
+        for var in \
+            INSTALL_DISK PARTITIONING_STRATEGY BOOT_MODE ENCRYPTION \
+            ROOT_FILESYSTEM HOME_FILESYSTEM SEPARATE_HOME SWAP SWAP_SIZE \
+            ROOT_SIZE HOME_SIZE RAID_LEVEL \
+            LOCALE KEYMAP TIMEZONE_REGION TIMEZONE TIME_SYNC \
+            MIRROR_COUNTRY KERNEL MULTILIB ADDITIONAL_PACKAGES GPU_DRIVERS \
+            SYSTEM_HOSTNAME MAIN_USERNAME \
+            AUR_HELPER ADDITIONAL_AUR_PACKAGES FLATPAK \
+            BOOTLOADER OS_PROBER GRUB_THEME GRUB_THEME_SELECTION SECURE_BOOT \
+            DESKTOP_ENVIRONMENT DISPLAY_MANAGER \
+            PLYMOUTH PLYMOUTH_THEME NUMLOCK_ON_BOOT \
+            GIT_REPOSITORY GIT_REPOSITORY_URL \
+            BTRFS_SNAPSHOTS BTRFS_FREQUENCY BTRFS_KEEP_COUNT BTRFS_ASSISTANT \
+            LOG_LEVEL \
+            MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
+        do
+            local val="${!var:-}"
+            # Redact passwords
+            case "$var" in
+                *PASSWORD*) val="********" ;;
+            esac
+            echo "[$timestamp]   $var=$val"
+        done
+        echo "[$timestamp] === END CONFIGURATION DUMP ==="
+    } >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
+}
+
+# Execute a command with set -x temporarily disabled (for password-sensitive operations)
+# Usage: run_secret <command> [args...]
+# When VERBOSE mode is active, this suppresses tracing to prevent passwords
+# from appearing in the verbose log. Re-enables tracing after the command.
+run_secret() {
+    if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
+        { set +x; } 2>/dev/null
+        "$@"
+        local rc=$?
+        set -x
+        return $rc
+    else
+        "$@"
+    fi
 }
 
 # Pre-flight checks before installation begins
