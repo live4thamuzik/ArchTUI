@@ -12,7 +12,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph},
     Frame,
 };
 
@@ -119,7 +119,7 @@ pub fn render_progress_bar(f: &mut Frame, area: Rect, progress: u16) {
 }
 
 /// Render installer output with auto-scroll and manual scroll support.
-/// Uses manual slicing (like FloatingOutput) to avoid wrap-offset mismatch.
+/// Uses Clear + block-first-then-content pattern to prevent ghosting artifacts.
 pub fn render_installer_output(
     f: &mut Frame,
     area: Rect,
@@ -127,10 +127,19 @@ pub fn render_installer_output(
     scroll_offset: usize,
     auto_scroll: bool,
 ) {
+    // Clear the entire area first to prevent ghosting from previous frames
+    f.render_widget(Clear, area);
+
+    // Render block with background fill — covers entire area including empty rows
     let content_block = Block::default()
         .borders(Borders::ALL)
-        .title("Installer Output (↑↓ scroll)");
+        .title("Installer Output (↑↓ scroll)")
+        .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+        .border_style(Style::default().fg(Colors::PRIMARY))
+        .style(Style::default().bg(Colors::BG_PRIMARY));
     let inner_area = content_block.inner(area);
+    f.render_widget(content_block, area);
+
     let visible_height = inner_area.height as usize;
 
     let start = if auto_scroll {
@@ -144,24 +153,27 @@ pub fn render_installer_output(
         .iter()
         .map(|line| {
             let style = if line.contains("ERROR") || line.contains("FATAL") {
-                Style::default().fg(Colors::ERROR)
+                Style::default().fg(Colors::ERROR).bg(Colors::BG_PRIMARY)
             } else if line.contains("WARNING") || line.contains("WARN:") {
-                Style::default().fg(Colors::WARNING)
+                Style::default().fg(Colors::WARNING).bg(Colors::BG_PRIMARY)
             } else if line.contains("SUCCESS:") {
-                Style::default().fg(Colors::SUCCESS)
+                Style::default().fg(Colors::SUCCESS).bg(Colors::BG_PRIMARY)
             } else if line.starts_with("==>") || line.starts_with("::") || line.contains("Phase ") {
                 Style::default()
                     .fg(Colors::INFO)
+                    .bg(Colors::BG_PRIMARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Colors::FG_PRIMARY)
+                Style::default().fg(Colors::FG_PRIMARY).bg(Colors::BG_PRIMARY)
             };
             ListItem::new(line.as_str()).style(style)
         })
         .collect();
 
-    let list = List::new(visible_content).block(content_block);
-    f.render_widget(list, area);
+    // Render list content into inner area (block already rendered above)
+    let list = List::new(visible_content)
+        .style(Style::default().bg(Colors::BG_PRIMARY));
+    f.render_widget(list, inner_area);
 }
 
 /// Render the navigation bar

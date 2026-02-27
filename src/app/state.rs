@@ -62,6 +62,8 @@ pub struct AppState {
     pub installer_scroll_offset: usize,
     /// Whether installer output auto-scrolls to bottom
     pub installer_auto_scroll: bool,
+    /// Actual visible height of installer output viewport (set by renderer)
+    pub installer_visible_height: usize,
     /// Main menu selection state
     pub main_menu_selection: usize,
     /// Tools menu selection state
@@ -144,6 +146,7 @@ impl Default for AppState {
             installation_progress: 0,
             installer_scroll_offset: 0,
             installer_auto_scroll: true,
+            installer_visible_height: 30,
             main_menu_selection: 0,
             tools_menu_selection: 0,
             current_tool: None,

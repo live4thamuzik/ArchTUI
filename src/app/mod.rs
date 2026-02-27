@@ -545,6 +545,15 @@ impl App {
                         .config_scroll
                         .update_visible_items(visible_items as usize);
                 }
+                // Sync actual installer output viewport height for scroll calculations
+                if state.mode == AppMode::Installation {
+                    // Layout: nav_bar(1) + header(7) + title(3) + progress(3) + status(1) + output(rest)
+                    // Output block has borders (2 lines), so inner height = total - 17 - 2
+                    let output_inner = f.area().height.saturating_sub(19) as usize;
+                    if output_inner > 0 {
+                        state.installer_visible_height = output_inner;
+                    }
+                }
                 self.ui_renderer
                     .render_with_context(f, &state, &mut self.input_handler, &self.keybinding_context, self.pty_terminal.as_mut());
             })?;
@@ -900,9 +909,8 @@ impl App {
                 AppMode::Installation => {
                     // Snapshot current position when switching from auto to manual
                     if state.installer_auto_scroll {
-                        let visible_height = 30_usize; // approximate viewport
                         state.installer_scroll_offset =
-                            state.installer_output.len().saturating_sub(visible_height);
+                            state.installer_output.len().saturating_sub(state.installer_visible_height);
                     }
                     state.installer_auto_scroll = false;
                     state.installer_scroll_offset =
@@ -966,9 +974,8 @@ impl App {
                         state.installer_scroll_offset += 1;
                     }
                     // Re-enable auto-scroll when scrolled near bottom
-                    let visible_height = 30_usize; // approximate viewport
                     if state.installer_scroll_offset
-                        >= state.installer_output.len().saturating_sub(visible_height)
+                        >= state.installer_output.len().saturating_sub(state.installer_visible_height)
                     {
                         state.installer_auto_scroll = true;
                     }
