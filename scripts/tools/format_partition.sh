@@ -107,23 +107,23 @@ log_info "Formatting $DEVICE with $FILESYSTEM filesystem..."
 case "$FILESYSTEM" in
     ext4)
         if [[ -n "$LABEL" ]]; then
-            mkfs.ext4 -L "$LABEL" "$DEVICE"
+            mkfs.ext4 -F -L "$LABEL" "$DEVICE"
         else
-            mkfs.ext4 "$DEVICE"
+            mkfs.ext4 -F "$DEVICE"
         fi
         ;;
     xfs)
         if [[ -n "$LABEL" ]]; then
-            mkfs.xfs -L "$LABEL" "$DEVICE"
+            mkfs.xfs -f -L "$LABEL" "$DEVICE"
         else
-            mkfs.xfs "$DEVICE"
+            mkfs.xfs -f "$DEVICE"
         fi
         ;;
     btrfs)
         if [[ -n "$LABEL" ]]; then
-            mkfs.btrfs -L "$LABEL" "$DEVICE"
+            mkfs.btrfs -f -L "$LABEL" "$DEVICE"
         else
-            mkfs.btrfs "$DEVICE"
+            mkfs.btrfs -f "$DEVICE"
         fi
         ;;
     fat32)
@@ -135,9 +135,9 @@ case "$FILESYSTEM" in
         ;;
     ntfs)
         if [[ -n "$LABEL" ]]; then
-            mkfs.ntfs -L "$LABEL" "$DEVICE"
+            mkfs.ntfs --force -L "$LABEL" "$DEVICE"
         else
-            mkfs.ntfs "$DEVICE"
+            mkfs.ntfs --force "$DEVICE"
         fi
         ;;
     *)
