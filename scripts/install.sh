@@ -715,8 +715,20 @@ install_base_system() {
         error_exit "Insufficient disk space on /mnt: ${available_mb}MB available, need at least 2048MB"
     fi
 
+    # Pre-create /etc/vconsole.conf before pacstrap
+    # The sd-vconsole hook (default since mkinitcpio 39, 2025) reads this file during
+    # initramfs generation. Without it, the mkinitcpio -P triggered by the linux package
+    # post-install hook will error with "file not found: /etc/vconsole.conf"
+    log_info "Pre-creating /etc/vconsole.conf with keymap: ${KEYMAP:-us}"
+    mkdir -p /mnt/etc
+    echo "KEYMAP=${KEYMAP:-us}" > /mnt/etc/vconsole.conf
+
     # Run pacstrap with array expansion and show output
     pacstrap -K /mnt "${all_packages[@]}" --noconfirm --needed 2>&1 | while IFS= read -r line; do
+        # Suppress harmless systemd chroot messages from post-install hooks
+        # systemd prints these when pacman hooks try daemon-reload inside pacstrap's chroot
+        [[ "$line" == *"Skipped: Running in chroot"* ]] && continue
+
         # Filter and format pacstrap output for readability with colors
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*|*"failed"*)
@@ -879,6 +891,10 @@ configure_chroot() {
         source /install_config.sh || { echo 'FATAL: Failed to source install_config.sh' >&2; exit 1; }
         /chroot_config.sh
     " 2>&1 | while IFS= read -r line; do
+        # Suppress harmless systemd chroot messages
+        # systemd prints these when systemctl enable creates symlinks but can't daemon-reload
+        [[ "$line" == *"Skipped: Running in chroot"* ]] && continue
+
         # Pass through colored output from chroot, or colorize based on content
         if [[ "$line" == *$'\033'* ]]; then
             # Line already has ANSI codes, pass through with prefix

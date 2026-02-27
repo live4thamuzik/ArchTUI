@@ -321,33 +321,33 @@ configure_mkinitcpio() {
     log_info "Configuring mkinitcpio..."
 
     # Build hooks list based on configuration
-    # Correct hook order per Arch Wiki (2024+):
+    # Systemd-based hooks (default since mkinitcpio 39, 2025):
     # https://wiki.archlinux.org/title/Mkinitcpio
     # https://wiki.archlinux.org/title/Dm-crypt/System_configuration
     #
-    # Standard: base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck
-    # Encrypted: base udev autodetect microcode modconf kms keyboard keymap consolefont block [plymouth] encrypt [lvm2] [resume] filesystems [fsck]
+    # Standard: base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
+    # Encrypted: base systemd keyboard sd-vconsole autodetect microcode modconf kms block [plymouth] sd-encrypt [lvm2] [resume] filesystems [fsck]
     #
     # Key requirements per wiki:
-    # - microcode: AFTER autodetect (so autodetect can filter to current CPU only)
-    # - keyboard/keymap/consolefont: BEFORE encrypt (so keyboard works for password entry)
-    # - plymouth: BEFORE encrypt (for graphical password prompt)
+    # - systemd replaces udev (provides device management + more)
+    # - sd-vconsole replaces keymap + consolefont (reads /etc/vconsole.conf)
+    # - sd-encrypt replaces encrypt (uses rd.luks.name= kernel params)
+    # - keyboard/sd-vconsole: BEFORE sd-encrypt (so keyboard works for password entry)
+    # - plymouth: BEFORE sd-encrypt (for graphical password prompt)
     # - For hardware compatibility (varying keyboards): keyboard BEFORE autodetect
-    #
-    # We use keyboard before autodetect for maximum hardware compatibility
     local hooks=""
 
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         # Encrypted: keyboard before autodetect for hardware compatibility
         # This ensures keyboard works even if booting on different hardware than image was built on
-        hooks="base udev keyboard keymap consolefont autodetect microcode modconf kms block"
+        hooks="base systemd keyboard sd-vconsole autodetect microcode modconf kms block"
         log_info "Using encrypted system hook order (keyboard before autodetect for compatibility)"
     else
-        # Non-encrypted: standard wiki order
-        hooks="base udev autodetect microcode modconf kms keyboard keymap consolefont block"
+        # Non-encrypted: standard systemd-based hook order
+        hooks="base systemd autodetect microcode modconf kms keyboard sd-vconsole block"
     fi
 
-    # Add RAID hook if using RAID (must come before encrypt/lvm2)
+    # Add RAID hook if using RAID (must come before sd-encrypt/lvm2)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
         hooks="$hooks mdadm_udev"
         log_info "Added mdadm_udev hook for RAID"
@@ -358,22 +358,22 @@ configure_mkinitcpio() {
         fi
     fi
 
-    # Add Plymouth hook BEFORE encrypt (per Arch Wiki: "place plymouth before the encrypt hook")
-    # Do NOT use deprecated plymouth-encrypt - use separate hooks
+    # Add Plymouth hook BEFORE sd-encrypt (per Arch Wiki: "place plymouth before the encrypt hook")
     # Install plymouth BEFORE adding hook so hook files exist when mkinitcpio -P runs
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
         pacman -S plymouth --noconfirm --needed || log_warn "Failed to install plymouth"
         hooks="$hooks plymouth"
-        log_info "Added plymouth hook (before encrypt per Arch Wiki)"
+        log_info "Added plymouth hook (before sd-encrypt per Arch Wiki)"
     fi
 
-    # Add encryption hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
+    # Add sd-encrypt hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
+    # sd-encrypt uses rd.luks.name= kernel params instead of cryptdevice=
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-        hooks="$hooks encrypt"
-        log_info "Added encrypt hook for LUKS"
+        hooks="$hooks sd-encrypt"
+        log_info "Added sd-encrypt hook for LUKS"
     fi
 
-    # Add LVM hook if using LVM (must come after encrypt for LUKS-on-LVM)
+    # Add LVM hook if using LVM (must come after sd-encrypt for LUKS-on-LVM)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
         hooks="$hooks lvm2"
         log_info "Added lvm2 hook"
@@ -556,15 +556,15 @@ install_systemd_boot() {
     # Build options line
     local options=""
 
-    # Handle encryption
+    # Handle encryption (sd-encrypt uses rd.luks.name= instead of cryptdevice=)
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if [[ -n "${LUKS_UUID:-}" ]]; then
             local mapper_name="cryptroot"
             [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
-                options="cryptdevice=UUID=${LUKS_UUID}:${mapper_name} root=/dev/archvg/root"
+                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/archvg/root"
             else
-                options="cryptdevice=UUID=${LUKS_UUID}:${mapper_name} root=/dev/mapper/${mapper_name}"
+                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/mapper/${mapper_name}"
             fi
         else
             options="root=UUID=${root_uuid}"
@@ -653,7 +653,7 @@ configure_grub_settings() {
     # Build kernel command line
     local cmdline="quiet"
 
-    # Add encryption parameters if needed
+    # Add encryption parameters if needed (sd-encrypt uses rd.luks.name= instead of cryptdevice=)
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if [[ -n "${LUKS_UUID:-}" ]]; then
             # Determine mapper name based on strategy
@@ -661,7 +661,7 @@ configure_grub_settings() {
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
                 mapper_name="cryptlvm"
             fi
-            cmdline="$cmdline cryptdevice=UUID=${LUKS_UUID}:${mapper_name}"
+            cmdline="$cmdline rd.luks.name=${LUKS_UUID}=${mapper_name}"
             # Add root= for the decrypted mapper device
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
                 cmdline="$cmdline root=/dev/archvg/root"
