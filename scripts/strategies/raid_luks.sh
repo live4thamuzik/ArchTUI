@@ -56,11 +56,11 @@ execute_raid_luks_partitioning() {
         sgdisk --print "$disk"
     done
     
-    # Wait for partitions to be available
-    sleep 2
+    # Inform kernel of partition table changes, then wait for udev
     for disk in "${RAID_DEVICES[@]}"; do
         partprobe "$disk" || true
     done
+    udevadm settle --timeout=10 2>/dev/null || sleep 2
     
     # Create RAID arrays
     local raid_level="${RAID_LEVEL:-raid1}"
