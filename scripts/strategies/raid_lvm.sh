@@ -130,6 +130,7 @@ execute_raid_lvm_partitioning() {
         lvcreate -L "$(get_swap_size_mib)M" -n swap archvg || error_exit "Failed to create swap logical volume."
         mkswap /dev/archvg/swap || error_exit "Failed to create swap filesystem."
         swapon /dev/archvg/swap || log_warn "Failed to activate swap"
+        capture_device_info "swap" "/dev/archvg/swap"
         SWAP_UUID=$(get_device_uuid "/dev/archvg/swap") || log_warn "Cannot determine SWAP_UUID"
         export SWAP_UUID
     fi

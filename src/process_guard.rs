@@ -321,6 +321,9 @@ impl CommandProcessGroup for std::process::Command {
     fn in_new_process_group(&mut self) -> &mut Self {
         use std::os::unix::process::CommandExt;
         // process_group(0) creates a new process group with PGID = child PID
+        // SAFETY: pre_exec runs in the child process after fork() but before exec().
+        // setpgid and prctl are async-signal-safe syscalls, safe to call in this context.
+        // The closure captures no shared state — it only configures the child's process attributes.
         unsafe {
             self.pre_exec(|| {
                 // Set process group ID to this process's PID

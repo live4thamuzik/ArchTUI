@@ -82,11 +82,13 @@ if ! id "$TARGET_USER" >/dev/null 2>&1; then
 fi
 
 log_info "Resetting password for user: $TARGET_USER"
-log_warning "You will be prompted to enter a new password"
 
-# Reset the password
-if passwd "$TARGET_USER"; then
-    log_success "Password reset successfully for user: $TARGET_USER"
-else
-    error_exit "Failed to reset password for user: $TARGET_USER"
+# Non-interactive password reset via env var (TUI runs under Stdio::null — passwd would hang)
+if [[ -z "${USER_PASSWORD:-}" ]]; then
+    error_exit "USER_PASSWORD environment variable must be set (non-interactive mode)"
 fi
+
+printf '%s:%s\n' "$TARGET_USER" "$USER_PASSWORD" | chpasswd || error_exit "Failed to reset password for user: $TARGET_USER"
+USER_PASSWORD=""
+
+log_success "Password reset successfully for user: $TARGET_USER"
