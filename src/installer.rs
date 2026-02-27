@@ -46,6 +46,60 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+/// Strip ANSI escape sequences and handle carriage returns from a line of output.
+///
+/// Bash scripts emit ANSI color codes (e.g., `\x1b[31m`) that are invisible in real terminals
+/// but ratatui renders as visible garbage, causing screen artifacts. Carriage returns from
+/// progress-bar style output (e.g., pacman) cause overlapping text when stored as raw strings.
+fn strip_ansi_and_cr(input: &str) -> String {
+    let mut stripped = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            match chars.peek() {
+                Some('[') => {
+                    // CSI sequence: \x1b[ ... (final byte in @..~)
+                    chars.next();
+                    for next in chars.by_ref() {
+                        if ('@'..='~').contains(&next) {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    // OSC sequence: \x1b] ... (terminated by BEL or ST)
+                    chars.next();
+                    while let Some(next) = chars.next() {
+                        if next == '\x07' {
+                            break;
+                        }
+                        if next == '\x1b' && chars.peek() == Some(&'\\') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                Some(_) => {
+                    // Simple two-byte escape: skip next char
+                    chars.next();
+                }
+                None => {}
+            }
+        } else {
+            stripped.push(c);
+        }
+    }
+
+    // Handle carriage returns: keep only content after the last \r
+    // Simulates terminal behavior where \r returns cursor to column 0
+    // and subsequent text overwrites from the start of the line
+    match stripped.rfind('\r') {
+        Some(pos) => stripped[pos + 1..].to_string(),
+        None => stripped,
+    }
+}
+
 /// Installer instance
 pub struct Installer {
     config: Configuration,
@@ -132,17 +186,23 @@ impl Installer {
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
                 for line in reader.lines().map_while(Result::ok) {
+                    // Strip ANSI color codes and carriage returns before storing.
+                    // Bash scripts emit these for terminal display, but ratatui renders
+                    // them as visible garbage causing screen artifacts.
+                    let clean_line = strip_ansi_and_cr(&line);
+
                     // SAFETY: unwrap — if mutex is poisoned the thread exits, which is acceptable
                     // for a background output reader; the wait thread handles final state transition
                     let mut state = app_state.lock().unwrap();
-                    state.installer_output.push(line.clone());
+                    state.installer_output.push(clean_line);
 
                     // Keep only last 500 lines
                     if state.installer_output.len() > 500 {
                         state.installer_output.remove(0);
                     }
 
-                    // Update progress based on output content
+                    // Update progress based on output content (match on raw line —
+                    // ANSI codes don't interfere with contains() substring matching)
                     if line.contains("Starting Arch Linux installation") {
                         state.installation_progress = 5;
                         state.status_message = "Installation started".to_string();
@@ -205,9 +265,11 @@ impl Installer {
             thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
+                    let clean_line = strip_ansi_and_cr(&line);
+
                     // SAFETY: unwrap — same rationale as stdout reader above
                     let mut state = app_state.lock().unwrap();
-                    state.installer_output.push(format!("ERROR: {}", line));
+                    state.installer_output.push(format!("ERROR: {}", clean_line));
 
                     // Keep only last 500 lines
                     if state.installer_output.len() > 500 {
@@ -1152,4 +1214,66 @@ pub fn check_network_connectivity() -> Result<bool> {
         .context("Failed to check network connectivity")?;
 
     Ok(output.success)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_ansi_and_cr;
+
+    #[test]
+    fn test_strip_plain_text_unchanged() {
+        assert_eq!(strip_ansi_and_cr("hello world"), "hello world");
+    }
+
+    #[test]
+    fn test_strip_csi_color_codes() {
+        // Red text: \x1b[31m ... \x1b[0m
+        assert_eq!(strip_ansi_and_cr("\x1b[31mERROR\x1b[0m"), "ERROR");
+    }
+
+    #[test]
+    fn test_strip_multiple_csi_sequences() {
+        let input = "\x1b[1m\x1b[36m  [pacstrap] downloading linux\x1b[0m";
+        assert_eq!(strip_ansi_and_cr(input), "  [pacstrap] downloading linux");
+    }
+
+    #[test]
+    fn test_strip_bold_and_color() {
+        let input = "\x1b[1;33mWARNING: something\x1b[0m";
+        assert_eq!(strip_ansi_and_cr(input), "WARNING: something");
+    }
+
+    #[test]
+    fn test_strip_carriage_return_keeps_last_segment() {
+        // Progress bar: overwrites from start of line
+        assert_eq!(strip_ansi_and_cr("old text\rnew text"), "new text");
+    }
+
+    #[test]
+    fn test_strip_cr_with_ansi() {
+        let input = "\x1b[32mProgress: 50%\x1b[0m\r\x1b[32mProgress: 100%\x1b[0m";
+        assert_eq!(strip_ansi_and_cr(input), "Progress: 100%");
+    }
+
+    #[test]
+    fn test_strip_osc_sequence() {
+        // OSC: terminal title setting \x1b]0;title\x07
+        let input = "\x1b]0;terminal title\x07visible text";
+        assert_eq!(strip_ansi_and_cr(input), "visible text");
+    }
+
+    #[test]
+    fn test_strip_empty_string() {
+        assert_eq!(strip_ansi_and_cr(""), "");
+    }
+
+    #[test]
+    fn test_strip_only_ansi_codes() {
+        assert_eq!(strip_ansi_and_cr("\x1b[0m\x1b[31m\x1b[0m"), "");
+    }
+
+    #[test]
+    fn test_strip_preserves_brackets_in_normal_text() {
+        assert_eq!(strip_ansi_and_cr("[INFO] Phase 5: Installing"), "[INFO] Phase 5: Installing");
+    }
 }
