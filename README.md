@@ -20,9 +20,9 @@ It is not a replacement for reading the Arch Wiki or understanding how a manual 
 
 ## What it does
 
-**Guided installation** — walks through disk partitioning, filesystem creation, base system install, bootloader setup, user creation, locale/timezone, desktop environment selection, and package installation. Supports automated runs from a saved JSON configuration file.
+**Guided installation** — walks through disk partitioning, filesystem creation, base system install, bootloader setup, user creation, locale/timezone, desktop environment selection, and package installation. Configuration options cascade automatically (e.g. selecting a desktop environment sets an appropriate display manager, disabling encryption clears the encryption password). Supports automated runs from a saved JSON configuration file.
 
-**System tools** — 25 standalone administration scripts accessible from the TUI or directly via CLI. Disk operations, service management, user/group administration, network configuration, security auditing.
+**System tools** — 26 standalone administration scripts accessible from the TUI or directly via CLI. Disk operations, service management, user/group administration, network configuration, security auditing.
 
 ---
 
@@ -74,6 +74,10 @@ Runs a headless installation using a previously saved configuration file.
 
 Walk through the TUI, configure everything, then write the result to a JSON file for later use or review.
 
+### Export Config (TUI)
+
+From the Guided Installer screen, the Export Config button writes the current configuration to a JSON file. This lets you snapshot your settings at any point during configuration.
+
 ### Validate a config file
 
 ```
@@ -90,6 +94,15 @@ Check a configuration file for errors without running anything.
 ```
 
 Preview what would be executed. Destructive operations are skipped and logged. Non-destructive operations (health checks, system info) still run.
+
+### Verbose logging
+
+```
+./archtui --verbose install --config config.json
+ARCHTUI_LOG_LEVEL=trace ./archtui install --config config.json
+```
+
+`--verbose` enables detailed trace logging. The `ARCHTUI_LOG_LEVEL` environment variable provides finer control (`error`, `warn`, `info`, `debug`, `trace`). Logs include a master log file, per-script verbose traces, and a configuration dump.
 
 ### CLI tools
 
@@ -123,21 +136,31 @@ Run `./archtui tools --help` for the full list. Each subcommand has its own `--h
 | RAID + LVM + LUKS | Yes | Yes | Yes | Full stack |
 | Manual | User choice | User choice | User choice | Guided manual partitioning via cfdisk |
 
-All automated strategies create an EFI System Partition and an XBOOTLDR partition.
+All automated strategies create an EFI System Partition and an XBOOTLDR partition. RAID strategies require 2+ disks and support RAID level selection (0, 1, 5, 6, 10).
 
 ## Supported options
 
-**Filesystems:** ext4, xfs, btrfs (with optional snapshots)
+**Filesystems:** ext4, xfs, btrfs (with optional snapshot management via snapper — configurable frequency, keep count, and snapper assistant)
 
-**Bootloaders:** GRUB (UEFI and BIOS), systemd-boot (UEFI only)
+**Bootloaders:** GRUB (UEFI and BIOS, with theme selection: PolyDark, CyberEXS, CyberPunk, HyperFluent), systemd-boot (UEFI only)
 
 **Kernels:** linux, linux-lts, linux-zen, linux-hardened
 
-**Desktop environments:** GNOME, KDE Plasma, Hyprland, or none
+**Desktop environments:** GNOME, KDE Plasma, Hyprland, Sway, i3, Xfce, Cinnamon, Mate, Budgie, or none
 
-**AUR helpers:** paru, yay, or none
+**Display managers:** GDM, SDDM, LightDM, LXDM, Ly, or none (auto-selected based on DE, user-overridable)
 
-**GPU drivers:** auto-detect, NVIDIA, AMD, Intel
+**AUR helpers:** paru, yay, pikaur, or none
+
+**GPU drivers:** auto-detect, NVIDIA (proprietary), NVIDIA Open, AMD, Intel, Nouveau, or none
+
+**Partition sizing:** configurable root and home partition sizes (GB/MB/TB or "Remaining" to use all available space)
+
+**Swap:** optional, configurable size (explicit value, "Equal to RAM", or "Double RAM")
+
+**Encryption:** LUKS encryption with secure password handling (tmpfs-backed SecretFile, RAII wipe, inline env vars — never written to disk)
+
+**Plymouth:** optional boot splash with theme selection (arch-glow, arch-mac-style)
 
 ---
 
@@ -155,9 +178,10 @@ archtui (Rust)
   v
 scripts/ (Bash)
   |-- install.sh              Main installation orchestrator
+  |-- config_loader.sh        JSON config → environment variables
   |-- strategies/*.sh         9 partitioning strategies
-  |-- desktops/*.sh           Desktop environment installers
-  |-- tools/*.sh              25 system administration tools
+  |-- desktops/*.sh           Desktop environment installers (6)
+  |-- tools/*.sh              26 system administration tools
   |-- utils.sh, disk_utils.sh Common utilities
 ```
 
@@ -186,7 +210,7 @@ Destructive operations (disk wipe, format, partition, LUKS setup) require:
 ```
 ArchTUI/
 |-- src/                    Rust source
-|   |-- app/                Application state machine
+|   |-- app/                Application state machine (mod.rs + state.rs)
 |   |-- ui/                 TUI rendering
 |   |-- components/         Reusable UI components (PTY terminal, dialogs, file browser)
 |   |-- scripts/            Typed argument structs for each script category
@@ -203,12 +227,13 @@ ArchTUI/
 |
 |-- scripts/
 |   |-- install.sh          Main install orchestrator
+|   |-- config_loader.sh    JSON config → env vars
 |   |-- strategies/         Partitioning strategy scripts (9)
-|   |-- desktops/           Desktop environment scripts
-|   |-- tools/              System administration scripts (25)
+|   |-- desktops/           Desktop environment scripts (6)
+|   |-- tools/              System administration scripts (26)
 |
 |-- docs/                   Architecture, safety model, process safety documentation
-|-- .github/workflows/      CI: shellcheck + cargo test + cargo build
+|-- .github/workflows/      CI: shellcheck + cargo clippy + cargo test + cargo build
 |-- Cargo.toml
 |-- Makefile                Development build targets
 ```
@@ -244,26 +269,26 @@ The compiled binary has no runtime library dependencies (statically linked, LTO,
 
 **This project is in active development.**
 
-What exists and compiles:
+What exists and works:
 - TUI framework, navigation, menus, dialogs, embedded PTY terminal
-- Full CLI with subcommands for all 25 tools
+- Full CLI with subcommands for all 26 tools
 - Typed argument system for all script categories
 - Process safety (death pact, group signaling, signal handling)
 - Dry-run mode
-- JSON configuration save/load/validate
+- JSON configuration save/load/validate/export
+- Cascading configuration (dependent options auto-update when parent options change)
 - Hardware detection (firmware mode, network state)
 - Pre-install orchestration (mirror ranking with network awareness)
 - Post-install orchestration (AUR helper, dotfiles — non-fatal)
-- 264 unit tests passing
-- CI pipeline (shellcheck + cargo test)
+- Comprehensive logging (master log, per-script verbose trace, config dump)
+- 279 unit tests passing
+- CI pipeline (shellcheck + cargo clippy + cargo test)
 
 What is incomplete or untested:
 - End-to-end installation has not been validated on real hardware
-- Wiring between TUI configuration and script execution is partially connected
 - Error recovery paths are not fully exercised
-- Some UI screens are structural but do not yet drive real operations
 - ALPM integration is feature-gated and lightly tested
-- Btrfs snapshot scheduling is defined but not wired
+- Cinnamon, Mate, and Budgie are defined as enums but do not have dedicated desktop scripts
 - No release binaries are published
 
 Do not assume anything works until you have tested it yourself in a disposable environment.

@@ -197,4 +197,4 @@ The following areas could benefit from additional coverage:
 - ✅ Progress tracking patterns (installer_tests.rs)
 - ✅ Error handling patterns (script_execution_tests.rs)
 
-See `ROADMAP.md` for the complete testing roadmap.
+See the Coverage Gaps section above for areas that could benefit from additional testing.

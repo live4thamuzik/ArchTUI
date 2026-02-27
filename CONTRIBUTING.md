@@ -136,17 +136,19 @@ bash -n scripts/tools/*.sh
 ### Bash Scripts
 
 - Always use `set -euo pipefail`
-- Use `source_or_die` instead of bare `source`
+- Use `source_or_die` instead of bare `source` (CI lint enforced)
 - Never use `eval` - use array expansion for commands
 - Never use `read` from stdin - use environment variables
-- Add trap handlers for cleanup on error/interrupt
+- Use `printf %q` for user-supplied strings in shell contexts (prevents shell injection from passwords with `$`, backticks, etc.)
+- Add trap handlers for SIGTERM/SIGINT cleanup on error/interrupt
 - Use `log_info`, `log_error`, `log_success` from utils.sh
 
 ### Rust Code
 
 - Follow standard Rust formatting (`cargo fmt`)
-- Use `ArchTuiError` for error handling, not anyhow
-- All `Command::new` calls must use `.in_new_process_group()`
+- Use `anyhow` for error propagation (`anyhow::Result`, `anyhow::bail!`, `.context()`)
+- All `Command::new` calls must use `.in_new_process_group()` (CI lint enforced — ensures death pact coverage)
+- Every `.unwrap()` must have a `// SAFETY:` comment explaining why it cannot fail
 - Recover from mutex poisoning, don't panic
 
 ## Testing
