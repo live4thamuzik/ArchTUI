@@ -94,6 +94,8 @@ pub struct AppState {
     pub installer_button_selection: usize,
     /// PID of the running installer process (for cancellation)
     pub installer_pid: Option<u32>,
+    /// Logging verbosity for installation ("INFO" or "VERBOSE")
+    pub log_level: String,
 }
 
 /// Application operating modes
@@ -162,6 +164,7 @@ impl Default for AppState {
             dry_run_scroll_offset: 0,
             installer_button_selection: 1, // Default to "Start Install"
             installer_pid: None,
+            log_level: std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string()),
         }
     }
 }

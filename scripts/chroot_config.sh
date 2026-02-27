@@ -14,12 +14,15 @@ if [[ -f "$SCRIPT_DIR/utils.sh" ]]; then
         echo "FATAL: Failed to source: $SCRIPT_DIR/utils.sh" >&2
         exit 1
     fi
+    # Initialize logging inside the chroot (persists to /var/log/archtui/ on installed system)
+    # LOG_LEVEL is exported from install_config.sh — if VERBOSE, this enables set -x tracing
+    setup_logging
 fi
 
 # =============================================================================
-# COLOR DEFINITIONS (fallback if utils.sh not sourced)
+# FALLBACK LOGGING (if utils.sh not sourced)
 # =============================================================================
-if [[ -z "${COLORS[RESET]:-}" ]]; then
+if ! declare -f log_info > /dev/null 2>&1; then
     declare -A COLORS=(
         [RESET]='\033[0m'
         [BOLD]='\033[1m'
@@ -42,10 +45,7 @@ if [[ -z "${COLORS[RESET]:-}" ]]; then
         [PHASE]="${COLORS[BRIGHT_CYAN]}"
         [COMMAND]="${COLORS[DIM]}${COLORS[CYAN]}"
     )
-fi
 
-# Logging functions (fallback if utils.sh wasn't sourced)
-if ! declare -f log_info > /dev/null 2>&1; then
     _log() {
         local level="$1"
         local message="$2"
@@ -86,6 +86,9 @@ install_packages() {
                 ;;
             *"downloading"*|*"installing"*|*"::"*|*"Packages"*|*"Total"*)
                 echo -e "\033[2m\033[36m  [pacman] $line\033[0m"
+                ;;
+            *)
+                echo "  [pacman] $line"
                 ;;
         esac
     done
@@ -132,7 +135,7 @@ main() {
     configure_mkinitcpio
     install_bootloader
     configure_grub_settings
-    configure_secure_boot
+    configure_secure_boot || log_warn "Secure boot configuration skipped"
 
     # --- Phase 3: Desktop Environment ---
     log_info "=== Phase 3: Desktop Environment ==="
@@ -141,29 +144,32 @@ main() {
     if [[ "${MULTILIB:-No}" == "Yes" ]]; then
         log_info "Enabling multilib repository in chroot..."
         sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf
+        if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+            log_warn "Could not enable multilib in pacman.conf — lib32 packages may not install"
+        fi
         pacman -Sy || log_warn "Failed to sync multilib repository"
         log_success "Multilib repository enabled in chroot"
     fi
 
     install_desktop_environment
     install_display_manager
-    install_gpu_drivers
+    install_gpu_drivers || log_warn "GPU driver installation failed — continuing"
 
-    # --- Phase 4: Additional Software ---
+    # --- Phase 4: Additional Software (non-critical) ---
     log_info "=== Phase 4: Additional Software ==="
 
-    install_aur_helper
-    install_flatpak
-    install_additional_packages
-    configure_plymouth
-    configure_snapper
+    install_aur_helper || log_warn "AUR helper installation failed — continuing"
+    install_flatpak || log_warn "Flatpak installation failed — continuing"
+    install_additional_packages || log_warn "Additional packages had issues — continuing"
+    configure_plymouth || log_warn "Plymouth configuration failed — continuing"
+    configure_snapper || log_warn "Snapper configuration failed — continuing"
 
-    # --- Phase 5: Final Configuration ---
+    # --- Phase 5: Final Configuration (non-critical) ---
     log_info "=== Phase 5: Final Configuration ==="
 
-    configure_numlock
-    deploy_dotfiles
-    final_cleanup
+    configure_numlock || log_warn "Numlock configuration failed — continuing"
+    deploy_dotfiles || log_warn "Dotfiles deployment failed — continuing"
+    final_cleanup || true
 
     log_success "Chroot configuration complete!"
 }
@@ -242,15 +248,19 @@ create_user_account() {
         log_info "User $MAIN_USERNAME already exists"
     fi
 
-    # Set user password
+    # Set user password (tracing disabled to prevent password leak in verbose logs)
     if [[ -n "${MAIN_USER_PASSWORD:-}" ]]; then
+        { set +x; } 2>/dev/null
         echo "$MAIN_USERNAME:$MAIN_USER_PASSWORD" | chpasswd || log_warn "Failed to set user password"
+        if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "User password set"
     fi
 
-    # Set root password
+    # Set root password (tracing disabled to prevent password leak in verbose logs)
     if [[ -n "${ROOT_PASSWORD:-}" ]]; then
+        { set +x; } 2>/dev/null
         echo "root:$ROOT_PASSWORD" | chpasswd || log_warn "Failed to set root password"
+        if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "Root password set"
     fi
 
@@ -288,13 +298,13 @@ enable_base_services() {
     # Time synchronization
     case "${TIME_SYNC:-No}" in
         "systemd-timesyncd"|"Yes")
-            systemctl enable systemd-timesyncd.service 2>/dev/null || true
+            systemctl enable systemd-timesyncd.service 2>/dev/null || log_warn "Failed to enable systemd-timesyncd"
             ;;
         "ntpd")
-            systemctl enable ntpd.service 2>/dev/null || true
+            systemctl enable ntpd.service 2>/dev/null || log_warn "Failed to enable ntpd"
             ;;
         "chrony")
-            systemctl enable chronyd.service 2>/dev/null || true
+            systemctl enable chronyd.service 2>/dev/null || log_warn "Failed to enable chronyd"
             ;;
         "No"|"")
             log_info "Time synchronization disabled by user"
@@ -302,7 +312,7 @@ enable_base_services() {
     esac
 
     # SSD trim timer (good for SSDs)
-    systemctl enable fstrim.timer 2>/dev/null || true
+    systemctl enable fstrim.timer 2>/dev/null || log_warn "Failed to enable fstrim.timer"
 
     # Bluetooth support
     systemctl enable bluetooth.service 2>/dev/null || log_warn "bluetooth service not found"
@@ -398,15 +408,21 @@ configure_mkinitcpio() {
 
     # Update mkinitcpio.conf
     if [[ -f /etc/mkinitcpio.conf ]]; then
-        sed -i "s|^HOOKS=.*|HOOKS=($hooks)|" /etc/mkinitcpio.conf
+        sed -i "s|^HOOKS=.*|HOOKS=($hooks)|" /etc/mkinitcpio.conf || { log_error "sed failed on HOOKS"; return 1; }
+        # Verify HOOKS was actually updated (sed returns 0 even if pattern didn't match)
+        if ! grep -q "^HOOKS=($hooks)" /etc/mkinitcpio.conf; then
+            log_error "HOOKS not updated — expected: HOOKS=($hooks)"
+            log_error "Actual: $(grep '^HOOKS=' /etc/mkinitcpio.conf || echo 'NO HOOKS LINE FOUND')"
+            return 1
+        fi
         log_info "Updated HOOKS in mkinitcpio.conf: $hooks"
 
         # Add btrfs module if using Btrfs
         if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" == "btrfs" ]]; then
             if ! grep -q "btrfs" /etc/mkinitcpio.conf; then
-                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 btrfs)/' /etc/mkinitcpio.conf
+                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 btrfs)/' /etc/mkinitcpio.conf || log_warn "Failed to add btrfs module"
                 # Clean up double spaces
-                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf
+                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
                 log_info "Added btrfs module to mkinitcpio.conf"
             fi
         fi
@@ -414,8 +430,8 @@ configure_mkinitcpio() {
         # Add amdgpu module for early KMS if AMD GPU detected
         if lspci 2>/dev/null | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
             if ! grep -q "amdgpu" /etc/mkinitcpio.conf; then
-                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 amdgpu)/' /etc/mkinitcpio.conf
-                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf
+                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 amdgpu)/' /etc/mkinitcpio.conf || log_warn "Failed to add amdgpu module"
+                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
                 log_info "Added amdgpu module for early KMS"
             fi
         fi
@@ -1135,19 +1151,19 @@ install_gpu_drivers() {
             # Auto-detect GPU
             if lspci | grep -qi nvidia; then
                 log_info "NVIDIA GPU detected"
-                pacman -S nvidia nvidia-utils nvidia-settings --noconfirm --needed || true
+                pacman -S nvidia nvidia-utils nvidia-settings --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
             fi
             if lspci | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
                 log_info "AMD GPU detected"
                 local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
                 [[ "$use_lib32" == "yes" ]] && amd_pkgs+=(lib32-mesa)
-                pacman -S "${amd_pkgs[@]}" --noconfirm --needed || true
+                pacman -S "${amd_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install AMD drivers"
             fi
             if lspci | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; then
                 log_info "Intel GPU detected"
                 local intel_pkgs=(mesa xf86-video-intel vulkan-intel)
                 [[ "$use_lib32" == "yes" ]] && intel_pkgs+=(lib32-mesa)
-                pacman -S "${intel_pkgs[@]}" --noconfirm --needed || true
+                pacman -S "${intel_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install Intel drivers"
             fi
             ;;
         "nvidia"|"NVIDIA")
@@ -1415,9 +1431,9 @@ configure_snapper() {
     # Configure snapper settings
     if [[ -f /etc/snapper/configs/root ]]; then
         # Set timeline settings for automatic snapshots
-        sed -i 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' /etc/snapper/configs/root
+        sed -i 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_CREATE"
+        sed -i 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_CLEANUP"
+        sed -i 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_MIN_AGE"
 
         # Map user's frequency preference to snapper timeline settings
         local keep_count="${BTRFS_KEEP_COUNT:-3}"
@@ -1453,11 +1469,11 @@ configure_snapper() {
                 ;;
         esac
 
-        sed -i "s/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY=\"$hourly_limit\"/" /etc/snapper/configs/root
-        sed -i "s/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY=\"$daily_limit\"/" /etc/snapper/configs/root
-        sed -i "s/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY=\"$weekly_limit\"/" /etc/snapper/configs/root
-        sed -i "s/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY=\"$monthly_limit\"/" /etc/snapper/configs/root
-        sed -i 's/^TIMELINE_LIMIT_YEARLY=.*/TIMELINE_LIMIT_YEARLY="0"/' /etc/snapper/configs/root
+        sed -i "s/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY=\"$hourly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_HOURLY"
+        sed -i "s/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY=\"$daily_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_DAILY"
+        sed -i "s/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY=\"$weekly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_WEEKLY"
+        sed -i "s/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY=\"$monthly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_MONTHLY"
+        sed -i 's/^TIMELINE_LIMIT_YEARLY=.*/TIMELINE_LIMIT_YEARLY="0"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_YEARLY"
 
         log_info "Configured snapper timeline settings (frequency: $frequency, keep: $keep_count)"
     fi

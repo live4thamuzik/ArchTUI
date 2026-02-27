@@ -113,15 +113,19 @@ fi
 
 echo "Credentials validated from environment."
 
-# Initialize logging
+# Set log level (can be overridden by environment variable)
+export LOG_LEVEL="${LOG_LEVEL:-INFO}"
+
+# Initialize logging (must come after LOG_LEVEL is set so VERBOSE mode activates)
 setup_logging
+dump_config
 
 echo "=========================================="
 echo "Log file: ${LOG_FILE:-/tmp/archtui-install.log}"
+if [[ -n "${VERBOSE_LOG_FILE:-}" ]]; then
+    echo "Verbose log: $VERBOSE_LOG_FILE"
+fi
 echo "=========================================="
-
-# Set log level (can be overridden by environment variable)
-export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 
 # Perform pre-flight checks
 perform_preflight_checks
@@ -781,12 +785,15 @@ configure_chroot() {
     log_info "Configuring system in chroot..."
     log_info "This phase includes: timezone, locale, users, bootloader, desktop environment..."
 
+    # Verify /mnt is mounted before attempting script copy
+    if ! mountpoint -q /mnt; then
+        error_exit "/mnt is not mounted — cannot configure chroot"
+    fi
+
     # Copy necessary scripts to target system
     log_info "Copying configuration scripts to /mnt/..."
     cp "$SCRIPT_DIR/chroot_config.sh" /mnt/ || error_exit "Failed to copy chroot_config.sh to /mnt/"
     cp "$SCRIPT_DIR/utils.sh" /mnt/ || error_exit "Failed to copy utils.sh to /mnt/"
-    mkdir -p /mnt/desktops
-    cp -r "$SCRIPT_DIR/desktops/"* /mnt/desktops/ 2>/dev/null || true
 
     # Copy Plymouth themes to target system BEFORE chroot (so configure_plymouth can find them)
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
@@ -810,12 +817,13 @@ configure_chroot() {
         log_warn "Attempting to extract from disk..."
         # Try to extract from the LUKS device if available
         if [[ -n "${INSTALL_DISK:-}" ]]; then
-            for part in "${INSTALL_DISK}"*; do
+            local recovery_disk="${INSTALL_DISK%%,*}"
+            while IFS= read -r part; do
                 if cryptsetup isLuks "$part" 2>/dev/null; then
                     LUKS_UUID=$(blkid -s UUID -o value "$part" 2>/dev/null || true)
                     [[ -n "$LUKS_UUID" ]] && log_info "Recovered LUKS_UUID: $LUKS_UUID" && break
                 fi
-            done
+            done < <(lsblk -ln -o PATH "$recovery_disk" | tail -n +2)
         fi
     fi
 
@@ -870,6 +878,7 @@ configure_chroot() {
         printf 'export WINDOWS_DETECTED=%q\n' "${WINDOWS_DETECTED:-}"
         printf 'export WINDOWS_EFI_PATH=%q\n' "${WINDOWS_EFI_PATH:-}"
         printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
+        printf 'export LOG_LEVEL=%q\n' "${LOG_LEVEL:-INFO}"
     } > /mnt/install_config.sh
 
     chmod +x /mnt/install_config.sh
@@ -927,7 +936,6 @@ configure_chroot() {
     rm -f /mnt/chroot_config.sh
     rm -f /mnt/utils.sh
     rm -f /mnt/install_config.sh
-    rm -rf /mnt/desktops
 
     if [[ $chroot_exit -ne 0 ]]; then
         log_error "Chroot configuration failed"

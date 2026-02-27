@@ -156,6 +156,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Running in DRY-RUN mode: destructive operations will be skipped");
     }
 
+    // Enable verbose logging if requested
+    if cli.verbose {
+        // SAFETY: set_var is safe here — called once at startup before any threads are spawned
+        unsafe { std::env::set_var("ARCHTUI_LOG_LEVEL", "VERBOSE") };
+        info!("Verbose logging enabled — full command trace will be written to /var/log/archtui/");
+    }
+
     match cli.command {
         Some(crate::cli::Commands::Validate { config }) => {
             info!("Validating configuration file: {:?}", config);
@@ -240,7 +247,8 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
 fn run_installer_with_config(
     config_path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::{BufRead, BufReader};
+    use std::fs::{self, OpenOptions};
+    use std::io::{BufRead, BufReader, Write};
     use std::process::{Command, Stdio};
 
     info!("Loading configuration from: {:?}", config_path);
@@ -251,7 +259,10 @@ fn run_installer_with_config(
 
     info!("Configuration validated successfully");
     println!("✓ Configuration loaded and validated");
-    println!("🚀 Starting installation with configuration file...");
+    println!("Starting installation with configuration file...");
+
+    // Pass LOG_LEVEL to child process
+    let log_level = std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
 
     let script_path = script_runner::scripts_base_dir()
         .join("install.sh")
@@ -263,6 +274,7 @@ fn run_installer_with_config(
         .arg(script_path)
         .arg("--config")
         .arg(config_path)
+        .env("LOG_LEVEL", &log_level)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .in_new_process_group()
@@ -272,12 +284,39 @@ fn run_installer_with_config(
             error::ArchTuiError::script(format!("Failed to spawn installer: {}", e))
         })?;
 
-    // Capture and print stdout in real-time
+    // Create master log for headless mode (best-effort)
+    let log_dir = "/var/log/archtui";
+    let _ = fs::create_dir_all(log_dir);
+    let master_log_path = format!(
+        "{}/install-{}-master.log",
+        log_dir,
+        installer::now_hms().replace(':', "")
+    );
+    let mut master_log = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&master_log_path)
+        .ok();
+
+    if let Some(ref mut f) = master_log {
+        let _ = writeln!(f, "=== ArchTUI Headless Master Log ===");
+        let _ = writeln!(f, "[{}] Config: {:?}", installer::now_hms(), config_path);
+        let _ = writeln!(f, "[{}] Log level: {}", installer::now_hms(), log_level);
+        let _ = writeln!(f);
+    }
+
+    // Capture and print stdout in real-time, writing to master log
     if let Some(stdout) = child.stdout.take() {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
             match line {
-                Ok(line_content) => println!("{}", line_content),
+                Ok(line_content) => {
+                    println!("{}", line_content);
+                    if let Some(ref mut f) = master_log {
+                        let clean = installer::strip_ansi_and_cr(&line_content);
+                        let _ = writeln!(f, "[{}] {}", installer::now_hms(), clean);
+                    }
+                }
                 Err(e) => {
                     // If there's an error reading stdout, still wait for the child
                     let _ = child.wait();
@@ -293,16 +332,27 @@ fn run_installer_with_config(
     if output.status.success() {
         info!("Installation completed successfully");
         println!("\n✓ Installation completed successfully!");
+        if let Some(ref mut f) = master_log {
+            let _ = writeln!(f, "[{}] [RUST] Installation completed successfully", installer::now_hms());
+        }
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         error!("Installation failed. Exit code: {:?}", output.status.code());
         if !stderr.is_empty() {
             error!("Stderr: {}", stderr);
         }
-        eprintln!("\n✗ Installation failed");
+        eprintln!("\n Installation failed");
         if !stderr.is_empty() {
             eprintln!("--- Errors ---");
             eprintln!("{}", stderr);
+        }
+        if let Some(ref mut f) = master_log {
+            let _ = writeln!(
+                f,
+                "[{}] [RUST] Installation FAILED (exit code {:?})",
+                installer::now_hms(),
+                output.status.code()
+            );
         }
         std::process::exit(1);
     }

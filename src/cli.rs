@@ -15,6 +15,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub dry_run: bool,
 
+    /// Enable verbose logging (captures full command execution trace to log file).
+    ///
+    /// When enabled, bash scripts run with set -x tracing to a separate
+    /// verbose log file, and the Rust master log captures all stdout/stderr.
+    /// Log files are written to /var/log/archtui/.
+    #[arg(long, short = 'v', global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -375,8 +383,23 @@ mod tests {
         // Running with no args should succeed (defaults to TUI mode)
         let result = Cli::try_parse_from(["archtui"]);
         assert!(result.is_ok());
-        let cli = result.unwrap();
+        let cli = result.unwrap(); // SAFETY: asserted Ok above
         assert!(cli.command.is_none());
+        assert!(!cli.verbose);
+    }
+
+    #[test]
+    fn test_cli_verbose_flag() {
+        let result = Cli::try_parse_from(["archtui", "--verbose"]);
+        assert!(result.is_ok());
+        let cli = result.unwrap(); // SAFETY: asserted Ok above
+        assert!(cli.verbose);
+
+        // Short form
+        let result = Cli::try_parse_from(["archtui", "-v"]);
+        assert!(result.is_ok());
+        let cli = result.unwrap(); // SAFETY: asserted Ok above
+        assert!(cli.verbose);
     }
 
     #[test]

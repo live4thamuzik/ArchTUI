@@ -38,7 +38,8 @@ use crate::profiles::DotfilesConfig;
 use crate::profiles::Profile;
 use crate::types::Filesystem;
 use anyhow::{Context, Result};
-use std::io::{BufRead, BufReader};
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
 #[cfg(feature = "alpm")]
 use std::path::Path;
 use std::path::PathBuf;
@@ -51,7 +52,7 @@ use std::thread;
 /// Bash scripts emit ANSI color codes (e.g., `\x1b[31m`) that are invisible in real terminals
 /// but ratatui renders as visible garbage, causing screen artifacts. Carriage returns from
 /// progress-bar style output (e.g., pacman) cause overlapping text when stored as raw strings.
-fn strip_ansi_and_cr(input: &str) -> String {
+pub fn strip_ansi_and_cr(input: &str) -> String {
     let mut stripped = String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
 
@@ -97,6 +98,31 @@ fn strip_ansi_and_cr(input: &str) -> String {
     match stripped.rfind('\r') {
         Some(pos) => stripped[pos + 1..].to_string(),
         None => stripped,
+    }
+}
+
+/// UTC timestamp formatted as HH:MM:SS for log file entries.
+/// Uses raw SystemTime to avoid adding a chrono dependency.
+pub fn now_hms() -> String {
+    use std::time::SystemTime;
+    let secs = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let h = (secs % 86400) / 3600;
+    let m = (secs % 3600) / 60;
+    let s = secs % 60;
+    format!("{h:02}:{m:02}:{s:02}")
+}
+
+/// Write a line to the master log file (thread-safe, best-effort).
+fn write_master_log(log_file: &Arc<Mutex<Option<File>>>, line: &str) {
+    // SAFETY: unwrap — poisoned mutex means a writer thread panicked;
+    // silently skipping the write is acceptable for a log file
+    if let Ok(mut guard) = log_file.lock() {
+        if let Some(ref mut f) = *guard {
+            let _ = writeln!(f, "[{}] {}", now_hms(), line);
+        }
     }
 }
 
@@ -148,7 +174,37 @@ impl Installer {
 
         // Prepare environment variables (includes passwords)
         // Passwords are passed via environment because lint rules forbid `read` in bash
-        let env_vars = self.config.to_env_vars();
+        let mut env_vars = self.config.to_env_vars();
+
+        // Pass LOG_LEVEL to child process (ARCHTUI_LOG_LEVEL env var → LOG_LEVEL in bash)
+        let log_level = std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
+        env_vars.insert("LOG_LEVEL".to_string(), log_level.clone());
+
+        // --- Master Log File ---
+        // Create a persistent log that captures everything the TUI sees (and more),
+        // surviving the 500-line ringbuffer cap. ANSI-stripped, timestamped.
+        let master_log: Arc<Mutex<Option<File>>> = {
+            let log_dir = "/var/log/archtui";
+            let _ = fs::create_dir_all(log_dir);
+            let timestamp = now_hms().replace(':', "");
+            let log_path = format!("{}/install-{}-master.log", log_dir, timestamp);
+            match OpenOptions::new().create(true).append(true).open(&log_path) {
+                Ok(mut f) => {
+                    // Write header block
+                    let _ = writeln!(f, "=== ArchTUI Master Installation Log ===");
+                    let _ = writeln!(f, "[{}] Log level: {}", now_hms(), log_level);
+                    let _ = writeln!(f, "[{}] === Environment Variables ===", now_hms());
+                    for (k, v) in &env_vars {
+                        let display_val = if k.contains("PASSWORD") { "********" } else { v.as_str() };
+                        let _ = writeln!(f, "[{}]   {}={}", now_hms(), k, display_val);
+                    }
+                    let _ = writeln!(f, "[{}] === End Environment Variables ===", now_hms());
+                    let _ = writeln!(f);
+                    Arc::new(Mutex::new(Some(f)))
+                }
+                Err(_) => Arc::new(Mutex::new(None)),
+            }
+        };
 
         // Determine script path - use wrapper for TUI-friendly output
         let script_path = crate::script_runner::scripts_base_dir()
@@ -182,6 +238,7 @@ impl Installer {
         // Handle stdout in separate thread
         if let Some(stdout) = child.stdout.take() {
             let app_state = Arc::clone(&self.app_state);
+            let log_file = Arc::clone(&master_log);
 
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
@@ -190,6 +247,9 @@ impl Installer {
                     // Bash scripts emit these for terminal display, but ratatui renders
                     // them as visible garbage causing screen artifacts.
                     let clean_line = strip_ansi_and_cr(&line);
+
+                    // Write to master log BEFORE the ringbuffer cap discards old lines
+                    write_master_log(&log_file, &clean_line);
 
                     // SAFETY: unwrap — if mutex is poisoned the thread exits, which is acceptable
                     // for a background output reader; the wait thread handles final state transition
@@ -203,56 +263,65 @@ impl Installer {
 
                     // Update progress based on output content (match on raw line —
                     // ANSI codes don't interfere with contains() substring matching)
-                    if line.contains("Starting Arch Linux installation") {
+                    let progress_msg = if line.contains("Starting Arch Linux installation") {
                         state.installation_progress = 5;
-                        state.status_message = "Installation started".to_string();
+                        Some("Installation started")
                     } else if line.contains("Phase 1:") {
                         state.installation_progress = 8;
-                        state.status_message = "Validating configuration".to_string();
+                        Some("Validating configuration")
                     } else if line.contains("Phase 2:") {
                         state.installation_progress = 12;
-                        state.status_message = "Preparing system".to_string();
+                        Some("Preparing system")
                     } else if line.contains("Mirrors ranked") {
                         state.installation_progress = 16;
-                        state.status_message = "Mirrors configured".to_string();
+                        Some("Mirrors configured")
                     } else if line.contains("Phase 3:") {
                         state.installation_progress = 18;
-                        state.status_message = "Installing dependencies".to_string();
+                        Some("Installing dependencies")
                     } else if line.contains("Phase 4:") {
                         state.installation_progress = 22;
-                        state.status_message = "Partitioning disk".to_string();
+                        Some("Partitioning disk")
                     } else if line.contains("Starting disk partitioning") {
                         state.installation_progress = 25;
-                        state.status_message = "Partitioning disk".to_string();
+                        Some("Partitioning disk")
                     } else if line.contains("Disk partitioning complete") {
                         state.installation_progress = 28;
-                        state.status_message = "Partitioning complete".to_string();
+                        Some("Partitioning complete")
                     } else if line.contains("Phase 5:") {
                         state.installation_progress = 30;
-                        state.status_message = "Installing base system".to_string();
+                        Some("Installing base system")
                     } else if line.contains("Starting pacstrap") {
                         state.installation_progress = 35;
-                        state.status_message =
-                            "Running pacstrap (this takes several minutes)".to_string();
+                        Some("Running pacstrap (this takes several minutes)")
                     } else if line.contains("Base system installed") {
                         state.installation_progress = 50;
-                        state.status_message = "Base system installed".to_string();
+                        Some("Base system installed")
                     } else if line.contains("Phase 6:") {
                         state.installation_progress = 55;
-                        state.status_message = "Generating fstab".to_string();
+                        Some("Generating fstab")
                     } else if line.contains("Phase 7:") {
                         state.installation_progress = 60;
-                        state.status_message = "Configuring system in chroot".to_string();
+                        Some("Configuring system in chroot")
                     } else if line.contains("Configuring bootloader") {
                         state.installation_progress = 80;
-                        state.status_message = "Configuring bootloader".to_string();
+                        Some("Configuring bootloader")
                     } else if line.contains("Phase 8:") {
                         state.installation_progress = 90;
-                        state.status_message = "Finalizing installation".to_string();
+                        Some("Finalizing installation")
                     } else if line.contains("Installation complete") {
                         state.installation_progress = 100;
-                        state.status_message =
-                            "Installation completed successfully!".to_string();
+                        Some("Installation completed successfully!")
+                    } else {
+                        None
+                    };
+
+                    if let Some(msg) = progress_msg {
+                        state.status_message = msg.to_string();
+                        // Log Rust-side state events to master log
+                        write_master_log(
+                            &log_file,
+                            &format!("[RUST] Progress: {}% - {}", state.installation_progress, msg),
+                        );
                     }
                 }
             });
@@ -261,11 +330,15 @@ impl Installer {
         // Handle stderr in separate thread
         if let Some(stderr) = child.stderr.take() {
             let app_state = Arc::clone(&self.app_state);
+            let log_file = Arc::clone(&master_log);
 
             thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
                     let clean_line = strip_ansi_and_cr(&line);
+
+                    // Write stderr to master log with ERROR prefix
+                    write_master_log(&log_file, &format!("STDERR: {}", clean_line));
 
                     // SAFETY: unwrap — same rationale as stdout reader above
                     let mut state = app_state.lock().unwrap();
@@ -310,6 +383,7 @@ impl Installer {
 
         // Wait for installation completion in separate thread
         let app_state = Arc::clone(&self.app_state);
+        let wait_log = Arc::clone(&master_log);
 
         thread::spawn(move || {
             let result = child.wait();
@@ -333,6 +407,7 @@ impl Installer {
                     state
                         .installer_output
                         .push("Installation completed successfully!".to_string());
+                    write_master_log(&wait_log, "[RUST] Installation completed successfully (exit code 0)");
                 } else {
                     let exit_code = status.code().unwrap_or(-1);
                     state.status_message = format!(
@@ -344,9 +419,10 @@ impl Installer {
                         exit_code
                     ));
                     state.installer_output.push(
-                        "Check /var/log/archtui/ or /tmp/install-*.log for full details".to_string()
+                        "Check /var/log/archtui/ for full details (master log + verbose trace)".to_string()
                     );
                     state.mode = crate::app::AppMode::Complete;
+                    write_master_log(&wait_log, &format!("[RUST] Installation FAILED (exit code {})", exit_code));
                 }
             }
             Err(e) => {
@@ -359,6 +435,7 @@ impl Installer {
                     .push(format!("ERROR: Failed to wait for installer: {}", e));
                 state.status_message = format!("Installation error: {}", e);
                 state.mode = crate::app::AppMode::Complete;
+                write_master_log(&wait_log, &format!("[RUST] Installation ERROR: Failed to wait: {}", e));
             }
             }
         });
