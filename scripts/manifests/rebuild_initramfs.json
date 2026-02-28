@@ -2,6 +2,7 @@
   "script": "scripts/tools/rebuild_initramfs.sh",
   "description": "Rebuild the initramfs (mkinitcpio -P) on an installed Arch system via chroot.",
   "destructive": true,
+  "required_confirmation": "CONFIRM_REBUILD_INITRAMFS",
   "version": "1.0",
   "needs_stdin": false,
   "valid_exit_codes": [0],

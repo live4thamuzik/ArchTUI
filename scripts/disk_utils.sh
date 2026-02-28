@@ -533,6 +533,8 @@ setup_luks_encryption() {
     local mapper_name="${2:-cryptroot}"
 
     # Password comes from environment (secure - not in command line)
+    # ROE §8.1: Suppress set -x tracing for password handling
+    { set +x; } 2>/dev/null
     local password="${ENCRYPTION_PASSWORD:-}"
 
     if [[ -z "$password" ]]; then
@@ -560,8 +562,12 @@ setup_luks_encryption() {
     log_cmd "cryptsetup open $partition $mapper_name"
     printf '%s' "$password" | cryptsetup open "$partition" "$mapper_name" - || {
         log_error "cryptsetup open failed on $partition (mapper: $mapper_name)"
+        [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
         return 1
     }
+
+    # Re-enable tracing after password-sensitive operations
+    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
     # Return the mapper device path (CRITICAL for callers)
     echo "/dev/mapper/$mapper_name"

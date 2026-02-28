@@ -84,7 +84,7 @@ execute_raid_partitioning() {
     mdadm --create --run --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
     
     # Wait for RAID to be ready
-    sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out after mdadm --create, falling back to sleep"; sleep 2; }
     mdadm --wait /dev/md0 || error_exit "RAID array not ready."
     
     # --- Phase 3: Format and mount root FIRST ---

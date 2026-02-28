@@ -122,7 +122,7 @@ log_info "Step 2/3: Building and installing $HELPER (makepkg -si --noconfirm)...
 echo "$USER ALL=(ALL) NOPASSWD: ALL" > "$ROOT/etc/sudoers.d/temp-aur-build"
 chmod 440 "$ROOT/etc/sudoers.d/temp-aur-build"
 
-arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd '$BUILD_DIR' && makepkg -si --noconfirm"
+arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd $(printf '%q' "$BUILD_DIR") && timeout 300 makepkg -si --noconfirm"
 
 # Revoke temporary passwordless sudo
 rm -f "$ROOT/etc/sudoers.d/temp-aur-build"

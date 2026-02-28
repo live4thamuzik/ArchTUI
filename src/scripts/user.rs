@@ -15,12 +15,22 @@ use crate::script_traits::ScriptArgs;
 // ============================================================================
 
 /// Type-safe arguments for `scripts/tools/reset_password.sh`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ResetPasswordArgs {
     /// Username to reset password for.
     pub username: String,
     /// New password (passed via env var, never on CLI).
     pub password: String,
+}
+
+// ROE §8.1: Custom Debug impl redacts password field
+impl std::fmt::Debug for ResetPasswordArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResetPasswordArgs")
+            .field("username", &self.username)
+            .field("password", &"********")
+            .finish()
+    }
 }
 
 impl ScriptArgs for ResetPasswordArgs {

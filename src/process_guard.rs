@@ -300,6 +300,9 @@ pub fn init_signal_handlers() -> Result<(), std::io::Error> {
             }
 
             // Exit with appropriate code (128 + signal number)
+            // EXCEPTION: process::exit in signal handler — RAII is already bypassed
+            // by the signal, and child cleanup just ran. Normal return is not possible
+            // from a signal handler thread.
             std::process::exit(128 + sig);
         }
     });
@@ -418,6 +421,7 @@ mod tests {
         // Spawn a real long-running bash process
         let child = Command::new("bash")
             .args(["-c", "sleep 60"])
+            .in_new_process_group()
             .spawn()
             .expect("Failed to spawn bash sleep process");
 
@@ -466,6 +470,7 @@ mod tests {
         // Spawn a process that exits immediately
         let mut child = Command::new("bash")
             .args(["-c", "exit 0"])
+            .in_new_process_group()
             .spawn()
             .expect("Failed to spawn bash");
 
@@ -492,6 +497,7 @@ mod tests {
         // Spawn a bash process that traps SIGTERM and exits cleanly
         let child = Command::new("bash")
             .args(["-c", "trap 'exit 0' TERM; sleep 60"])
+            .in_new_process_group()
             .spawn()
             .expect("Failed to spawn bash with trap");
 

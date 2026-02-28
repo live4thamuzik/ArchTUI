@@ -229,14 +229,11 @@ pub enum UserToolCommands {
         #[arg(short, long, default_value = "/bin/bash")]
         shell: String,
     },
-    /// Reset user password
+    /// Reset user password (reads password from USER_PASSWORD env var — ROE §8.1)
     ResetPassword {
         /// Username to reset password for
         #[arg(short, long)]
         username: String,
-        /// New password
-        #[arg(short, long)]
-        password: String,
     },
     /// Manage user groups
     Groups {

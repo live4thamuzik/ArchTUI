@@ -4801,7 +4801,8 @@ impl App {
                 match action.as_str() {
                     "format" => {
                         // Create SecretFile for the password
-                        let secret = SecretFile::new(&password)?;
+                        let secret = SecretFile::new(&password)
+                            .map_err(|e| anyhow::anyhow!("Failed to create temporary keyfile for LUKS format: {}", e))?;
                         let key_file_path = secret.path().to_path_buf();
                         // Store SecretFile on App to keep it alive during execution
                         self._active_secret_file = Some(secret);
@@ -4819,7 +4820,8 @@ impl App {
                         )
                     }
                     "open" => {
-                        let secret = SecretFile::new(&password)?;
+                        let secret = SecretFile::new(&password)
+                            .map_err(|e| anyhow::anyhow!("Failed to create temporary keyfile for LUKS open: {}", e))?;
                         let key_file_path = secret.path().to_path_buf();
                         self._active_secret_file = Some(secret);
 
