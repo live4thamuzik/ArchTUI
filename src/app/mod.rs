@@ -12,7 +12,7 @@ mod state;
 pub use state::{AppMode, AppState, ToolDialogState, ToolParam, ToolParameter};
 
 use crate::components::confirm_dialog::{
-    start_install_confirm, wipe_disk_confirm, ConfirmDialogState,
+    start_install_confirm, ConfirmDialogState,
     ConfirmSeverity,
 };
 use crate::components::floating_window::FloatingOutputState;
@@ -670,11 +670,34 @@ impl App {
                             return Ok(false);
                         }
                         "wipe_disk" => {
-                            // Show confirmation dialog before wiping
+                            // Open ToolDialog with device pre-filled for method selection
+                            let parameters = Self::get_tool_parameters("wipe_disk");
+                            let mut param_values: Vec<String> = parameters
+                                .iter()
+                                .map(|p| match &p.param_type {
+                                    ToolParameter::Selection(options, default_idx) => {
+                                        options.get(*default_idx).cloned().unwrap_or_default()
+                                    }
+                                    ToolParameter::Boolean(v) => v.to_string(),
+                                    _ => String::new(),
+                                })
+                                .collect();
+                            // Pre-fill device from disk selection, skip to method param
+                            param_values[0] = value;
                             let mut state = self.lock_state();
-                            state.pre_dialog_mode = Some(AppMode::DiskTools);
-                            state.confirm_dialog = Some(wipe_disk_confirm(&value));
-                            state.mode = AppMode::ConfirmDialog;
+                            if state.pre_dialog_mode.is_none() {
+                                state.pre_dialog_mode = Some(AppMode::DiskTools);
+                            }
+                            state.current_tool = Some("wipe_disk".to_string());
+                            state.tool_dialog = Some(ToolDialogState {
+                                tool_name: "wipe_disk".to_string(),
+                                parameters,
+                                current_param: 1, // Skip device, start at method
+                                param_values,
+                                is_executing: false,
+                            });
+                            state.mode = AppMode::ToolDialog;
+                            state.status_message = "Select wipe method for disk".to_string();
                             return Ok(false);
                         }
                         _ => {}
@@ -1160,7 +1183,7 @@ impl App {
 
     /// Handle confirmation dialog Enter key
     fn handle_confirm_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (confirmed, action, action_data, pre_mode) = {
+        let (confirmed, action, _action_data, pre_mode) = {
             let state = self.lock_state();
             if let Some(ref dialog) = state.confirm_dialog {
                 (
@@ -1188,20 +1211,6 @@ impl App {
         if confirmed {
             // Execute the confirmed action
             match action.as_str() {
-                "wipe_disk" => {
-                    if let Some(disk) = action_data {
-                        tracing::info!("Confirmed: wiping disk {}", disk);
-                        // Execute wipe disk operation
-                        self.execute_wipe_disk(&disk)?;
-                    }
-                }
-                "format_partition" => {
-                    if let Some(partition) = action_data.clone() {
-                        tracing::info!("Confirmed: formatting partition {}", partition);
-                        // Execute format operation via execute_confirmed_action
-                        self.execute_confirmed_action("format_partition", Some(partition))?;
-                    }
-                }
                 "start_installation" => {
                     tracing::info!("Confirmed: starting installation");
                     self.start_installation()?;
@@ -1215,23 +1224,6 @@ impl App {
         Ok(())
     }
 
-    /// Execute wipe disk operation via ScriptArgs
-    fn execute_wipe_disk(&mut self, disk: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let args = WipeDiskArgs {
-            device: PathBuf::from(disk),
-            method: WipeMethod::Quick,
-            confirm: true,
-        };
-        self.execute_via_script_args(
-            args.script_name(),
-            args.to_cli_args(),
-            args.get_env_vars(),
-            &format!("wipe disk {}", disk),
-            args.is_destructive(),
-            true, // already confirmed via disk selection dialog
-        )
-    }
-
     /// Execute action after confirmation dialog
     fn execute_confirmed_action(
         &mut self,
@@ -1239,25 +1231,6 @@ impl App {
         data: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match action {
-            "wipe_disk" => {
-                if let Some(disk) = data {
-                    self.execute_wipe_disk(&disk)?;
-                }
-            }
-            "format_partition" => {
-                if let Some(partition) = data {
-                    let sa = FormatPartitionArgs {
-                        device: PathBuf::from(&partition),
-                        filesystem: crate::types::Filesystem::Ext4,
-                        label: None,
-                        force: false,
-                    };
-                    self.execute_via_script_args(
-                        sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                        "format partition", sa.is_destructive(), true,
-                    )?;
-                }
-            }
             "install_bootloader" => {
                 if let Some(params) = data {
                     // params format: "bootloader:disk"
@@ -1568,15 +1541,8 @@ impl App {
                         self.create_tool_dialog("install_aur_helper")?;
                     }
                     7 => {
-                        // Rebuild Initramfs - run directly with --root /mnt
-                        self.execute_via_script_args(
-                            "rebuild_initramfs.sh",
-                            vec!["--root".to_string(), "/mnt".to_string()],
-                            vec![],
-                            "rebuild initramfs",
-                            true,
-                            true,
-                        )?;
+                        // Rebuild Initramfs - Create dialog for root path
+                        self.create_tool_dialog("rebuild_initramfs")?;
                     }
                     8 => {
                         // View Install Logs - run directly with --latest
@@ -1785,7 +1751,7 @@ impl App {
                         }
                         "install_bootloader" | "generate_fstab" | "chroot" | "info"
                         | "manage_services" | "system_info" | "enable_services"
-                        | "install_aur_helper" => {
+                        | "install_aur_helper" | "rebuild_initramfs" => {
                             state.mode = AppMode::SystemTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
@@ -3956,6 +3922,12 @@ impl App {
                     required: false,
                 },
             ],
+            "rebuild_initramfs" => vec![ToolParam {
+                name: "root".to_string(),
+                description: "Root of the installed system (e.g., /mnt)".to_string(),
+                param_type: ToolParameter::Text("/mnt".to_string()),
+                required: true,
+            }],
             "update_mirrors" => vec![
                 ToolParam {
                     name: "country".to_string(),
@@ -4036,7 +4008,7 @@ impl App {
                         }
                         "install_bootloader" | "generate_fstab" | "chroot" | "info"
                         | "manage_services" | "system_info" | "enable_services"
-                        | "install_aur_helper" => {
+                        | "install_aur_helper" | "rebuild_initramfs" => {
                             state.mode = AppMode::SystemTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
@@ -4897,6 +4869,21 @@ impl App {
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
                     "enable services", sa.is_destructive(), false,
+                )
+            }
+            "rebuild_initramfs" => {
+                // params: root
+                let root = params.first()
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .unwrap_or_else(|| "/mnt".to_string());
+                self.execute_via_script_args(
+                    "rebuild_initramfs.sh",
+                    vec!["--root".to_string(), root],
+                    vec![],
+                    "rebuild initramfs",
+                    true,
+                    false,
                 )
             }
             "install_aur_helper" => {
