@@ -648,7 +648,7 @@ impl ManifestRegistry {
                 ))
                 .needs_stdin() // For password passing
                 .build()
-                .expect("Core manifest should be valid"), // Safe: hardcoded valid manifest
+                .expect("Core manifest should be valid"), // SAFETY: hardcoded valid manifest — cannot fail
         );
 
         // Wipe disk manifest
@@ -664,7 +664,7 @@ impl ManifestRegistry {
                     "quick",
                 ))
                 .build()
-                .expect("Core manifest should be valid"), // Safe: hardcoded valid manifest
+                .expect("Core manifest should be valid"), // SAFETY: hardcoded valid manifest — cannot fail
         );
 
         // Manual partition manifest
@@ -678,7 +678,7 @@ impl ManifestRegistry {
                 EnvRequirement::new("INSTALL_DISK", "Disk to partition").with_pattern("^/dev/"),
             )
             .build()
-            .expect("Core manifest should be valid"), // Safe: hardcoded valid manifest
+            .expect("Core manifest should be valid"), // SAFETY: hardcoded valid manifest — cannot fail
         );
 
         // Chroot config manifest
@@ -693,7 +693,7 @@ impl ManifestRegistry {
             .optional_env(OptionalEnv::new("KEYMAP", "Keyboard layout", "us"))
             .optional_env(OptionalEnv::new("BOOTLOADER", "Bootloader", "grub"))
             .build()
-            .expect("Core manifest should be valid"), // Safe: hardcoded valid manifest
+            .expect("Core manifest should be valid"), // SAFETY: hardcoded valid manifest — cannot fail
         );
 
         registry

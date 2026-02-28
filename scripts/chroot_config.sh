@@ -4,6 +4,17 @@
 
 set -euo pipefail
 
+# --- Signal Handling ---
+cleanup_and_exit() {
+    local sig="$1"
+    # Remove any stale NOPASSWD sudoers fragments
+    rm -f /etc/sudoers.d/archtui_*
+    echo "$(basename "$0"): Received $sig, aborting..." >&2
+    exit 130
+}
+trap 'cleanup_and_exit SIGTERM' SIGTERM
+trap 'cleanup_and_exit SIGINT' SIGINT
+
 # Get script directory (we're running from / inside chroot)
 SCRIPT_DIR="/"
 
@@ -257,7 +268,7 @@ create_user_account() {
     # Set user password (tracing disabled to prevent password leak in verbose logs)
     if [[ -n "${MAIN_USER_PASSWORD:-}" ]]; then
         { set +x; } 2>/dev/null
-        echo "$MAIN_USERNAME:$MAIN_USER_PASSWORD" | chpasswd || log_warn "Failed to set user password"
+        printf '%s:%s\n' "$MAIN_USERNAME" "$MAIN_USER_PASSWORD" | chpasswd || log_warn "Failed to set user password"
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "User password set"
     fi
@@ -265,7 +276,7 @@ create_user_account() {
     # Set root password (tracing disabled to prevent password leak in verbose logs)
     if [[ -n "${ROOT_PASSWORD:-}" ]]; then
         { set +x; } 2>/dev/null
-        echo "root:$ROOT_PASSWORD" | chpasswd || log_warn "Failed to set root password"
+        printf '%s:%s\n' "root" "$ROOT_PASSWORD" | chpasswd || log_warn "Failed to set root password"
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "Root password set"
     fi
@@ -825,7 +836,7 @@ _grub_theme_git_clone() {
     else
         log_warn "Failed to clone GRUB theme: $repo_url"
     fi
-    rm -rf "$tmp_dir"
+    rm -rf "${tmp_dir:?}"
 }
 
 configure_grub_theme() {
@@ -1315,7 +1326,7 @@ AUREOF
     esac
 
     # Cleanup build artifacts
-    rm -rf "$build_dir"
+    rm -rf "${build_dir:?}"
 
     log_success "AUR helper installation complete"
 }

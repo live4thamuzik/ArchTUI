@@ -181,7 +181,7 @@ LOCALE="${LOCALE:-en_US.UTF-8}"
 KEYMAP="${KEYMAP:-us}"
 
 # Disk and Storage
-INSTALL_DISK="${INSTALL_DISK:-/dev/sda}"
+INSTALL_DISK="${INSTALL_DISK:?INSTALL_DISK must be set — no default disk}"
 PARTITIONING_STRATEGY="${PARTITIONING_STRATEGY:-auto_simple}"
 # Also set PARTITION_SCHEME for disk_strategies.sh compatibility
 export PARTITION_SCHEME="$PARTITIONING_STRATEGY"

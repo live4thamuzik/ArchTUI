@@ -197,14 +197,14 @@ case "$BOOTLOADER_TYPE" in
                 --target=x86_64-efi \
                 --efi-directory="$EFI_PATH" \
                 --bootloader-id=GRUB \
-                --recheck
+                --recheck || error_exit "grub-install (UEFI) failed"
         else
             log_info "Installing GRUB for BIOS mode..."
             log_cmd "arch-chroot $ROOT_PATH grub-install --target=i386-pc $TARGET_DISK --recheck"
             arch-chroot "$ROOT_PATH" grub-install \
                 --target=i386-pc \
                 "$TARGET_DISK" \
-                --recheck
+                --recheck || error_exit "grub-install (BIOS) failed"
         fi
         
         # Configure GRUB
@@ -220,7 +220,7 @@ case "$BOOTLOADER_TYPE" in
         
         # Generate GRUB config
         log_cmd "arch-chroot $ROOT_PATH grub-mkconfig -o /boot/grub/grub.cfg"
-        arch-chroot "$ROOT_PATH" grub-mkconfig -o /boot/grub/grub.cfg
+        arch-chroot "$ROOT_PATH" grub-mkconfig -o /boot/grub/grub.cfg || error_exit "grub-mkconfig failed"
         
         log_success "✅ GRUB bootloader installed successfully!"
         ;;
@@ -232,7 +232,7 @@ case "$BOOTLOADER_TYPE" in
         
         log_info "🔧 Installing systemd-boot..."
         log_cmd "arch-chroot $ROOT_PATH bootctl install"
-        arch-chroot "$ROOT_PATH" bootctl install
+        arch-chroot "$ROOT_PATH" bootctl install || error_exit "bootctl install failed"
         
         # Create loader configuration
         log_info "⚙️  Configuring systemd-boot loader..."
@@ -285,7 +285,7 @@ EOF
         # Update firmware boot manager
         log_info "🔄 Updating firmware boot manager..."
         log_cmd "arch-chroot $ROOT_PATH bootctl update"
-        arch-chroot "$ROOT_PATH" bootctl update
+        arch-chroot "$ROOT_PATH" bootctl update || log_warn "bootctl update failed (non-fatal)"
         
         log_success "✅ systemd-boot installed successfully!"
         ;;

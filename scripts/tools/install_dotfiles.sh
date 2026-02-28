@@ -107,7 +107,7 @@ CLONE_DIR=$(mktemp -d "/tmp/dotfiles-XXXXXX")
 # Cleanup on exit
 cleanup_clone() {
     if [[ -d "$CLONE_DIR" ]]; then
-        rm -rf "$CLONE_DIR"
+        rm -rf "${CLONE_DIR:?}"
     fi
 }
 trap 'cleanup_clone' EXIT
