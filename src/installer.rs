@@ -263,50 +263,66 @@ impl Installer {
 
                     // Update progress based on output content (match on raw line —
                     // ANSI codes don't interfere with contains() substring matching)
+                    //
+                    // Phases 1-4 (fast) = 2%-18%, pacstrap = 22%-40%,
+                    // Phase 7 chroot (longest) = 48%-88% with 5 PROGRESS: sub-milestones,
+                    // Phase 8 + completion = 92%-100%
                     let progress_msg = if line.contains("Starting Arch Linux installation") {
-                        state.installation_progress = 5;
+                        state.installation_progress = 2;
                         Some("Installation started")
                     } else if line.contains("Phase 1:") {
-                        state.installation_progress = 8;
+                        state.installation_progress = 5;
                         Some("Validating configuration")
                     } else if line.contains("Phase 2:") {
-                        state.installation_progress = 12;
+                        state.installation_progress = 8;
                         Some("Preparing system")
                     } else if line.contains("Mirrors ranked") {
-                        state.installation_progress = 16;
+                        state.installation_progress = 10;
                         Some("Mirrors configured")
                     } else if line.contains("Phase 3:") {
-                        state.installation_progress = 18;
+                        state.installation_progress = 12;
                         Some("Installing dependencies")
                     } else if line.contains("Phase 4:") {
-                        state.installation_progress = 22;
+                        state.installation_progress = 14;
                         Some("Partitioning disk")
                     } else if line.contains("Starting disk partitioning") {
-                        state.installation_progress = 25;
+                        state.installation_progress = 16;
                         Some("Partitioning disk")
                     } else if line.contains("Disk partitioning complete") {
-                        state.installation_progress = 28;
+                        state.installation_progress = 18;
                         Some("Partitioning complete")
                     } else if line.contains("Phase 5:") {
-                        state.installation_progress = 30;
+                        state.installation_progress = 20;
                         Some("Installing base system")
                     } else if line.contains("Starting pacstrap") {
-                        state.installation_progress = 35;
+                        state.installation_progress = 22;
                         Some("Running pacstrap (this takes several minutes)")
                     } else if line.contains("Base system installed") {
-                        state.installation_progress = 50;
+                        state.installation_progress = 40;
                         Some("Base system installed")
                     } else if line.contains("Phase 6:") {
-                        state.installation_progress = 55;
+                        state.installation_progress = 45;
                         Some("Generating fstab")
                     } else if line.contains("Phase 7:") {
-                        state.installation_progress = 60;
+                        state.installation_progress = 48;
                         Some("Configuring system in chroot")
-                    } else if line.contains("Configuring bootloader") {
-                        state.installation_progress = 80;
+                    } else if line.contains("PROGRESS: Configuring base system") {
+                        state.installation_progress = 52;
+                        Some("Configuring base system")
+                    } else if line.contains("PROGRESS: Configuring bootloader") {
+                        state.installation_progress = 58;
                         Some("Configuring bootloader")
+                    } else if line.contains("PROGRESS: Installing desktop environment") {
+                        state.installation_progress = 65;
+                        Some("Installing desktop environment")
+                    } else if line.contains("PROGRESS: Installing additional software") {
+                        state.installation_progress = 78;
+                        Some("Installing additional software")
+                    } else if line.contains("PROGRESS: Running final configuration") {
+                        state.installation_progress = 88;
+                        Some("Running final configuration")
                     } else if line.contains("Phase 8:") {
-                        state.installation_progress = 90;
+                        state.installation_progress = 92;
                         Some("Finalizing installation")
                     } else if line.contains("Installation complete") {
                         state.installation_progress = 100;
@@ -351,28 +367,28 @@ impl Installer {
 
                     // Check progress triggers on stderr too (in case wrapper doesn't merge)
                     if line.contains("Phase 1:") {
-                        state.installation_progress = 8;
+                        state.installation_progress = 5;
                         state.status_message = "Validating configuration".to_string();
                     } else if line.contains("Phase 2:") {
-                        state.installation_progress = 12;
+                        state.installation_progress = 8;
                         state.status_message = "Preparing system".to_string();
                     } else if line.contains("Phase 3:") {
-                        state.installation_progress = 18;
+                        state.installation_progress = 12;
                         state.status_message = "Installing dependencies".to_string();
                     } else if line.contains("Phase 4:") {
-                        state.installation_progress = 22;
+                        state.installation_progress = 14;
                         state.status_message = "Partitioning disk".to_string();
                     } else if line.contains("Phase 5:") {
-                        state.installation_progress = 30;
+                        state.installation_progress = 20;
                         state.status_message = "Installing base system".to_string();
                     } else if line.contains("Phase 6:") {
-                        state.installation_progress = 55;
+                        state.installation_progress = 45;
                         state.status_message = "Generating fstab".to_string();
                     } else if line.contains("Phase 7:") {
-                        state.installation_progress = 60;
+                        state.installation_progress = 48;
                         state.status_message = "Configuring system in chroot".to_string();
                     } else if line.contains("Phase 8:") {
-                        state.installation_progress = 90;
+                        state.installation_progress = 92;
                         state.status_message = "Finalizing installation".to_string();
                     } else if line.contains("ERROR") || line.contains("FATAL") {
                         state.status_message = format!("Error: {}", line);
