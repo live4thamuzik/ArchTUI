@@ -651,8 +651,9 @@ impl App {
                                     _ => String::new(),
                                 })
                                 .collect();
-                            // Pre-fill device from disk selection, skip to filesystem param
-                            param_values[0] = value;
+                            // Extract device path from "/dev/sda (128G) info..."
+                            let device = value.split_whitespace().next().unwrap_or(&value).to_string();
+                            param_values[0] = device;
                             let mut state = self.lock_state();
                             if state.pre_dialog_mode.is_none() {
                                 state.pre_dialog_mode = Some(AppMode::DiskTools);
@@ -682,8 +683,9 @@ impl App {
                                     _ => String::new(),
                                 })
                                 .collect();
-                            // Pre-fill device from disk selection, skip to method param
-                            param_values[0] = value;
+                            // Extract device path from "/dev/sda (128G) info..."
+                            let device = value.split_whitespace().next().unwrap_or(&value).to_string();
+                            param_values[0] = device;
                             let mut state = self.lock_state();
                             if state.pre_dialog_mode.is_none() {
                                 state.pre_dialog_mode = Some(AppMode::DiskTools);
@@ -4296,8 +4298,14 @@ impl App {
         &mut self,
         selected_disk: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Extract device path from formatted string like "/dev/sda (128G) info..."
+        let device = selected_disk
+            .split_whitespace()
+            .next()
+            .unwrap_or(&selected_disk)
+            .to_string();
         let sa = CheckDiskHealthArgs {
-            device: PathBuf::from(&selected_disk),
+            device: PathBuf::from(&device),
         };
         let mut cli_args = sa.to_cli_args();
         cli_args.push("--detailed".to_string());
