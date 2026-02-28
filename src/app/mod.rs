@@ -3626,8 +3626,8 @@ impl App {
                 },
                 ToolParam {
                     name: "confirm".to_string(),
-                    description: "Confirm destructive operation".to_string(),
-                    param_type: ToolParameter::Boolean(false),
+                    description: "ALL DATA WILL BE DESTROYED. Type CONFIRM to proceed.".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
                     required: true,
                 },
             ],
@@ -4678,15 +4678,22 @@ impl App {
                 let method: WipeMethod = params.get(1)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(WipeMethod::Quick);
-                let confirm = params.get(2).map(|s| s == "true").unwrap_or(false);
+                // User must type "CONFIRM" — reject anything else
+                let confirm_text = params.get(2).cloned().unwrap_or_default();
+                if confirm_text != "CONFIRM" {
+                    let mut state = self.lock_state();
+                    state.status_message = "Wipe cancelled — you must type CONFIRM exactly".to_string();
+                    return Ok(());
+                }
                 let sa = WipeDiskArgs {
                     device: PathBuf::from(device),
                     method,
-                    confirm,
+                    confirm: true, // Validated by typed CONFIRM above
                 };
+                // skip_confirm=true: the typed CONFIRM IS the confirmation
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "wipe disk", sa.is_destructive(), false,
+                    "wipe disk", sa.is_destructive(), true,
                 )
             }
             "health" => {
