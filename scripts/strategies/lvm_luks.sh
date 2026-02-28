@@ -3,9 +3,9 @@
 set -euo pipefail
 
 # Source common utilities via source_or_die
-SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+_STRATEGY_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../disk_utils.sh
-source_or_die "$SCRIPT_DIR/../disk_utils.sh"
+source_or_die "$_STRATEGY_SCRIPT_DIR/../disk_utils.sh"
 
 # Execute LVM + LUKS partitioning strategy
 execute_lvm_luks_partitioning() {
