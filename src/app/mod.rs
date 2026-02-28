@@ -4217,12 +4217,13 @@ impl App {
 
     /// Handle tool dialog enter key
     fn handle_tool_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (tool_name, current_param, param_values) = {
+        let (tool_name, current_param, total_params, param_values) = {
             let state = self.lock_state();
             if let Some(ref dialog) = state.tool_dialog {
                 (
                     dialog.tool_name.clone(),
                     dialog.current_param,
+                    dialog.parameters.len(),
                     dialog.param_values.clone(),
                 )
             } else {
@@ -4230,30 +4231,16 @@ impl App {
             }
         };
 
-        {
+        let last_param = total_params.saturating_sub(1);
+
+        if current_param < total_params && current_param != last_param {
+            // Not on last param — advance to next
             let mut state = self.lock_state();
             if let Some(ref mut dialog) = state.tool_dialog {
-                if current_param < dialog.parameters.len() {
-                    // Move to next parameter or execute tool
-                    if current_param == dialog.parameters.len().saturating_sub(1) {
-                        // All parameters collected — mode will be set by execute_tool_with_params
-                    } else {
-                        // Move to next parameter
-                        dialog.current_param += 1;
-                    }
-                }
+                dialog.current_param += 1;
             }
-        }
-
-        // Execute tool outside of the state lock
-        if current_param
-            == self
-                .lock_state()
-                .tool_dialog
-                .as_ref()
-                .map(|d| d.parameters.len().saturating_sub(1))
-                .unwrap_or(0)
-        {
+        } else if current_param == last_param {
+            // On last param — execute tool
             self.execute_tool_with_params(&tool_name, param_values)?;
         }
 
@@ -4682,6 +4669,9 @@ impl App {
                 let confirm_text = params.get(2).cloned().unwrap_or_default();
                 if confirm_text != "CONFIRM" {
                     let mut state = self.lock_state();
+                    state.tool_dialog = None;
+                    state.current_tool = None;
+                    state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::DiskTools);
                     state.status_message = "Wipe cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
