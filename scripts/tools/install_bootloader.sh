@@ -192,6 +192,7 @@ case "$BOOTLOADER_TYPE" in
                 log_warning "efibootmgr not found. EFI boot manager entries may not be created."
             fi
             
+            log_cmd "arch-chroot $ROOT_PATH grub-install --target=x86_64-efi --efi-directory=$EFI_PATH --bootloader-id=GRUB --recheck"
             arch-chroot "$ROOT_PATH" grub-install \
                 --target=x86_64-efi \
                 --efi-directory="$EFI_PATH" \
@@ -199,6 +200,7 @@ case "$BOOTLOADER_TYPE" in
                 --recheck
         else
             log_info "Installing GRUB for BIOS mode..."
+            log_cmd "arch-chroot $ROOT_PATH grub-install --target=i386-pc $TARGET_DISK --recheck"
             arch-chroot "$ROOT_PATH" grub-install \
                 --target=i386-pc \
                 "$TARGET_DISK" \
@@ -217,6 +219,7 @@ case "$BOOTLOADER_TYPE" in
         fi
         
         # Generate GRUB config
+        log_cmd "arch-chroot $ROOT_PATH grub-mkconfig -o /boot/grub/grub.cfg"
         arch-chroot "$ROOT_PATH" grub-mkconfig -o /boot/grub/grub.cfg
         
         log_success "✅ GRUB bootloader installed successfully!"
@@ -228,6 +231,7 @@ case "$BOOTLOADER_TYPE" in
         fi
         
         log_info "🔧 Installing systemd-boot..."
+        log_cmd "arch-chroot $ROOT_PATH bootctl install"
         arch-chroot "$ROOT_PATH" bootctl install
         
         # Create loader configuration
@@ -280,6 +284,7 @@ EOF
         
         # Update firmware boot manager
         log_info "🔄 Updating firmware boot manager..."
+        log_cmd "arch-chroot $ROOT_PATH bootctl update"
         arch-chroot "$ROOT_PATH" bootctl update
         
         log_success "✅ systemd-boot installed successfully!"

@@ -73,6 +73,7 @@ execute_lvm_partitioning() {
     
     # LVM partition (uses remaining space)
     log_info "Creating LVM partition..."
+    log_cmd "sgdisk -n $part_num:0:0 -t $part_num:$LVM_PARTITION_TYPE $INSTALL_DISK"
     sgdisk -n "$part_num:0:0" -t "$part_num:$LVM_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LVM partition."
     sync_partitions "$INSTALL_DISK"
     local lvm_part
@@ -80,7 +81,9 @@ execute_lvm_partitioning() {
     
     # Create LVM setup
     log_info "Setting up LVM..."
+    log_cmd "pvcreate $lvm_part"
     pvcreate "$lvm_part" || error_exit "Failed to create physical volume."
+    log_cmd "vgcreate archvg $lvm_part"
     vgcreate archvg "$lvm_part" || error_exit "Failed to create volume group."
     
     # Create logical volumes
@@ -94,20 +97,25 @@ execute_lvm_partitioning() {
             log_warn "Root=Remaining with separate home: falling back to ${DEFAULT_ROOT_SIZE_MIB}MiB root"
             root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
         fi
+        log_cmd "lvcreate -L ${root_size_mib}M -n root archvg"
         lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
 
         local home_size_mib
         home_size_mib=$(get_home_size_mib)
         if [[ "$home_size_mib" == "REMAINING" ]]; then
+            log_cmd "lvcreate -l 100%FREE -n home archvg"
             lvcreate -l 100%FREE -n home archvg || error_exit "Failed to create home logical volume."
         else
+            log_cmd "lvcreate -L ${home_size_mib}M -n home archvg"
             lvcreate -L "${home_size_mib}M" -n home archvg || error_exit "Failed to create home logical volume."
         fi
     else
         # No home: root takes all or user-specified size
         if [[ "$root_size_mib" == "REMAINING" ]]; then
+            log_cmd "lvcreate -l 100%FREE -n root archvg"
             lvcreate -l 100%FREE -n root archvg || error_exit "Failed to create root logical volume."
         else
+            log_cmd "lvcreate -L ${root_size_mib}M -n root archvg"
             lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
         fi
     fi

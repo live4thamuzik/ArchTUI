@@ -225,6 +225,7 @@ mod tests {
         let state = ScrollState::new(50, 10);
         let info = state.page_info();
         assert!(info.is_some());
+        // SAFETY: asserted is_some() on previous line
         let (current, total) = info.unwrap();
         assert_eq!(current, 1);
         assert_eq!(total, 5);

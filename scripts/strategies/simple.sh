@@ -132,6 +132,7 @@ execute_simple_partitioning() {
             root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
         fi
 
+        log_cmd "sgdisk -n ${part_num}:0:+${root_size_mib}M -t ${part_num}:${LINUX_PARTITION_TYPE} -c ${part_num}:ROOT $INSTALL_DISK"
         sgdisk -n "${part_num}:0:+${root_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$INSTALL_DISK" || error_exit "Failed to create root partition."
         sync_partitions "$INSTALL_DISK"
         local root_device
@@ -150,6 +151,7 @@ execute_simple_partitioning() {
         else
             # Fixed size home
             local home_device
+            log_cmd "sgdisk -n ${part_num}:0:+${home_size_mib}M -t ${part_num}:${LINUX_PARTITION_TYPE} -c ${part_num}:HOME $INSTALL_DISK"
             sgdisk -n "${part_num}:0:+${home_size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$INSTALL_DISK" || error_exit "Failed to create home partition."
             sync_partitions "$INSTALL_DISK"
             home_device=$(get_partition_path "$INSTALL_DISK" "$part_num")

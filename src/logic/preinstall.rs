@@ -121,18 +121,18 @@ impl Default for PreinstallConfig {
 pub fn rank_mirrors(config: &PreinstallConfig) -> MirrorRankResult {
     // 1. User opt-out check
     if config.skip_mirrors {
-        log::info!("Mirror ranking skipped by user");
+        tracing::info!("Mirror ranking skipped by user");
         return MirrorRankResult::Skipped(SkipReason::UserSkipped);
     }
 
     // 2. Network connectivity check (pure Rust — Sprint 14)
     let network = hardware::detect_internet();
     if network != NetworkState::Online {
-        log::warn!("Mirror ranking skipped: no network connectivity");
+        tracing::warn!("Mirror ranking skipped: no network connectivity");
         return MirrorRankResult::Skipped(SkipReason::Offline);
     }
 
-    log::info!(
+    tracing::info!(
         "Ranking mirrors (country={:?}, limit={}, sort={}, timeout={}s)",
         config.mirror_country,
         config.mirror_limit,
@@ -152,7 +152,7 @@ pub fn rank_mirrors(config: &PreinstallConfig) -> MirrorRankResult {
     match run_script_safe(&args) {
         Ok(output) => {
             if output.success {
-                log::info!("Mirror ranking completed successfully");
+                tracing::info!("Mirror ranking completed successfully");
                 MirrorRankResult::Ranked {
                     mirror_count: config.mirror_limit,
                 }
@@ -161,13 +161,13 @@ pub fn rank_mirrors(config: &PreinstallConfig) -> MirrorRankResult {
                     "reflector exited with code {} — using default mirrorlist",
                     output.exit_code.unwrap_or(-1)
                 );
-                log::warn!("{}", msg);
+                tracing::warn!("{}", msg);
                 MirrorRankResult::Failed(msg)
             }
         }
         Err(e) => {
             let msg = format!("reflector failed to execute: {} — using default mirrorlist", e);
-            log::warn!("{}", msg);
+            tracing::warn!("{}", msg);
             MirrorRankResult::Failed(msg)
         }
     }

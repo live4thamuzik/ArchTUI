@@ -16,6 +16,9 @@ pub fn search_pacman_packages(search_term: &str) -> Result<Vec<Package>, String>
         return Err("Invalid characters in search term".to_string());
     }
 
+    // EXCEPTION: Command::new("pacman") instead of ALPM bindings — alpm-rs lacks stable
+    // search API; call is read-only (pacman -Ss) with process group isolation, no safety gain
+    // from ALPM integration here.
     let output = Command::new("pacman")
         .args(["-Ss", search_term])
         .in_new_process_group()

@@ -321,7 +321,7 @@ impl InstallerContext {
     /// Refresh network connectivity state (e.g., after user plugs in cable).
     pub fn refresh_network(&mut self) {
         self.network_state = crate::hardware::detect_internet();
-        log::info!("Network state refreshed: {}", self.network_state);
+        tracing::info!("Network state refreshed: {}", self.network_state);
     }
 
     /// Returns the current installation stage

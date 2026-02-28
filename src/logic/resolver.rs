@@ -56,6 +56,14 @@ use crate::types::*;
 /// - Validate package existence: That's ALPM's job at install time
 /// - Handle package conflicts: pacman/ALPM resolves dependencies
 pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
+    tracing::info!(
+        kernel = %config.kernel,
+        gpu = %config.gpu_drivers,
+        bootloader = %config.bootloader,
+        de = %config.desktop_environment,
+        strategy = %config.partitioning_strategy,
+        "Resolving packages"
+    );
     let mut packages: Vec<&str> = Vec::new();
 
     // 1. Base system — always installed
@@ -158,6 +166,8 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     result.sort();
     result.dedup();
 
+    tracing::info!(count = result.len(), "Package resolution complete");
+    tracing::debug!(packages = ?result, "Resolved package list");
     result
 }
 
@@ -178,6 +188,7 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
 /// - `bluetooth.service` — enabled for desktop profiles (not Minimal)
 /// - `fstrim.timer` — enabled for SSD optimization
 pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
+    tracing::info!(de = %config.desktop_environment, dm = %config.display_manager, "Resolving services");
     let mut services: Vec<&str> = Vec::new();
 
     // NetworkManager — always enabled

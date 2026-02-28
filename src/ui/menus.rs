@@ -281,6 +281,8 @@ pub fn render_system_tools_menu_in_area(
         ("ℹ️ ", "System Info"),
         ("✅", "Enable Services"),
         ("📦", "Install AUR Helper"),
+        ("🔄", "Rebuild Initramfs"),
+        ("📄", "View Install Logs"),
         ("◀️ ", "Back to Tools Menu"),
     ];
 

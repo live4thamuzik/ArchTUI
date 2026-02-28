@@ -120,17 +120,25 @@ impl InstallationConfig {
 
     /// Load configuration from a JSON file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        tracing::info!(path = %path.as_ref().display(), "Loading configuration from file");
         let content = fs::read_to_string(&path)
             .with_context(|| format!("Failed to read configuration from {:?}", path.as_ref()))?;
 
         let config: Self =
             serde_json::from_str(&content).context("Failed to parse configuration JSON")?;
 
+        tracing::info!(
+            strategy = %config.partitioning_strategy,
+            bootloader = %config.bootloader,
+            de = %config.desktop_environment,
+            "Configuration loaded successfully"
+        );
         Ok(config)
     }
 
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
+        tracing::info!("Validating configuration");
         // Validate disk path
         if self.install_disk.trim().is_empty() {
             anyhow::bail!("Install disk must be specified");
@@ -238,6 +246,7 @@ impl InstallationConfig {
             }
         }
 
+        tracing::info!("Configuration validation passed");
         Ok(())
     }
 
@@ -245,6 +254,11 @@ impl InstallationConfig {
     /// N/A sentinel values are converted to empty strings.
     #[allow(dead_code)] // API: Used when passing config to install scripts
     pub fn to_env_vars(&self) -> Vec<(String, String)> {
+        tracing::debug!(
+            strategy = %self.partitioning_strategy,
+            disk = %self.install_disk,
+            "Exporting configuration to environment variables"
+        );
         let sanitize = |s: String| -> String {
             if s == "N/A" { String::new() } else { s }
         };

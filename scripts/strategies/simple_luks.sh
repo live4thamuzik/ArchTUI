@@ -82,12 +82,14 @@ execute_simple_luks_partitioning() {
             root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
         fi
 
+        log_cmd "sgdisk -n ${part_num}:0:+${root_size_mib}M -t ${part_num}:${LUKS_PARTITION_TYPE} -c ${part_num}:LUKS $INSTALL_DISK"
         sgdisk -n "${part_num}:0:+${root_size_mib}M" \
                -t "${part_num}:${LUKS_PARTITION_TYPE}" \
                -c "${part_num}:LUKS" \
                "$INSTALL_DISK" || error_exit "Failed to create LUKS partition"
     else
         # No home: root LUKS takes all remaining space
+        log_cmd "sgdisk -n ${part_num}:0:0 -t ${part_num}:${LUKS_PARTITION_TYPE} -c ${part_num}:LUKS $INSTALL_DISK"
         sgdisk -n "${part_num}:0:0" \
                -t "${part_num}:${LUKS_PARTITION_TYPE}" \
                -c "${part_num}:LUKS" \
@@ -134,12 +136,14 @@ execute_simple_luks_partitioning() {
 
         if [[ "$home_size_mib" == "REMAINING" ]]; then
             # Home takes all remaining space
+            log_cmd "sgdisk -n ${part_num}:0:0 -t ${part_num}:${LUKS_PARTITION_TYPE} -c ${part_num}:LUKS_HOME $INSTALL_DISK"
             sgdisk -n "${part_num}:0:0" \
                    -t "${part_num}:${LUKS_PARTITION_TYPE}" \
                    -c "${part_num}:LUKS_HOME" \
                    "$INSTALL_DISK" || error_exit "Failed to create LUKS home partition"
         else
             # Fixed size home
+            log_cmd "sgdisk -n ${part_num}:0:+${home_size_mib}M -t ${part_num}:${LUKS_PARTITION_TYPE} -c ${part_num}:LUKS_HOME $INSTALL_DISK"
             sgdisk -n "${part_num}:0:+${home_size_mib}M" \
                    -t "${part_num}:${LUKS_PARTITION_TYPE}" \
                    -c "${part_num}:LUKS_HOME" \

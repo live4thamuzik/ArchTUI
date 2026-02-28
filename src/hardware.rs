@@ -111,7 +111,7 @@ impl HardwareInfo {
         let firmware = detect_firmware_mode();
         let network = detect_internet();
 
-        log::info!("Hardware detection: firmware={}, network={}", firmware, network);
+        tracing::info!("Hardware detection: firmware={}, network={}", firmware, network);
 
         Self { firmware, network }
     }
@@ -149,10 +149,10 @@ pub fn detect_firmware_mode() -> FirmwareMode {
     let efi_path = Path::new("/sys/firmware/efi");
 
     if efi_path.exists() {
-        log::info!("UEFI firmware detected (/sys/firmware/efi exists)");
+        tracing::info!("UEFI firmware detected (/sys/firmware/efi exists)");
         FirmwareMode::Uefi
     } else {
-        log::info!("BIOS firmware detected (/sys/firmware/efi not found)");
+        tracing::info!("BIOS firmware detected (/sys/firmware/efi not found)");
         FirmwareMode::Bios
     }
 }
@@ -180,7 +180,7 @@ pub fn detect_internet() -> NetworkState {
     let addr: SocketAddr = match "147.75.81.97:443".parse() {
         Ok(a) => a,
         Err(e) => {
-            log::warn!("Failed to parse socket address: {}", e);
+            tracing::warn!("Failed to parse socket address: {}", e);
             return NetworkState::Offline;
         }
     };
@@ -189,11 +189,11 @@ pub fn detect_internet() -> NetworkState {
 
     match TcpStream::connect_timeout(&addr, timeout) {
         Ok(_stream) => {
-            log::info!("Network connectivity confirmed (TCP to archlinux.org:443)");
+            tracing::info!("Network connectivity confirmed (TCP to archlinux.org:443)");
             NetworkState::Online
         }
         Err(e) => {
-            log::warn!("Network connectivity check failed: {}", e);
+            tracing::warn!("Network connectivity check failed: {}", e);
             NetworkState::Offline
         }
     }
@@ -219,9 +219,9 @@ pub fn detect_firmware_mode_strict() -> Result<FirmwareMode> {
         // Double-check by reading efivars
         let efivars = Path::new("/sys/firmware/efi/efivars");
         if efivars.exists() {
-            log::info!("UEFI firmware confirmed (efivars accessible)");
+            tracing::info!("UEFI firmware confirmed (efivars accessible)");
         } else {
-            log::warn!(
+            tracing::warn!(
                 "/sys/firmware/efi exists but efivars not found — \
                  UEFI detected but EFI variables may not be writable"
             );
@@ -245,7 +245,7 @@ pub fn detect_internet_strict() -> Result<bool> {
     match TcpStream::connect_timeout(&addr, timeout) {
         Ok(_stream) => Ok(true),
         Err(e) => {
-            log::info!("Network offline: {}", e);
+            tracing::info!("Network offline: {}", e);
             Ok(false)
         }
     }

@@ -26,7 +26,7 @@
 use crate::process_guard::{ChildRegistry, CommandProcessGroup};
 use crate::script_traits::{is_dry_run, ScriptArgs};
 use anyhow::{bail, Context, Result};
-use log::{info, warn};
+use tracing::{info, warn};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -109,8 +109,11 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
 
     // Log exact command and environment for transparency
     info!(
-        "run_script_safe: {} args={:?} env={:?}",
-        script_path, cli_args, env_vars
+        script = %script_name,
+        path = %script_path,
+        args = ?cli_args,
+        destructive = args.is_destructive(),
+        "Spawning script"
     );
 
     // ========================================================================
@@ -197,7 +200,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     let exit_code = output.status.code();
 
     if output.status.success() {
-        info!("Script {} executed successfully", script_name);
+        info!(script = %script_name, exit_code = ?exit_code, "Script completed successfully");
         Ok(ScriptOutput {
             stdout,
             stderr,
@@ -207,7 +210,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
         })
     } else {
         let code = exit_code.unwrap_or(-1);
-        info!("Script {} failed with exit code {}", script_name, code);
+        warn!(script = %script_name, exit_code = code, "Script failed");
         Ok(ScriptOutput {
             stdout,
             stderr,

@@ -78,7 +78,6 @@ ArchTUI/
 │   ├── config_loader.sh     # JSON config → environment variables
 │   ├── run_as_user.sh       # Unprivileged execution helper
 │   ├── strategies/          # Partitioning strategies (9)
-│   ├── desktops/            # DE installation scripts (6)
 │   ├── tools/               # System admin tools (26)
 │   └── tests/               # BATS test suite
 │
@@ -144,9 +143,9 @@ Nine disk layout options:
 8. `raid_lvm_luks.sh` - Full stack (RAID + LVM + LUKS)
 9. `manual.sh` - User-guided partitioning
 
-#### Desktop Environments (`desktops/`)
-- `gnome.sh`, `kde.sh`, `hyprland.sh`, `i3.sh`, `xfce.sh`, `none.sh`
-- Sway, Cinnamon, Mate, and Budgie are defined as enums in `types.rs` and handled via package lists in `chroot_config.sh` (no dedicated scripts)
+#### Desktop Environments
+All DE installation is handled inline in `chroot_config.sh` via package lists.
+Desktop environment enums are defined in `types.rs`.
 
 ## Data Flow
 
@@ -227,9 +226,10 @@ Key variables:
 4. Add UI option in `config.rs`
 
 ### Adding a Desktop Environment
-1. Create `scripts/desktops/new_de.sh`
-2. Implement package lists and services
-3. Add option in Rust configuration
+1. Add variant to `DesktopEnvironment` enum in `types.rs`
+2. Add package list and service enable logic in `chroot_config.sh`
+3. Add profile mapping in `profiles.rs` via `desktop_to_profile()`
+4. Add option in Rust configuration (`config.rs`)
 
 ### Adding a System Tool
 1. Create `scripts/tools/category/new_tool.sh`

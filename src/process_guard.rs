@@ -45,13 +45,13 @@ impl ChildRegistry {
     /// Register a new child process
     pub fn register(&mut self, pid: u32) {
         self.pids.insert(pid);
-        log::debug!("Registered child process PID {}", pid);
+        tracing::debug!(pid, "Registered child process");
     }
 
     /// Unregister a child process (called when it exits normally)
     pub fn unregister(&mut self, pid: u32) {
         self.pids.remove(&pid);
-        log::debug!("Unregistered child process PID {}", pid);
+        tracing::debug!(pid, "Unregistered child process");
     }
 
     /// Get count of tracked children
@@ -69,12 +69,12 @@ impl ChildRegistry {
         if self.pids.is_empty() {
             return;
         }
-        log::info!("Terminating {} running tool process(es)...", self.pids.len());
+        tracing::info!("Terminating {} running tool process(es)...", self.pids.len());
 
         let pids_to_kill: Vec<u32> = self.pids.iter().copied().collect();
         for &pid in &pids_to_kill {
             if let Err(e) = send_signal_to_group(pid, Signal::SIGTERM) {
-                log::warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
+                tracing::warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
                 let _ = send_signal(pid, Signal::SIGTERM);
             }
         }
@@ -93,7 +93,7 @@ impl ChildRegistry {
 
         for &pid in &pids_to_kill {
             if is_process_alive(pid) {
-                log::warn!("Process {} did not terminate, sending SIGKILL", pid);
+                tracing::warn!("Process {} did not terminate, sending SIGKILL", pid);
                 let _ = send_signal_to_group(pid, Signal::SIGKILL);
                 let _ = send_signal(pid, Signal::SIGKILL);
             }
@@ -107,20 +107,17 @@ impl ChildRegistry {
     /// Sends SIGTERM first, waits up to `grace_period`, then SIGKILL
     pub fn terminate_all(&mut self, grace_period: Duration) {
         if self.cleanup_initiated {
-            log::debug!("Cleanup already initiated, skipping");
+            tracing::debug!("Cleanup already initiated, skipping");
             return;
         }
         self.cleanup_initiated = true;
 
         if self.pids.is_empty() {
-            log::debug!("No child processes to terminate");
+            tracing::debug!("No child processes to terminate");
             return;
         }
 
-        log::info!(
-            "Terminating {} child process(es)...",
-            self.pids.len()
-        );
+        tracing::info!(count = self.pids.len(), "Terminating child processes");
 
         // First pass: send SIGTERM to all process GROUPS
         // Using group signaling ensures children (sgdisk, cryptsetup, etc.) also receive the signal
@@ -128,13 +125,13 @@ impl ChildRegistry {
         for &pid in &pids_to_kill {
             // Try group signal first (catches entire process tree)
             if let Err(e) = send_signal_to_group(pid, Signal::SIGTERM) {
-                log::warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
+                tracing::warn!("Failed to send SIGTERM to process group {}: {}", pid, e);
                 // Fall back to direct signal if group signal fails
                 if let Err(e2) = send_signal(pid, Signal::SIGTERM) {
-                    log::warn!("Failed to send SIGTERM to PID {}: {}", pid, e2);
+                    tracing::warn!("Failed to send SIGTERM to PID {}: {}", pid, e2);
                 }
             } else {
-                log::debug!("Sent SIGTERM to process group {}", pid);
+                tracing::debug!("Sent SIGTERM to process group {}", pid);
             }
         }
 
@@ -149,7 +146,7 @@ impl ChildRegistry {
                 .collect();
 
             if still_alive.is_empty() {
-                log::info!("All child processes terminated gracefully");
+                tracing::info!("All child processes terminated gracefully");
                 self.pids.clear();
                 return;
             }
@@ -160,10 +157,10 @@ impl ChildRegistry {
         // Second pass: SIGKILL any remaining process groups
         for &pid in &pids_to_kill {
             if is_process_alive(pid) {
-                log::warn!("Process group {} did not terminate, sending SIGKILL", pid);
+                tracing::warn!("Process group {} did not terminate, sending SIGKILL", pid);
                 // Try group signal first
                 if let Err(e) = send_signal_to_group(pid, Signal::SIGKILL) {
-                    log::error!("Failed to send SIGKILL to process group {}: {}", pid, e);
+                    tracing::error!("Failed to send SIGKILL to process group {}: {}", pid, e);
                     // Fall back to direct signal
                     let _ = send_signal(pid, Signal::SIGKILL);
                 }
@@ -171,7 +168,7 @@ impl ChildRegistry {
         }
 
         self.pids.clear();
-        log::info!("Child process cleanup complete");
+        tracing::info!("Child process cleanup complete");
     }
 }
 
@@ -269,7 +266,7 @@ impl Default for ProcessGuard {
 
 impl Drop for ProcessGuard {
     fn drop(&mut self) {
-        log::debug!("ProcessGuard dropped, initiating cleanup");
+        tracing::debug!("ProcessGuard dropped, initiating cleanup");
         if let Ok(mut registry) = self.registry.lock() {
             registry.terminate_all(Duration::from_secs(5));
         }
@@ -295,7 +292,7 @@ pub fn init_signal_handlers() -> Result<(), std::io::Error> {
                 _ => "UNKNOWN",
             };
 
-            log::info!("Received {} signal, cleaning up...", signal_name);
+            tracing::info!("Received {} signal, cleaning up...", signal_name);
 
             // Terminate all children
             if let Ok(mut registry) = ChildRegistry::global().lock() {

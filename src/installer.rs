@@ -543,11 +543,11 @@ impl Default for DiskLayout {
 /// prepare_disks(&layout, true, true)?;
 /// ```
 pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Result<()> {
-    log::info!("Starting disk preparation for {:?}", layout.disk);
+    tracing::info!(disk = %layout.disk.display(), wipe, "Starting disk preparation");
 
     // Step 1: Optionally wipe the disk
     if wipe {
-        log::info!("Wiping disk: {:?}", layout.disk);
+        tracing::info!("Wiping disk: {:?}", layout.disk);
         let wipe_args = WipeDiskArgs {
             device: layout.disk.clone(),
             method: WipeMethod::Quick,
@@ -556,11 +556,11 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
         let output = run_script_safe(&wipe_args)
             .context("Failed to execute disk wipe")?;
         output.ensure_success("Disk wipe")?;
-        log::info!("Disk wipe completed");
+        tracing::info!("Disk wipe completed");
     }
 
     // Step 2: Format EFI/boot partition as FAT32
-    log::info!("Formatting boot partition: {:?} as FAT32", layout.boot_partition);
+    tracing::info!("Formatting boot partition: {:?} as FAT32", layout.boot_partition);
     let format_boot = FormatPartitionArgs {
         device: layout.boot_partition.clone(),
         filesystem: Filesystem::Fat32,
@@ -570,10 +570,10 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     let output = run_script_safe(&format_boot)
         .context("Failed to execute boot partition format")?;
     output.ensure_success("Boot partition format")?;
-    log::info!("Boot partition formatted");
+    tracing::info!("Boot partition formatted");
 
     // Step 3: Format root partition
-    log::info!(
+    tracing::info!(
         "Formatting root partition: {:?} as {:?}",
         layout.root_partition,
         layout.root_filesystem
@@ -587,11 +587,11 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     let output = run_script_safe(&format_root)
         .context("Failed to execute root partition format")?;
     output.ensure_success("Root partition format")?;
-    log::info!("Root partition formatted");
+    tracing::info!("Root partition formatted");
 
     // Step 4: Mount root partition FIRST
     // CRITICAL: Root must be mounted before boot so /mnt/boot exists
-    log::info!(
+    tracing::info!(
         "Mounting root partition: {:?} -> {:?}",
         layout.root_partition,
         layout.target_root
@@ -604,11 +604,11 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     let output = run_script_safe(&mount_root)
         .context("Failed to execute root partition mount")?;
     output.ensure_success("Root partition mount")?;
-    log::info!("Root partition mounted");
+    tracing::info!("Root partition mounted");
 
     // Step 5: Create boot mount point and mount boot partition
     let boot_mountpoint = layout.target_root.join("boot");
-    log::info!(
+    tracing::info!(
         "Mounting boot partition: {:?} -> {:?}",
         layout.boot_partition,
         boot_mountpoint
@@ -626,9 +626,9 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     let output = run_script_safe(&mount_boot)
         .context("Failed to execute boot partition mount")?;
     output.ensure_success("Boot partition mount")?;
-    log::info!("Boot partition mounted");
+    tracing::info!("Boot partition mounted");
 
-    log::info!("Disk preparation complete");
+    tracing::info!("Disk preparation complete");
     Ok(())
 }
 
@@ -661,7 +661,7 @@ const BASE_PACKAGES: &[&str] = &["base", "linux", "linux-firmware", "base-devel"
 /// # Transparency
 ///
 /// The ALPM handle is configured with `log_cb` which routes all library
-/// messages to `log::info!`, `log::warn!`, and `log::error!`. This ensures
+/// messages to `tracing::info!`, `tracing::warn!`, and `tracing::error!`. This ensures
 /// the TUI sees "Downloading...", "Installing...", etc.
 ///
 /// # Fail Fast
@@ -680,7 +680,7 @@ const BASE_PACKAGES: &[&str] = &["base", "linux", "linux-firmware", "base-devel"
 /// ```
 #[allow(dead_code)] // Library API - will be called from main installer flow
 pub fn install_base_system(target_root: &Path) -> Result<()> {
-    log::info!("Installing base system to {:?}", target_root);
+    tracing::info!("Installing base system to {:?}", target_root);
 
     // Verify target root exists and is mounted
     if !target_root.exists() {
@@ -697,7 +697,7 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
             .unwrap_or(false);
 
     if !is_mount {
-        log::warn!(
+        tracing::warn!(
             "Target root {:?} appears to be empty - ensure it's properly mounted",
             target_root
         );
@@ -710,7 +710,7 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
     std::fs::create_dir_all(&db_path)
         .with_context(|| format!("Failed to create pacman db path: {:?}", db_path))?;
 
-    log::info!("Initializing ALPM: root={:?}, db={:?}", target_root, db_path);
+    tracing::info!("Initializing ALPM: root={:?}, db={:?}", target_root, db_path);
 
     let mut pm = PackageManager::new(target_root, &db_path)
         .context("Failed to initialize ALPM package manager")?;
@@ -719,15 +719,15 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
     // In a real installation, we'd copy mirrorlist to target first
     let live_pacman_conf = Path::new("/etc/pacman.conf");
     if live_pacman_conf.exists() {
-        log::info!("Loading mirror configuration from live system");
+        tracing::info!("Loading mirror configuration from live system");
         pm = PackageManager::from_pacman_conf(target_root, live_pacman_conf)
             .context("Failed to load pacman.conf")?;
     } else {
-        log::warn!("No pacman.conf found - using default mirrors");
+        tracing::warn!("No pacman.conf found - using default mirrors");
     }
 
     // CRITICAL: Log exactly what we're installing (Self-Audit: linux-firmware included)
-    log::info!(
+    tracing::info!(
         "Installing base packages: {:?}",
         BASE_PACKAGES
     );
@@ -737,7 +737,7 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
     pm.install_packages(BASE_PACKAGES)
         .context("Failed to install base packages")?;
 
-    log::info!("Base system installation complete");
+    tracing::info!("Base system installation complete");
     Ok(())
 }
 
@@ -756,13 +756,13 @@ pub fn install_base_system_with_extras(
     target_root: &Path,
     extra_packages: &[&str],
 ) -> Result<()> {
-    log::info!("Installing base system with {} extra packages", extra_packages.len());
+    tracing::info!("Installing base system with {} extra packages", extra_packages.len());
 
     // Combine base packages with extras
     let mut all_packages: Vec<&str> = BASE_PACKAGES.to_vec();
     all_packages.extend_from_slice(extra_packages);
 
-    log::info!("Full package list: {:?}", all_packages);
+    tracing::info!("Full package list: {:?}", all_packages);
 
     // Initialize ALPM
     let db_path = target_root.join("var/lib/pacman");
@@ -782,7 +782,7 @@ pub fn install_base_system_with_extras(
     pm.install_packages(&all_packages)
         .context("Failed to install packages")?;
 
-    log::info!("Package installation complete");
+    tracing::info!("Package installation complete");
     Ok(())
 }
 
@@ -881,27 +881,27 @@ impl Default for SystemConfig {
 /// ```
 #[allow(dead_code)] // Library API - will be called from main installer flow
 pub fn configure_system(config: &SystemConfig) -> Result<()> {
-    log::info!("Starting system configuration for {:?}", config.target_root);
+    tracing::info!("Starting system configuration for {:?}", config.target_root);
 
     // ========================================================================
     // Step 1: Generate Fstab
     // CRITICAL: Must be done AFTER partitions are mounted, BEFORE chroot/reboot
     // Uses genfstab to read currently mounted filesystems
     // ========================================================================
-    log::info!("Generating /etc/fstab");
+    tracing::info!("Generating /etc/fstab");
     let fstab_args = GenFstabArgs {
         root: config.target_root.clone(),
     };
     let output = run_script_safe(&fstab_args)
         .context("Failed to execute fstab generation")?;
     output.ensure_success("Fstab generation")?;
-    log::info!("Fstab generated successfully");
+    tracing::info!("Fstab generated successfully");
 
     // ========================================================================
     // Step 2: Configure Hostname and Locale
     // Sets /etc/hostname, /etc/locale.gen, /etc/locale.conf, /etc/localtime
     // ========================================================================
-    log::info!(
+    tracing::info!(
         "Configuring locale: hostname={}, locale={}, timezone={}",
         config.hostname,
         config.locale,
@@ -917,7 +917,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     let output = run_script_safe(&locale_args)
         .context("Failed to execute locale configuration")?;
     output.ensure_success("Locale configuration")?;
-    log::info!("Locale configuration complete");
+    tracing::info!("Locale configuration complete");
 
     // ========================================================================
     // Step 3: Create User Accounts
@@ -925,7 +925,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     // ========================================================================
 
     // Create main user with sudo access if requested
-    log::info!("Creating user: {} (sudo={})", config.username, config.user_sudo);
+    tracing::info!("Creating user: {} (sudo={})", config.username, config.user_sudo);
     let user_args = UserAddArgs {
         username: config.username.clone(),
         password: Some(config.user_password.clone()),
@@ -947,11 +947,11 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     let output = run_script_safe(&user_args)
         .context("Failed to create user")?;
     output.ensure_success("User creation")?;
-    log::info!("User {} created successfully", config.username);
+    tracing::info!("User {} created successfully", config.username);
 
     // Set root password if provided
     if let Some(ref root_pw) = config.root_password {
-        log::info!("Setting root password");
+        tracing::info!("Setting root password");
         let root_args = UserAddArgs {
             username: "root".to_string(),
             password: Some(root_pw.clone()),
@@ -973,18 +973,18 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
         let output = run_script_safe(&root_args)
             .context("Failed to set root password")?;
         output.ensure_success("Root password setup")?;
-        log::info!("Root password configured");
+        tracing::info!("Root password configured");
     } else {
-        log::info!("No root password specified - root login will be disabled");
+        tracing::info!("No root password specified - root login will be disabled");
     }
 
     // ========================================================================
     // Step 4: Install Bootloader (TODO: Sprint 7)
     // This will configure GRUB/systemd-boot based on boot mode (UEFI/BIOS)
     // ========================================================================
-    log::info!("Bootloader installation: TODO in Sprint 7");
+    tracing::info!("Bootloader installation: TODO in Sprint 7");
 
-    log::info!("System configuration complete");
+    tracing::info!("System configuration complete");
     Ok(())
 }
 
@@ -1068,14 +1068,14 @@ pub fn encrypt_partition(
     config: &EncryptionConfig,
     confirm: bool,
 ) -> Result<PathBuf> {
-    log::info!("Starting LUKS encryption for {:?}", device);
+    tracing::info!(device = %device.display(), "Starting LUKS encryption");
 
     // SECURITY: Create temporary keyfile with password
     // SecretFile ensures cleanup via Drop trait (even on panic)
     let keyfile = SecretFile::new(&config.password)
         .context("Failed to create temporary keyfile")?;
 
-    log::info!("Temporary keyfile created: {:?}", keyfile.path());
+    tracing::info!("Temporary keyfile created: {:?}", keyfile.path());
 
     // Format the device with LUKS2
     let format_args = LuksFormatArgs {
@@ -1093,11 +1093,11 @@ pub fn encrypt_partition(
         "BUG: Password found in LUKS format CLI args! This is a security vulnerability."
     );
 
-    log::info!("Executing LUKS format on {:?}", device);
+    tracing::info!("Executing LUKS format on {:?}", device);
     let output = run_script_safe(&format_args)
         .context("Failed to execute LUKS format")?;
     output.ensure_success("LUKS format")?;
-    log::info!("LUKS format completed successfully");
+    tracing::info!("LUKS format completed successfully");
 
     // Open the encrypted device
     let open_args = LuksOpenArgs {
@@ -1106,14 +1106,14 @@ pub fn encrypt_partition(
         key_file: keyfile.path().to_path_buf(),
     };
 
-    log::info!("Opening LUKS device as {:?}", config.mapper_name);
+    tracing::info!("Opening LUKS device as {:?}", config.mapper_name);
     let output = run_script_safe(&open_args)
         .context("Failed to open LUKS device")?;
     output.ensure_success("LUKS open")?;
 
     // SecretFile is dropped here, securely wiping the keyfile
     let decrypted_device = PathBuf::from(format!("/dev/mapper/{}", config.mapper_name));
-    log::info!(
+    tracing::info!(
         "LUKS encryption complete. Decrypted device: {:?}",
         decrypted_device
     );
@@ -1142,11 +1142,11 @@ pub fn encrypt_partition(
 #[cfg(feature = "alpm")]
 #[allow(dead_code)] // Library API
 pub fn install_profile(target_root: &Path, profile: Profile) -> Result<()> {
-    log::info!("Installing profile: {:?}", profile);
+    tracing::info!(profile = ?profile, "Installing profile");
 
     // Get packages for the profile
     let packages = profile.get_packages();
-    log::info!("Profile packages: {:?}", packages);
+    tracing::info!(profile = ?profile, count = packages.len(), "Profile packages resolved");
 
     // Install packages using ALPM
     let db_path = target_root.join("var/lib/pacman");
@@ -1167,7 +1167,7 @@ pub fn install_profile(target_root: &Path, profile: Profile) -> Result<()> {
 
     // Enable display manager if present
     if let Some(dm) = profile.get_display_manager() {
-        log::info!("Enabling display manager: {}", dm);
+        tracing::info!("Enabling display manager: {}", dm);
 
         let mut services: Vec<String> = vec![dm.to_string()];
         services.extend(profile.get_services().iter().map(|s| s.to_string()));
@@ -1182,7 +1182,7 @@ pub fn install_profile(target_root: &Path, profile: Profile) -> Result<()> {
         output.ensure_success("Enable services")?;
     }
 
-    log::info!("Profile {:?} installed successfully", profile);
+    tracing::info!("Profile {:?} installed successfully", profile);
     Ok(())
 }
 
@@ -1205,7 +1205,7 @@ pub fn install_profile(target_root: &Path, profile: Profile) -> Result<()> {
 /// - `Err` - Installation failed
 #[allow(dead_code)] // Library API
 pub fn install_dotfiles(config: &DotfilesConfig) -> Result<()> {
-    log::info!(
+    tracing::info!(
         "Installing dotfiles from {} for user {}",
         config.repo_url,
         config.target_user
@@ -1223,7 +1223,7 @@ pub fn install_dotfiles(config: &DotfilesConfig) -> Result<()> {
         .context("Failed to install dotfiles")?;
     output.ensure_success("Dotfiles installation")?;
 
-    log::info!("Dotfiles installed successfully");
+    tracing::info!("Dotfiles installed successfully");
     Ok(())
 }
 
@@ -1257,11 +1257,11 @@ pub fn update_mirrors(
     limit: u32,
     sort: MirrorSortMethod,
 ) -> Result<()> {
-    log::info!("Updating pacman mirrors (country={:?}, limit={}, sort={})",
+    tracing::info!("Updating pacman mirrors (country={:?}, limit={}, sort={})",
                country, limit, sort);
 
     // Check network connectivity first
-    log::info!("Checking network connectivity...");
+    tracing::info!("Checking network connectivity...");
     let connectivity = CheckConnectivityArgs::default();
     let output = run_script_safe(&connectivity)
         .context("Failed to check network connectivity")?;
@@ -1271,7 +1271,7 @@ pub fn update_mirrors(
             "Network connectivity check failed. Cannot update mirrors without network access."
         );
     }
-    log::info!("Network connectivity OK");
+    tracing::info!("Network connectivity OK");
 
     // Update mirrors
     let args = UpdateMirrorsArgs {
@@ -1282,12 +1282,12 @@ pub fn update_mirrors(
         save: true,
     };
 
-    log::info!("Running reflector to rank mirrors...");
+    tracing::info!("Running reflector to rank mirrors...");
     let output = run_script_safe(&args)
         .context("Failed to update mirrors")?;
     output.ensure_success("Mirror update")?;
 
-    log::info!("Mirrors updated successfully");
+    tracing::info!("Mirrors updated successfully");
     Ok(())
 }
 
@@ -1300,7 +1300,7 @@ pub fn update_mirrors(
 /// - `Err` - Check failed
 #[allow(dead_code)] // Library API
 pub fn check_network_connectivity() -> Result<bool> {
-    log::info!("Checking network connectivity...");
+    tracing::info!("Checking network connectivity...");
 
     let args = CheckConnectivityArgs::default();
     let output = run_script_safe(&args)

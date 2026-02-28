@@ -39,7 +39,7 @@ static DRY_RUN: AtomicBool = AtomicBool::new(false);
 /// Called at startup if `--dry-run` CLI flag is present.
 pub fn enable_dry_run() {
     DRY_RUN.store(true, Ordering::SeqCst);
-    log::info!("[DRY RUN] Mode enabled - destructive operations will be skipped");
+    tracing::info!("[DRY RUN] Mode enabled - destructive operations will be skipped");
 }
 
 /// Disable dry-run mode globally.

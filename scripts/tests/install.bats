@@ -137,35 +137,8 @@ teardown() {
 }
 
 # =============================================================================
-# Desktop Environment Script Existence Tests
-# =============================================================================
-
-@test "gnome desktop script exists" {
-    [ -f "$SCRIPTS_DIR/desktops/gnome.sh" ]
-}
-
-@test "kde desktop script exists" {
-    [ -f "$SCRIPTS_DIR/desktops/kde.sh" ]
-}
-
-@test "hyprland desktop script exists" {
-    [ -f "$SCRIPTS_DIR/desktops/hyprland.sh" ]
-}
-
-@test "i3 desktop script exists" {
-    [ -f "$SCRIPTS_DIR/desktops/i3.sh" ]
-}
-
-@test "xfce desktop script exists" {
-    [ -f "$SCRIPTS_DIR/desktops/xfce.sh" ]
-}
-
-@test "none desktop script exists" {
-    [ -f "$SCRIPTS_DIR/desktops/none.sh" ]
-}
-
-# =============================================================================
 # Directory Structure Tests
+# (Desktop scripts removed — DE installation is inline in chroot_config.sh)
 # =============================================================================
 
 @test "scripts directory contains required files" {

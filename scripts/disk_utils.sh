@@ -339,9 +339,11 @@ wipe_disk() {
     log_warn "DESTRUCTIVE: Wiping all data on $disk..."
 
     # Wipe filesystem signatures
+    log_cmd "wipefs --all --force $disk"
     wipefs --all --force "$disk"
 
     # Zero out the beginning of the disk to kill MBR/GPT tables
+    log_cmd "dd if=/dev/zero of=$disk bs=1M count=10 status=none"
     dd if=/dev/zero of="$disk" bs=1M count=10 status=none
 
     # Reload partition table
@@ -358,7 +360,9 @@ create_partition_table() {
     
     # Use sgdisk for scripting (non-interactive)
     # --zap-all clears table, -o creates new GPT
+    log_cmd "sgdisk --zap-all $disk"
     sgdisk --zap-all "$disk" || { log_error "Failed to zap partition table on $disk"; return 1; }
+    log_cmd "sgdisk -o $disk"
     sgdisk -o "$disk" || { log_error "Failed to create new GPT on $disk"; return 1; }
     
     partprobe "$disk" || true
@@ -374,12 +378,14 @@ create_esp_partition() {
     
     log_info "Creating ESP partition: $part_device (${size_mib}MiB)"
     
+    log_cmd "sgdisk -n ${part_num}:0:+${size_mib}M -t ${part_num}:${EFI_PARTITION_TYPE} -c ${part_num}:EFI $disk"
     sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${EFI_PARTITION_TYPE}" -c "${part_num}:EFI" "$disk" || { log_error "sgdisk failed creating ESP on $disk"; return 1; }
 
     # Wait for udev to create device node
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 
     [[ -b "$part_device" ]] || { log_error "ESP device $part_device not found after partitioning"; return 1; }
+    log_cmd "mkfs.fat -F32 $part_device"
     mkfs.fat -F32 "$part_device" || { log_error "Failed to format ESP $part_device as FAT32"; return 1; }
 }
 
@@ -394,13 +400,15 @@ create_boot_partition() {
     log_info "Creating boot partition: $part_device (${size_mib}MiB, ext4)"
 
     # Use standard Linux partition type (8300), NOT XBOOTLDR (EA00)
+    log_cmd "sgdisk -n ${part_num}:0:+${size_mib}M -t ${part_num}:${LINUX_PARTITION_TYPE} -c ${part_num}:BOOT $disk"
     sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:BOOT" "$disk" || { log_error "sgdisk failed creating boot partition on $disk"; return 1; }
 
     # Wait for udev to create device node
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 
     # Format as ext4 (standard for /boot) — -F prevents interactive prompt
     [[ -b "$part_device" ]] || { log_error "Boot device $part_device not found after partitioning"; return 1; }
+    log_cmd "mkfs.ext4 -F -L BOOT $part_device"
     mkfs.ext4 -F -L BOOT "$part_device" || { log_error "Failed to format boot partition $part_device as ext4"; return 1; }
 }
 
@@ -409,9 +417,10 @@ create_bios_boot_partition() {
     local part_num="$2"
     
     log_info "Creating BIOS Boot partition: partition $part_num"
+    log_cmd "sgdisk -n ${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M -t ${part_num}:${BIOS_BOOT_PARTITION_TYPE} -c ${part_num}:BIOSBOOT $disk"
     sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" -c "${part_num}:BIOSBOOT" "$disk" || { log_error "sgdisk failed creating BIOS boot partition on $disk"; return 1; }
     # Wait for udev to create device node
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 }
 
 create_swap_partition() {
@@ -424,13 +433,16 @@ create_swap_partition() {
     
     log_info "Creating Swap partition: $part_device (${size_mib}MiB)"
     
+    log_cmd "sgdisk -n ${part_num}:0:+${size_mib}M -t ${part_num}:${SWAP_PARTITION_TYPE} -c ${part_num}:SWAP $disk"
     sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${SWAP_PARTITION_TYPE}" -c "${part_num}:SWAP" "$disk" || { log_error "sgdisk failed creating swap partition on $disk"; return 1; }
 
     # Wait for udev to create device node
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 
     [[ -b "$part_device" ]] || { log_error "Swap device $part_device not found after partitioning"; return 1; }
+    log_cmd "mkswap $part_device"
     mkswap "$part_device" || { log_error "Failed to format swap on $part_device"; return 1; }
+    log_cmd "swapon $part_device"
     swapon "$part_device" || log_warn "Failed to activate swap on $part_device"
 }
 
@@ -445,10 +457,11 @@ create_root_partition() {
     log_info "Creating Root partition: $part_device ($filesystem)"
     
     # Use remaining space (0)
+    log_cmd "sgdisk -n ${part_num}:0:0 -t ${part_num}:${LINUX_PARTITION_TYPE} -c ${part_num}:ROOT $disk"
     sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$disk" || { log_error "sgdisk failed creating root partition on $disk"; return 1; }
 
     # Wait for udev to create device node
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 
     [[ -b "$part_device" ]] || { log_error "Root device $part_device not found after partitioning"; return 1; }
     format_filesystem "$part_device" "$filesystem"
@@ -466,10 +479,11 @@ create_home_partition() {
     
     # This implies root didn't take 100%. Logic for splitting root/home should be in strategy.
     # For now, assumes we are appending to disk.
+    log_cmd "sgdisk -n ${part_num}:0:0 -t ${part_num}:${LINUX_PARTITION_TYPE} -c ${part_num}:HOME $disk"
     sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$disk" || { log_error "sgdisk failed creating home partition on $disk"; return 1; }
 
     # Wait for udev to create device node
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 
     [[ -b "$part_device" ]] || { log_error "Home device $part_device not found after partitioning"; return 1; }
     format_filesystem "$part_device" "$filesystem"
@@ -483,19 +497,23 @@ create_swapfile() {
 
     if [[ "$ROOT_FILESYSTEM_TYPE" == "btrfs" ]]; then
         # Btrfs requires special handling: use btrfs-specific swapfile creation
+        log_cmd "btrfs filesystem mkswapfile --size ${swap_size_mib}m $swapfile"
         btrfs filesystem mkswapfile --size "${swap_size_mib}m" "$swapfile" || {
             log_error "Failed to create btrfs swap file"
             return 1
         }
     else
+        log_cmd "dd if=/dev/zero of=$swapfile bs=1M count=$swap_size_mib status=progress"
         dd if=/dev/zero of="$swapfile" bs=1M count="$swap_size_mib" status=progress || {
             log_error "Failed to allocate swap file"
             return 1
         }
         chmod 600 "$swapfile"
+        log_cmd "mkswap $swapfile"
         mkswap "$swapfile" || { log_error "Failed to format swap file"; return 1; }
     fi
 
+    log_cmd "swapon $swapfile"
     swapon "$swapfile" || log_warn "Failed to activate swap file"
     log_success "Swap file created and activated"
 }
@@ -506,6 +524,7 @@ safe_mount() {
     local options="${3:-defaults}"
 
     mkdir -p "$mountpoint" || { log_error "Failed to create mount point $mountpoint"; return 1; }
+    log_cmd "mount -o $options $device $mountpoint"
     mount -o "$options" "$device" "$mountpoint" || { log_error "Failed to mount $device on $mountpoint"; return 1; }
 }
 
@@ -524,6 +543,7 @@ setup_luks_encryption() {
     log_info "Encrypting $partition with LUKS2 (mapper: $mapper_name)"
 
     # Format with password from stdin (LUKS2 with argon2id)
+    log_cmd "cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 --key-size 512 --hash sha256 --pbkdf argon2id --batch-mode $partition"
     echo -n "$password" | cryptsetup luksFormat \
         --type luks2 \
         --cipher aes-xts-plain64 \
@@ -537,6 +557,7 @@ setup_luks_encryption() {
     }
 
     # Open mapping
+    log_cmd "cryptsetup open $partition $mapper_name"
     echo -n "$password" | cryptsetup open "$partition" "$mapper_name" - || {
         log_error "cryptsetup open failed on $partition (mapper: $mapper_name)"
         return 1
@@ -553,6 +574,7 @@ setup_btrfs_subvolumes() {
     log_info "Setting up Btrfs subvolumes on $device"
 
     # Mount the device first to create subvolumes
+    log_cmd "mount $device /mnt"
     mount "$device" /mnt || {
         log_error "Failed to mount $device for btrfs subvolume creation"
         return 1
@@ -577,6 +599,7 @@ setup_btrfs_subvolumes() {
     }
 
     # Mount root subvolume with compression and noatime
+    log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@ $device /mnt"
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@ "$device" /mnt || {
         log_error "Failed to mount @ subvolume"
         return 1
@@ -589,8 +612,11 @@ setup_btrfs_subvolumes() {
     }
 
     # Mount @var, @tmp, @snapshots first (top-level subvolumes)
+    log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@var $device /mnt/var"
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@var "$device" /mnt/var || { log_error "Failed to mount @var subvolume"; return 1; }
+    log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp $device /mnt/tmp"
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@tmp "$device" /mnt/tmp || { log_error "Failed to mount @tmp subvolume"; return 1; }
+    log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots $device /mnt/.snapshots"
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@snapshots "$device" /mnt/.snapshots || { log_error "Failed to mount @snapshots subvolume"; return 1; }
 
     # Create nested dirs inside @var (now a real mount, not hidden by @)
@@ -600,11 +626,14 @@ setup_btrfs_subvolumes() {
     }
 
     # Mount @cache, @log inside @var
+    log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache $device /mnt/var/cache"
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@cache "$device" /mnt/var/cache || { log_error "Failed to mount @cache subvolume"; return 1; }
+    log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@log $device /mnt/var/log"
     mount -o compress=zstd,noatime,space_cache=v2,subvol=@log "$device" /mnt/var/log || { log_error "Failed to mount @log subvolume"; return 1; }
 
     if [[ "$include_home" == "yes" ]]; then
         mkdir -p /mnt/home
+        log_cmd "mount -o compress=zstd,noatime,space_cache=v2,subvol=@home $device /mnt/home"
         mount -o compress=zstd,noatime,space_cache=v2,subvol=@home "$device" /mnt/home || { log_error "Failed to mount @home subvolume"; return 1; }
     fi
 
@@ -879,15 +908,19 @@ format_filesystem() {
 
     case "$fs_type" in
         ext4)
+            log_cmd "mkfs.ext4 -F $device"
             mkfs.ext4 -F "$device" || { log_error "Failed to format $device as ext4"; return 1; }
             ;;
         btrfs)
+            log_cmd "mkfs.btrfs -f $device"
             mkfs.btrfs -f "$device" || { log_error "Failed to format $device as btrfs"; return 1; }
             ;;
         xfs)
+            log_cmd "mkfs.xfs -f $device"
             mkfs.xfs -f "$device" || { log_error "Failed to format $device as xfs"; return 1; }
             ;;
         vfat|fat32)
+            log_cmd "mkfs.fat -F32 $device"
             mkfs.fat -F32 "$device" || { log_error "Failed to format $device as fat32"; return 1; }
             ;;
         *)
@@ -953,12 +986,12 @@ sync_partitions() {
 
     # Wait for udev to finish creating device nodes and populating attributes
     # Critical for NVMe/USB where device nodes appear asynchronously
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
 
     # Verify device is visible
     if ! lsblk "$disk" &>/dev/null; then
         blockdev --rereadpt "$disk" 2>/dev/null || true
-        udevadm settle --timeout=10 2>/dev/null || sleep 2
+        udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
     fi
 
     log_info "Partition table synced"

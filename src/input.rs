@@ -1692,9 +1692,9 @@ impl InputHandler {
         // For single disk, use cfdisk (more user-friendly than fdisk)
         // For multiple disks, we'll launch cfdisk for each disk sequentially
         for disk in &disk_paths {
-            log::info!("Launching cfdisk for {}", disk);
-            log::info!("Please partition this disk according to your needs.");
-            log::info!("Press Enter when you're done with {}", disk);
+            tracing::info!("Launching cfdisk for {}", disk);
+            tracing::info!("Please partition this disk according to your needs.");
+            tracing::info!("Press Enter when you're done with {}", disk);
 
             // Launch cfdisk in interactive mode
             let status = Command::new("cfdisk")
