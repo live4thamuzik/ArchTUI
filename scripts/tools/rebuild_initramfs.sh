@@ -81,6 +81,7 @@ for mp in proc sys dev dev/pts; do
     if ! mountpoint -q "$ROOT/$mp" 2>/dev/null; then
         log_info "Bind-mounting /$mp to $ROOT/$mp"
         mkdir -p "$ROOT/$mp"
+        log_cmd "mount --bind /$mp $ROOT/$mp"
         if ! mount --bind "/$mp" "$ROOT/$mp"; then
             log_error "Failed to bind-mount /$mp"
             exit 1
@@ -89,7 +90,7 @@ for mp in proc sys dev dev/pts; do
 done
 
 # Run mkinitcpio -P inside the chroot
-log_cmd mkinitcpio -P
+log_cmd "arch-chroot $ROOT mkinitcpio -P"
 if arch-chroot "$ROOT" mkinitcpio -P; then
     log_success "Initramfs rebuilt successfully"
 else

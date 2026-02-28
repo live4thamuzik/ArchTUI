@@ -119,6 +119,7 @@ if [[ -d "$ROOT/$BUILD_DIR" ]]; then
     rm -rf "${ROOT:?}/${BUILD_DIR}"
 fi
 
+log_cmd "arch-chroot $ROOT runuser -u $USER -- timeout 60 git clone $AUR_URL $BUILD_DIR"
 arch-chroot "$ROOT" runuser -u "$USER" -- timeout 60 git clone "$AUR_URL" "$BUILD_DIR"
 
 if [[ ! -f "$ROOT/$BUILD_DIR/PKGBUILD" ]]; then
@@ -133,6 +134,7 @@ log_info "Step 2/3: Building and installing $HELPER (makepkg -si --noconfirm)...
 echo "$USER ALL=(ALL) NOPASSWD: ALL" > "$ROOT/etc/sudoers.d/temp-aur-build"
 chmod 440 "$ROOT/etc/sudoers.d/temp-aur-build"
 
+log_cmd "arch-chroot $ROOT runuser -u $USER -- makepkg -si --noconfirm (in $BUILD_DIR)"
 arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd $(printf '%q' "$BUILD_DIR") && timeout 300 makepkg -si --noconfirm"
 
 # Revoke temporary passwordless sudo

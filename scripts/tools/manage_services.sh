@@ -129,6 +129,7 @@ fi
 # Perform actions based on flags or action parameter
 if [[ "$ENABLE" == true ]] || [[ "$ACTION" == "enable" ]]; then
     log_info "Enabling service: $SERVICE"
+    log_cmd "systemctl enable $SERVICE"
     if systemctl enable "$SERVICE"; then
         log_success "Service $SERVICE enabled successfully"
     else
@@ -139,6 +140,7 @@ fi
 
 if [[ "$DISABLE" == true ]] || [[ "$ACTION" == "disable" ]]; then
     log_info "Disabling service: $SERVICE"
+    log_cmd "systemctl disable $SERVICE"
     if systemctl disable "$SERVICE"; then
         log_success "Service $SERVICE disabled successfully"
     else
@@ -149,6 +151,7 @@ fi
 
 if [[ "$START" == true ]] || [[ "$ACTION" == "start" ]]; then
     log_info "Starting service: $SERVICE"
+    log_cmd "systemctl start $SERVICE"
     if systemctl start "$SERVICE"; then
         log_success "Service $SERVICE started successfully"
     else
@@ -159,6 +162,7 @@ fi
 
 if [[ "$STOP" == true ]] || [[ "$ACTION" == "stop" ]]; then
     log_info "Stopping service: $SERVICE"
+    log_cmd "systemctl stop $SERVICE"
     if systemctl stop "$SERVICE"; then
         log_success "Service $SERVICE stopped successfully"
     else

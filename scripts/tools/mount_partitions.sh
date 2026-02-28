@@ -333,18 +333,18 @@ case "$ACTION" in
         fi
         
         # Mount the device
-        log_info "🚀 Mounting $DEVICE to $MOUNTPOINT..."
+        log_info "Mounting $DEVICE to $MOUNTPOINT..."
         if [[ -n "$FILESYSTEM" && -n "$mount_opts" ]]; then
-            log_info "Command: mount -t $FILESYSTEM -o $mount_opts $DEVICE $MOUNTPOINT"
+            log_cmd "mount -t $FILESYSTEM -o $mount_opts $DEVICE $MOUNTPOINT"
             mount -t "$FILESYSTEM" -o "$mount_opts" "$DEVICE" "$MOUNTPOINT"
         elif [[ -n "$FILESYSTEM" ]]; then
-            log_info "Command: mount -t $FILESYSTEM $DEVICE $MOUNTPOINT"
+            log_cmd "mount -t $FILESYSTEM $DEVICE $MOUNTPOINT"
             mount -t "$FILESYSTEM" "$DEVICE" "$MOUNTPOINT"
         elif [[ -n "$mount_opts" ]]; then
-            log_info "Command: mount -o $mount_opts $DEVICE $MOUNTPOINT"
+            log_cmd "mount -o $mount_opts $DEVICE $MOUNTPOINT"
             mount -o "$mount_opts" "$DEVICE" "$MOUNTPOINT"
         else
-            log_info "Command: mount $DEVICE $MOUNTPOINT"
+            log_cmd "mount $DEVICE $MOUNTPOINT"
             mount "$DEVICE" "$MOUNTPOINT"
         fi
         
@@ -390,17 +390,19 @@ case "$ACTION" in
             
             if [[ "$LAZY" == true ]]; then
                 log_info "Lazy umount enabled - umounting anyway..."
+                log_cmd "umount -l $TARGET"
                 umount -l "$TARGET"
-                log_success "✅ Lazy umounted $TARGET (will umount when not busy)"
+                log_success "Lazy umounted $TARGET (will umount when not busy)"
             else
                 log_info "Use --lazy to force umount (will umount when not busy)"
                 exit 1
             fi
         else
             # Use umount -R (recursive) for safety, especially for system repair
-            log_info "🚀 Umounting $TARGET (using umount -R for safety)..."
+            log_info "Umounting $TARGET (using umount -R for safety)..."
+            log_cmd "umount -R $TARGET"
             umount -R "$TARGET"
-            log_success "✅ Successfully umounted $TARGET"
+            log_success "Successfully umounted $TARGET"
         fi
         ;;
     *)

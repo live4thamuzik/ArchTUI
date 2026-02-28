@@ -95,6 +95,7 @@ case "$ACTION" in
         fi
         
         log_info "Creating group: $GROUP"
+        log_cmd "groupadd $GROUP"
         if groupadd "$GROUP"; then
             log_success "Group $GROUP created successfully"
         else
@@ -120,6 +121,7 @@ case "$ACTION" in
             error_exit "CONFIRM_GROUP_DELETE=yes is required for group deletion"
         fi
 
+        log_cmd "groupdel $GROUP"
         if groupdel "$GROUP"; then
             log_success "Group $GROUP deleted successfully"
         else
@@ -148,6 +150,7 @@ case "$ACTION" in
         
         if [[ "$ACTION" == "add" ]]; then
             log_info "Adding user $USERNAME to group $GROUP"
+            log_cmd "usermod -aG $GROUP $USERNAME"
             if usermod -aG "$GROUP" "$USERNAME"; then
                 log_success "User $USERNAME added to group $GROUP successfully"
             else
@@ -156,6 +159,7 @@ case "$ACTION" in
             fi
         else
             log_info "Removing user $USERNAME from group $GROUP"
+            log_cmd "gpasswd -d $USERNAME $GROUP"
             if gpasswd -d "$USERNAME" "$GROUP"; then
                 log_success "User $USERNAME removed from group $GROUP successfully"
             else

@@ -131,7 +131,7 @@ case "$ACTION" in
 
         LUKS_ARGS+=("$DEVICE")
 
-        log_cmd "cryptsetup ${LUKS_ARGS[*]}"
+        log_cmd "cryptsetup luksFormat --type luks2 --cipher $CIPHER --key-size $KEY_SIZE --key-file [REDACTED] $DEVICE"
         if ! cryptsetup "${LUKS_ARGS[@]}"; then
             error_exit "LUKS format failed on $DEVICE"
         fi

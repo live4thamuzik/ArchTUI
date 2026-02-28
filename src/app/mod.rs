@@ -1774,30 +1774,32 @@ impl App {
             }
             AppMode::ToolDialog => {
                 // Go back to the appropriate tool menu based on current tool
+                // NOTE: tool names must match what create_tool_dialog() and execute_tool() set
                 if let Some(ref tool_name) = state.current_tool {
                     match tool_name.as_str() {
-                        "format_partition" | "wipe_disk" | "check_disk_health"
-                        | "mount_partitions" | "manual_partition" => {
+                        "format_partition" | "wipe_disk" | "health" | "mount"
+                        | "manual_partition" | "encrypt_device" => {
                             state.mode = AppMode::DiskTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
                         }
-                        "install_bootloader" | "generate_fstab" | "chroot_system"
-                        | "manage_services" | "system_info" => {
+                        "install_bootloader" | "generate_fstab" | "chroot" | "info"
+                        | "manage_services" | "system_info" | "enable_services"
+                        | "install_aur_helper" => {
                             state.mode = AppMode::SystemTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
-                        "add_user" | "reset_password" | "manage_groups" | "configure_ssh"
-                        | "security_audit" => {
+                        "add_user" | "reset_password" | "manage_groups"
+                        | "configure_ssh" | "security_audit" | "install_dotfiles"
+                        | "run_as_user" => {
                             state.mode = AppMode::UserTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
-                        "configure_network"
-                        | "test_network"
-                        | "configure_firewall"
-                        | "network_diagnostics" => {
+                        "configure_network" | "configure_firewall"
+                        | "test_network" | "network_diagnostics"
+                        | "update_mirrors" => {
                             state.mode = AppMode::NetworkTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Network Tools".to_string();
@@ -4901,7 +4903,7 @@ impl App {
                 // params: helper, user, root
                 let helper: AurHelper = params.first()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(AurHelper::Paru);
+                    .unwrap_or(AurHelper::None);
                 let target_user = match Self::validate_required_param(&params, 1, "target user") {
                     Ok(v) => v,
                     Err(e) => {

@@ -127,9 +127,11 @@ if [[ -n "$mount_point" ]]; then
     case "$fs_type" in
         "ext4"|"ext3"|"ext2")
             log_info "Running ext4 filesystem check..."
+            log_cmd "umount $DEVICE"
             if umount "$DEVICE" 2>/dev/null; then
                 log_info "Unmounted device for filesystem check"
                 fsck_output=""
+                log_cmd "fsck -n $DEVICE"
                 if fsck_output=$(fsck -n "$DEVICE" 2>&1); then
                     log_success "✅ Filesystem integrity: GOOD"
                 else
@@ -139,6 +141,7 @@ if [[ -n "$mount_point" ]]; then
                 fi
                 # Remount if it was previously mounted
                 if [[ -n "$mount_point" ]]; then
+                    log_cmd "mount $DEVICE $mount_point"
                     mount "$DEVICE" "$mount_point" 2>/dev/null || log_warning "Could not remount device"
                 fi
             else

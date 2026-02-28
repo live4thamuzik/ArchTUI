@@ -154,10 +154,12 @@ wipe_quick() {
     local disk="$1"
 
     log_info "Quick wipe: Removing partition table and filesystem signatures..."
+    log_cmd "wipefs -a $disk"
     wipefs -a "$disk"
 
     # Zero the first and last MB to clear GPT backup
     log_info "Clearing GPT structures..."
+    log_cmd "dd if=/dev/zero of=$disk bs=1M count=1"
     dd if=/dev/zero of="$disk" bs=1M count=1 status=none 2>/dev/null || true
 
     # Get disk size and zero last MB (GPT backup header)
@@ -165,10 +167,12 @@ wipe_quick() {
     disk_size_bytes=$(blockdev --getsize64 "$disk")
     local last_mb_offset=$(( (disk_size_bytes / 1048576) - 1 ))
     if [[ $last_mb_offset -gt 0 ]]; then
+        log_cmd "dd if=/dev/zero of=$disk bs=1M count=1 seek=$last_mb_offset"
         dd if=/dev/zero of="$disk" bs=1M count=1 seek="$last_mb_offset" status=none 2>/dev/null || true
     fi
 
     # Inform kernel of partition table changes
+    log_cmd "partprobe $disk"
     partprobe "$disk" 2>/dev/null || true
 }
 
@@ -186,9 +190,11 @@ wipe_ssd_secure() {
     log_info "This is fast and safe for SSDs (no unnecessary writes)"
 
     # First, quick wipe to remove signatures
+    log_cmd "wipefs -a $disk"
     wipefs -a "$disk"
 
     # Issue TRIM to entire device
+    log_cmd "blkdiscard $disk"
     if blkdiscard "$disk"; then
         log_success "blkdiscard completed successfully"
     else
@@ -198,6 +204,7 @@ wipe_ssd_secure() {
     fi
 
     # Inform kernel of changes
+    log_cmd "partprobe $disk"
     partprobe "$disk" 2>/dev/null || true
 }
 
@@ -212,6 +219,7 @@ wipe_hdd_secure() {
     log_info "Using /dev/zero (NOT /dev/urandom - that provides no additional security)"
 
     # First, quick wipe
+    log_cmd "wipefs -a $disk"
     wipefs -a "$disk"
 
     # Overwrite with zeros
@@ -220,9 +228,11 @@ wipe_hdd_secure() {
     # 2. For SSDs, it's pointless (wear leveling makes it ineffective)
     # 3. For HDDs, zeros are sufficient for non-forensic purposes
     # 4. Using urandom would waste system entropy
+    log_cmd "dd if=/dev/zero of=$disk bs=4M conv=fsync"
     dd if=/dev/zero of="$disk" bs=4M status=progress conv=fsync
 
     # Inform kernel of changes
+    log_cmd "partprobe $disk"
     partprobe "$disk" 2>/dev/null || true
 }
 

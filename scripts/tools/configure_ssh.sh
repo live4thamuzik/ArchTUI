@@ -111,19 +111,21 @@ case "$ACTION" in
         # Generate host keys if they don't exist
         if [[ ! -f /etc/ssh/ssh_host_rsa_key ]]; then
             log_info "Generating SSH host keys..."
-            ssh-keygen -A
+            ssh-keygen -A || log_warn "Failed to generate SSH host keys"
         fi
         ;;
     
     enable)
         log_info "Enabling SSH service..."
+        log_cmd "systemctl enable sshd"
         if systemctl enable sshd; then
             log_success "SSH service enabled successfully"
         else
             log_error "Failed to enable SSH service"
             exit 1
         fi
-        
+
+        log_cmd "systemctl start sshd"
         if systemctl start sshd; then
             log_success "SSH service started successfully"
         else
@@ -134,12 +136,14 @@ case "$ACTION" in
     
     disable)
         log_info "Disabling SSH service..."
+        log_cmd "systemctl stop sshd"
         if systemctl stop sshd; then
             log_success "SSH service stopped successfully"
         else
             log_warning "SSH service was not running"
         fi
-        
+
+        log_cmd "systemctl disable sshd"
         if systemctl disable sshd; then
             log_success "SSH service disabled successfully"
         else
@@ -160,40 +164,41 @@ case "$ACTION" in
         # Configure port if specified
         if [[ -n "$PORT" ]]; then
             log_info "Setting SSH port to $PORT"
-            sed -i "s|^#Port 22|Port $PORT|" /etc/ssh/sshd_config
-            sed -i "s|^Port [0-9]*|Port $PORT|" /etc/ssh/sshd_config
+            sed -i "s|^#Port 22|Port $PORT|" /etc/ssh/sshd_config || error_exit "Failed to set SSH port"
+            sed -i "s|^Port [0-9]*|Port $PORT|" /etc/ssh/sshd_config || error_exit "Failed to set SSH port"
         fi
-        
+
         # Configure root login
         if [[ "$DISABLE_ROOT_LOGIN" == true ]]; then
             log_info "Disabling root login"
-            sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-            sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+            sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
+            sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
         elif [[ "$ENABLE_ROOT_LOGIN" == true ]]; then
             log_info "Enabling root login"
-            sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-            sed -i 's/^PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+            sed -i 's/^#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
+            sed -i 's/^PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
         fi
-        
+
         # Configure password authentication
         if [[ "$DISABLE_PASSWORD_AUTH" == true ]]; then
             log_info "Disabling password authentication"
-            sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-            sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+            sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
+            sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
         elif [[ "$ENABLE_PASSWORD_AUTH" == true ]]; then
             log_info "Enabling password authentication"
-            sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-            sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
+            sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
         fi
-        
+
         # Basic security settings
         log_info "Applying basic security settings..."
-        sed -i 's/^#Protocol 2/Protocol 2/' /etc/ssh/sshd_config
-        sed -i 's/^Protocol.*/Protocol 2/' /etc/ssh/sshd_config
+        sed -i 's/^#Protocol 2/Protocol 2/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
+        sed -i 's/^Protocol.*/Protocol 2/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
         
         # Restart SSH service to apply changes
         if systemctl is-active sshd >/dev/null 2>&1; then
             log_info "Restarting SSH service to apply changes..."
+            log_cmd "systemctl restart sshd"
             systemctl restart sshd
             log_success "SSH configuration updated successfully"
         else

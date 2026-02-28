@@ -72,7 +72,7 @@ if mountpoint -q "$DEVICE" 2>/dev/null; then
     # Find and unmount all partitions on this device
     for partition in "${DEVICE}"*; do
         if [[ -b "$partition" ]] && mountpoint -q "$partition" 2>/dev/null; then
-            log_info "Unmounting $partition"
+            log_cmd "umount $partition"
             umount "$partition" || log_warning "Failed to unmount $partition"
         fi
     done
