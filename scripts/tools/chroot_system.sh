@@ -78,25 +78,29 @@ if [[ "$MOUNT_SYSTEMS" == true ]]; then
     
     # Mount /proc
     if ! mountpoint -q "$ROOT_PATH/proc" 2>/dev/null; then
-        mount --bind /proc "$ROOT_PATH/proc"
+        log_cmd "mount --bind /proc $ROOT_PATH/proc"
+        mount --bind /proc "$ROOT_PATH/proc" || error_exit "Failed to mount /proc"
         log_info "Mounted /proc"
     fi
-    
+
     # Mount /sys
     if ! mountpoint -q "$ROOT_PATH/sys" 2>/dev/null; then
-        mount --bind /sys "$ROOT_PATH/sys"
+        log_cmd "mount --bind /sys $ROOT_PATH/sys"
+        mount --bind /sys "$ROOT_PATH/sys" || error_exit "Failed to mount /sys"
         log_info "Mounted /sys"
     fi
-    
+
     # Mount /dev
     if ! mountpoint -q "$ROOT_PATH/dev" 2>/dev/null; then
-        mount --bind /dev "$ROOT_PATH/dev"
+        log_cmd "mount --bind /dev $ROOT_PATH/dev"
+        mount --bind /dev "$ROOT_PATH/dev" || error_exit "Failed to mount /dev"
         log_info "Mounted /dev"
     fi
-    
+
     # Mount /dev/pts
     if ! mountpoint -q "$ROOT_PATH/dev/pts" 2>/dev/null; then
-        mount --bind /dev/pts "$ROOT_PATH/dev/pts"
+        log_cmd "mount --bind /dev/pts $ROOT_PATH/dev/pts"
+        mount --bind /dev/pts "$ROOT_PATH/dev/pts" || error_exit "Failed to mount /dev/pts"
         log_info "Mounted /dev/pts"
     fi
 fi

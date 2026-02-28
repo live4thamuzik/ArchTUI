@@ -88,6 +88,7 @@ if [[ -z "${USER_PASSWORD:-}" ]]; then
     error_exit "USER_PASSWORD environment variable must be set (non-interactive mode)"
 fi
 
+log_cmd "printf '***:***' | chpasswd (password redacted)"
 printf '%s:%s\n' "$TARGET_USER" "$USER_PASSWORD" | chpasswd || error_exit "Failed to reset password for user: $TARGET_USER"
 USER_PASSWORD=""
 

@@ -66,7 +66,8 @@ fi
 
 # Generate new fstab
 log_info "Running genfstab..."
-genfstab -U "$ROOT_PATH" >> "$ROOT_PATH/etc/fstab"
+log_cmd "genfstab -U $ROOT_PATH"
+genfstab -U "$ROOT_PATH" >> "$ROOT_PATH/etc/fstab" || error_exit "genfstab failed"
 
 log_success "fstab generated successfully!"
 log_info "Location: $ROOT_PATH/etc/fstab"

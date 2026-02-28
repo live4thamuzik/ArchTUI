@@ -155,6 +155,7 @@ done < <(find . -not -path './.git/*' -not -path './.git' -not -name '.git' -typ
 
 # Fix ownership
 log_info "Setting ownership to $TARGET_USER"
-chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_DIR"
+log_cmd "chown -R $TARGET_USER:$TARGET_USER $TARGET_DIR"
+chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_DIR" || error_exit "Failed to set ownership on $TARGET_DIR"
 
 log_success "Dotfiles installed successfully for $TARGET_USER"

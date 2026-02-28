@@ -140,6 +140,7 @@ if [[ "$SAVE" == "true" ]]; then
     # Backup existing mirrorlist before overwriting
     if [[ -f /etc/pacman.d/mirrorlist ]]; then
         log_info "Backing up current mirrorlist"
+        log_cmd "cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak"
         cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak
     fi
 

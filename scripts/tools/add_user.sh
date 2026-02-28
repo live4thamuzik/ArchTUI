@@ -244,7 +244,7 @@ USERADD_ARGS+=("$USERNAME")
 
 # Execute useradd command (SAFE - array expansion, no injection)
 log_info "Creating user '$USERNAME'..."
-log_info "Command: useradd ${USERADD_ARGS[*]}"
+log_cmd "useradd ${USERADD_ARGS[*]}"
 
 if useradd "${USERADD_ARGS[@]}"; then
     log_success "User '$USERNAME' created successfully"
@@ -263,6 +263,7 @@ if [[ -n "$GROUPS" ]]; then
         # Create group if it doesn't exist
         if ! getent group "$group" >/dev/null 2>&1; then
             log_info "Creating group '$group'..."
+            log_cmd "groupadd $group"
             if groupadd "$group"; then
                 log_success "✅ Group '$group' created"
             else
@@ -272,6 +273,7 @@ if [[ -n "$GROUPS" ]]; then
         fi
         
         # Add user to group
+        log_cmd "usermod -aG $group $USERNAME"
         if usermod -aG "$group" "$USERNAME"; then
             log_success "✅ Added '$USERNAME' to group '$group'"
         else
@@ -286,6 +288,7 @@ if [[ "$NO_LOGIN" == false ]]; then
     if [[ -n "$PASSWORD" ]]; then
         log_info "Setting password for '$USERNAME'..."
         # Use chpasswd to set password securely
+        log_cmd "printf '***:***' | chpasswd (password redacted)"
         if printf '%s:%s\n' "$USERNAME" "$PASSWORD" | chpasswd 2>/dev/null; then
             log_success "Password set for '$USERNAME'"
             PASSWORD_WAS_SET="yes"

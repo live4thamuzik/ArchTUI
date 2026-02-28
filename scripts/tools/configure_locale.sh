@@ -100,7 +100,7 @@ log_info "Configuring locale settings for $ROOT_PATH"
 
 # --- Hostname ---
 log_info "Setting hostname to: $HOSTNAME"
-echo "$HOSTNAME" > "$ROOT_PATH/etc/hostname"
+echo "$HOSTNAME" > "$ROOT_PATH/etc/hostname" || error_exit "Failed to write hostname"
 
 # Create /etc/hosts
 cat > "$ROOT_PATH/etc/hosts" << EOF
@@ -115,6 +115,7 @@ log_info "Configuring locale: $LOCALE"
 
 # Uncomment the locale in locale.gen
 if [[ -f "$ROOT_PATH/etc/locale.gen" ]]; then
+    log_cmd "sed -i 's|^#${LOCALE}|${LOCALE}|' $ROOT_PATH/etc/locale.gen"
     sed -i "s|^#${LOCALE}|${LOCALE}|" "$ROOT_PATH/etc/locale.gen"
 else
     echo "$LOCALE UTF-8" > "$ROOT_PATH/etc/locale.gen"
@@ -122,6 +123,7 @@ fi
 
 # Generate locale inside chroot
 if command -v arch-chroot &> /dev/null; then
+    log_cmd "arch-chroot $ROOT_PATH locale-gen"
     arch-chroot "$ROOT_PATH" locale-gen
 else
     log_warning "arch-chroot not available, skipping locale-gen"
@@ -146,10 +148,12 @@ if [[ ! -f "/usr/share/zoneinfo/$TIMEZONE" ]]; then
 fi
 
 # Create timezone symlink
-ln -sf "/usr/share/zoneinfo/$TIMEZONE" "$ROOT_PATH/etc/localtime"
+log_cmd "ln -sf /usr/share/zoneinfo/$TIMEZONE $ROOT_PATH/etc/localtime"
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" "$ROOT_PATH/etc/localtime" || error_exit "Failed to set timezone symlink"
 
 # Set hardware clock to UTC inside chroot
 if command -v arch-chroot &> /dev/null; then
+    log_cmd "arch-chroot $ROOT_PATH hwclock --systohc"
     arch-chroot "$ROOT_PATH" hwclock --systohc
 else
     log_warning "arch-chroot not available, skipping hwclock"
