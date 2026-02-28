@@ -1001,7 +1001,13 @@ impl App {
                         state.tools_menu_selection += 1;
                     }
                 }
-                AppMode::SystemTools | AppMode::UserTools => {
+                AppMode::SystemTools => {
+                    if state.tools_menu_selection < 9 {
+                        // 10 items total (0-9)
+                        state.tools_menu_selection += 1;
+                    }
+                }
+                AppMode::UserTools => {
                     if state.tools_menu_selection < 7 {
                         // 8 items total (0-7)
                         state.tools_menu_selection += 1;
@@ -1466,8 +1472,8 @@ impl App {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk (cfdisk) - Launch in embedded terminal
-                        let _ = self.launch_embedded_tool("cfdisk", &[], "cfdisk", AppMode::DiskTools);
+                        // Partition Disk - Create dialog for device selection
+                        self.create_tool_dialog("manual_partition")?;
                     }
                     1 => {
                         // Format Partition - Use disk selection dialog
@@ -1577,12 +1583,8 @@ impl App {
                         self.create_tool_dialog("configure_ssh")?;
                     }
                     4 => {
-                        // Security Audit - no parameters needed
-                        let sa = SecurityAuditArgs { action: "basic".into() };
-                        self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "security audit", sa.is_destructive(), true,
-                        )?;
+                        // Security Audit - Create dialog for audit level
+                        self.create_tool_dialog("security_audit")?;
                     }
                     5 => {
                         // Install Dotfiles - Create dialog
@@ -1602,28 +1604,16 @@ impl App {
                         self.create_tool_dialog("configure_network")?;
                     }
                     1 => {
-                        // Test Network Connectivity - no parameters needed
-                        let sa = TestNetworkArgs {
-                            action: "full".into(),
-                            host: None,
-                            timeout: 10,
-                        };
-                        self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "test network", sa.is_destructive(), true,
-                        )?;
+                        // Test Network Connectivity - Create dialog for test type
+                        self.create_tool_dialog("test_network")?;
                     }
                     2 => {
                         // Configure Firewall - Create dialog
                         self.create_tool_dialog("configure_firewall")?;
                     }
                     3 => {
-                        // Network Diagnostics - no parameters needed
-                        let sa = NetworkDiagnosticsArgs { action: "info".into() };
-                        self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "network diagnostics", sa.is_destructive(), true,
-                        )?;
+                        // Network Diagnostics - Create dialog for diagnostic type
+                        self.create_tool_dialog("network_diagnostics")?;
                     }
                     4 => {
                         // Update Mirrors - Create dialog
@@ -3539,15 +3529,6 @@ impl App {
                     required: true,
                 },
             ],
-            "health" => vec![ToolParam {
-                name: "output_level".to_string(),
-                description: "Output detail level".to_string(),
-                param_type: ToolParameter::Selection(
-                    vec!["basic".to_string(), "detailed".to_string()],
-                    0,
-                ),
-                required: false,
-            }],
             "mount" => vec![
                 ToolParam {
                     name: "action".to_string(),
@@ -3598,20 +3579,6 @@ impl App {
                 ToolParam {
                     name: "skip_mount".to_string(),
                     description: "Skip mounting /proc, /sys, /dev (if already mounted)".to_string(),
-                    param_type: ToolParameter::Boolean(false),
-                    required: false,
-                },
-            ],
-            "info" => vec![
-                ToolParam {
-                    name: "detailed".to_string(),
-                    description: "Show detailed system information".to_string(),
-                    param_type: ToolParameter::Boolean(false),
-                    required: false,
-                },
-                ToolParam {
-                    name: "json".to_string(),
-                    description: "Output in JSON format".to_string(),
                     param_type: ToolParameter::Boolean(false),
                     required: false,
                 },
@@ -3800,6 +3767,54 @@ impl App {
                     required: true,
                 },
             ],
+            "security_audit" => vec![ToolParam {
+                name: "action".to_string(),
+                description: "basic: quick permission/service checks | full: comprehensive audit".to_string(),
+                param_type: ToolParameter::Selection(
+                    vec!["basic".to_string(), "full".to_string()],
+                    0,
+                ),
+                required: true,
+            }],
+            "test_network" => vec![
+                ToolParam {
+                    name: "action".to_string(),
+                    description: "ping: ICMP test | dns: name resolution | http: web access | full: all tests".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "full".to_string(),
+                            "ping".to_string(),
+                            "dns".to_string(),
+                            "http".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "timeout".to_string(),
+                    description: "Timeout in seconds for each test".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec!["5".to_string(), "10".to_string(), "30".to_string()],
+                        0,
+                    ),
+                    required: false,
+                },
+            ],
+            "network_diagnostics" => vec![ToolParam {
+                name: "action".to_string(),
+                description: "info: interfaces | basic: quick check | detailed: full analysis | troubleshoot: diagnose issues".to_string(),
+                param_type: ToolParameter::Selection(
+                    vec![
+                        "info".to_string(),
+                        "basic".to_string(),
+                        "detailed".to_string(),
+                        "troubleshoot".to_string(),
+                    ],
+                    0,
+                ),
+                required: true,
+            }],
             "encrypt_device" => vec![
                 ToolParam {
                     name: "action".to_string(),
@@ -3922,6 +3937,12 @@ impl App {
                     required: false,
                 },
             ],
+            "manual_partition" => vec![ToolParam {
+                name: "device".to_string(),
+                description: "Disk device to partition (e.g., /dev/sda)".to_string(),
+                param_type: ToolParameter::Text("".to_string()),
+                required: true,
+            }],
             "rebuild_initramfs" => vec![ToolParam {
                 name: "root".to_string(),
                 description: "Root of the installed system (e.g., /mnt)".to_string(),
@@ -4796,6 +4817,38 @@ impl App {
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
                     "configure firewall", sa.is_destructive(), false,
+                )
+            }
+            "security_audit" => {
+                // params: action
+                let sa = SecurityAuditArgs {
+                    action: params.first().cloned().unwrap_or_else(|| "basic".to_string()),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "security audit", sa.is_destructive(), true,
+                )
+            }
+            "test_network" => {
+                // params: action, timeout
+                let sa = TestNetworkArgs {
+                    action: params.first().cloned().unwrap_or_else(|| "full".to_string()),
+                    host: None,
+                    timeout: params.get(1).and_then(|s| s.parse().ok()).unwrap_or(5),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "test network", sa.is_destructive(), true,
+                )
+            }
+            "network_diagnostics" => {
+                // params: action
+                let sa = NetworkDiagnosticsArgs {
+                    action: params.first().cloned().unwrap_or_else(|| "info".to_string()),
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "network diagnostics", sa.is_destructive(), true,
                 )
             }
             // === New tools (Phase 3) ===
