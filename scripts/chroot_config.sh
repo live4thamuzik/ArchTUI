@@ -122,6 +122,7 @@ main() {
 
     # --- Phase 1: Basic System Configuration ---
     log_info "=== Phase 1: Basic System Configuration ==="
+    echo "PROGRESS: Configuring base system"
 
     configure_localization
     configure_hostname
@@ -131,6 +132,7 @@ main() {
 
     # --- Phase 2: Bootloader & Initramfs ---
     log_info "=== Phase 2: Bootloader & Initramfs ==="
+    echo "PROGRESS: Configuring bootloader"
 
     configure_mkinitcpio
     install_bootloader
@@ -139,6 +141,7 @@ main() {
 
     # --- Phase 3: Desktop Environment ---
     log_info "=== Phase 3: Desktop Environment ==="
+    echo "PROGRESS: Installing desktop environment"
 
     # Enable multilib repository in chroot if requested
     if [[ "${MULTILIB:-No}" == "Yes" ]]; then
@@ -157,6 +160,7 @@ main() {
 
     # --- Phase 4: Additional Software (non-critical) ---
     log_info "=== Phase 4: Additional Software ==="
+    echo "PROGRESS: Installing additional software"
 
     install_aur_helper || log_warn "AUR helper installation failed — continuing"
     install_flatpak || log_warn "Flatpak installation failed — continuing"
@@ -166,6 +170,7 @@ main() {
 
     # --- Phase 5: Final Configuration (non-critical) ---
     log_info "=== Phase 5: Final Configuration ==="
+    echo "PROGRESS: Running final configuration"
 
     configure_numlock || log_warn "Numlock configuration failed — continuing"
     deploy_dotfiles || log_warn "Dotfiles deployment failed — continuing"
@@ -1223,7 +1228,7 @@ install_aur_helper() {
     local sudoers_drop="/etc/sudoers.d/temp-aur-build"
     echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
     chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
-    trap 'rm -f "$sudoers_drop"' RETURN
+    trap 'rm -f /etc/sudoers.d/temp-aur-build' RETURN
 
     case "$helper" in
         "paru")
@@ -1321,7 +1326,7 @@ install_additional_packages() {
                 local sudoers_drop="/etc/sudoers.d/temp-aur-packages"
                 echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
                 chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
-                trap 'rm -f "$sudoers_drop"' RETURN
+                trap 'rm -f /etc/sudoers.d/temp-aur-packages' RETURN
 
                 runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some AUR packages may have failed to install"
             fi
