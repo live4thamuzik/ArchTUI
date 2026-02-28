@@ -4495,8 +4495,13 @@ impl App {
             let action_data = pending.to_string();
 
             let mut state = self.lock_state();
-            state.pre_dialog_mode = Some(state.mode.clone());
+            // Use the ToolDialog's parent menu as the return target, not ToolDialog itself
+            // (tool_dialog is cleared below, so returning to ToolDialog mode leaves a ghost state)
+            let return_mode = state.pre_dialog_mode.take()
+                .unwrap_or_else(|| state.mode.clone());
+            state.pre_dialog_mode = Some(return_mode);
             state.tool_dialog = None;
+            state.current_tool = None;
             state.confirm_dialog = Some(
                 ConfirmDialogState::new(&title, &message, severity, "execute_tool")
                     .with_detail(&detail1)
