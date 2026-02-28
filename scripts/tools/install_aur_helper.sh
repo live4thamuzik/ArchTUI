@@ -24,6 +24,7 @@ cleanup() {
     rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
     exit 130
 }
+# shellcheck disable=SC2317  # Trap handler is invoked indirectly via signal
 cleanup_term() {
     log_info "install_aur_helper: received signal, cleaning up"
     if [[ -n "${BUILD_DIR:-}" && -d "$ROOT/$BUILD_DIR" ]]; then

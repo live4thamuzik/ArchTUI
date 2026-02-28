@@ -14,6 +14,7 @@ cleanup() {
     log_info "run_as_user: received signal, cleaning up"
     exit 130
 }
+# shellcheck disable=SC2317  # Trap handler is invoked indirectly via signal
 cleanup_term() {
     log_info "run_as_user: received signal, cleaning up"
     exit 143
