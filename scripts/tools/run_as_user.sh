@@ -12,9 +12,14 @@ set -euo pipefail
 # shellcheck disable=SC2317  # Trap handler is invoked indirectly via signal
 cleanup() {
     log_info "run_as_user: received signal, cleaning up"
-    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
+    exit 130
 }
-trap cleanup SIGTERM SIGINT SIGHUP
+cleanup_term() {
+    log_info "run_as_user: received signal, cleaning up"
+    exit 143
+}
+trap cleanup_term SIGTERM SIGHUP
+trap cleanup SIGINT
 
 # --- Logging ---
 log_info()  { echo "[INFO]  $*"; }

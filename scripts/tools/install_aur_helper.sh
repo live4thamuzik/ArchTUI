@@ -22,9 +22,19 @@ cleanup() {
     fi
     # Revoke temporary passwordless sudo if it was created
     rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
-    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
+    exit 130
 }
-trap cleanup SIGTERM SIGINT SIGHUP
+cleanup_term() {
+    log_info "install_aur_helper: received signal, cleaning up"
+    if [[ -n "${BUILD_DIR:-}" && -d "$ROOT/$BUILD_DIR" ]]; then
+        rm -rf "${ROOT:?}/${BUILD_DIR}"
+        log_info "Cleaned up partial build directory"
+    fi
+    rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
+    exit 143
+}
+trap cleanup_term SIGTERM SIGHUP
+trap cleanup SIGINT
 
 # --- Logging ---
 log_info()  { echo "[INFO]  $*"; }
