@@ -2747,6 +2747,31 @@ impl App {
                         "RAID Level is only available for RAID partitioning strategies.".to_string();
                 }
             }
+            "AUR Helper" => {
+                let mut options = InputHandler::get_predefined_options(&option.name);
+
+                // When DE requires AUR packages, filter out "none" so the user can't deselect
+                let de_value = {
+                    let state = match self.lock_state() {
+                        Ok(state) => state,
+                        Err(_) => return Ok(()),
+                    };
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Desktop Environment")
+                        .map(|opt| opt.get_value().to_string())
+                        .unwrap_or_default()
+                };
+                let de: DesktopEnvironment = de_value.parse().unwrap_or_default();
+                if de.requires_aur() {
+                    options.retain(|o| o.to_lowercase() != "none");
+                }
+
+                self.input_handler
+                    .start_selection(option.name.clone(), options, option.value);
+            }
             _ => {
                 // Use predefined options for selection fields
                 let options = InputHandler::get_predefined_options(&option.name);
