@@ -215,6 +215,14 @@ impl InstallationConfig {
             }
         }
 
+        // Validate AUR helper is selected when DE requires AUR packages
+        if self.desktop_environment.requires_aur() && self.aur_helper == AurHelper::None {
+            anyhow::bail!(
+                "{} requires an AUR helper (packages like wlogout are AUR-only)",
+                self.desktop_environment
+            );
+        }
+
         // Validate RAID configuration
         if self.partitioning_strategy.requires_raid() {
             let disk = self.install_disk.trim();

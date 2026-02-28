@@ -34,7 +34,7 @@ use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
 use crate::scripts::system::{BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs};
 use crate::scripts::user::{GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs};
 use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
-use crate::types::AurHelper;
+use crate::types::{AurHelper, DesktopEnvironment};
 use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use log::{debug, info};
@@ -3349,6 +3349,43 @@ impl App {
                             .find(|opt| opt.name == "Mirror Country")
                         {
                             mirror_option.value = mirror_country.to_string();
+                        }
+                    }
+                }
+                "Desktop Environment" => {
+                    let de: DesktopEnvironment = value.parse().unwrap_or_default();
+                    if de.requires_aur() {
+                        if let Some(aur_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "AUR Helper")
+                        {
+                            if aur_opt.get_value().to_lowercase() == "none" {
+                                aur_opt.value = "Paru".to_string();
+                                state.status_message = format!(
+                                    "{} requires AUR packages — AUR Helper set to Paru",
+                                    value
+                                );
+                            }
+                        }
+                    }
+                }
+                "AUR Helper" => {
+                    if value.to_lowercase() == "none" {
+                        let de_value = state
+                            .config
+                            .options
+                            .iter()
+                            .find(|opt| opt.name == "Desktop Environment")
+                            .map(|opt| opt.get_value().to_string())
+                            .unwrap_or_default();
+                        let de: DesktopEnvironment = de_value.parse().unwrap_or_default();
+                        if de.requires_aur() {
+                            state.status_message = format!(
+                                "Warning: {} requires AUR packages — install may fail without an AUR helper",
+                                de
+                            );
                         }
                     }
                 }

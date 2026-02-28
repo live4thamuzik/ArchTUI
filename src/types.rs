@@ -117,6 +117,13 @@ pub enum DesktopEnvironment {
     Budgie,
 }
 
+impl DesktopEnvironment {
+    /// Whether this DE/WM has packages that are only available in the AUR
+    pub fn requires_aur(&self) -> bool {
+        matches!(self, Self::Hyprland)
+    }
+}
+
 /// Display manager selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumIter)]
