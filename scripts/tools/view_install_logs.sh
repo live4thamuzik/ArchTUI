@@ -81,9 +81,7 @@ case "$ACTION" in
             if [[ ${#local_logs[@]} -gt 0 ]]; then
                 echo "Master logs ($LOG_DIR):"
                 for f in "${local_logs[@]}"; do
-                    local size
                     size=$(stat -c %s "$f" 2>/dev/null || echo "?")
-                    local date
                     date=$(stat -c %y "$f" 2>/dev/null | cut -d. -f1 || echo "?")
                     printf "  %-60s %8s bytes  %s\n" "$(basename "$f")" "$size" "$date"
                 done
@@ -96,7 +94,6 @@ case "$ACTION" in
 
         echo ""
         if [[ -f "$TMP_LOG" ]]; then
-            local size
             size=$(stat -c %s "$TMP_LOG" 2>/dev/null || echo "?")
             echo "TUI debug log: $TMP_LOG ($size bytes)"
         else
@@ -106,7 +103,7 @@ case "$ACTION" in
 
     latest)
         # Find the most recent master log
-        local latest_log=""
+        latest_log=""
         if [[ -d "$LOG_DIR" ]]; then
             latest_log=$(find "$LOG_DIR" -name "*-master.log" -printf '%T@ %p\n' 2>/dev/null \
                 | sort -rn | head -1 | cut -d' ' -f2-)
