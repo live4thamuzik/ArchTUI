@@ -12,7 +12,7 @@ mod state;
 pub use state::{AppMode, AppState, ToolDialogState, ToolParam, ToolParameter};
 
 use crate::components::confirm_dialog::{
-    format_partition_confirm, start_install_confirm, wipe_disk_confirm, ConfirmDialogState,
+    start_install_confirm, wipe_disk_confirm, ConfirmDialogState,
     ConfirmSeverity,
 };
 use crate::components::floating_window::FloatingOutputState;
@@ -640,12 +640,33 @@ impl App {
                             return Ok(false);
                         }
                         "format_partition" => {
-                            // Show confirmation dialog before formatting
+                            // Open ToolDialog with device pre-filled for filesystem selection
+                            let parameters = Self::get_tool_parameters("format_partition");
+                            let mut param_values: Vec<String> = parameters
+                                .iter()
+                                .map(|p| match &p.param_type {
+                                    ToolParameter::Selection(options, default_idx) => {
+                                        options.get(*default_idx).cloned().unwrap_or_default()
+                                    }
+                                    _ => String::new(),
+                                })
+                                .collect();
+                            // Pre-fill device from disk selection, skip to filesystem param
+                            param_values[0] = value;
                             let mut state = self.lock_state();
-                            state.pre_dialog_mode = Some(AppMode::DiskTools);
-                            state.confirm_dialog =
-                                Some(format_partition_confirm(&value, "ext4"));
-                            state.mode = AppMode::ConfirmDialog;
+                            if state.pre_dialog_mode.is_none() {
+                                state.pre_dialog_mode = Some(AppMode::DiskTools);
+                            }
+                            state.current_tool = Some("format_partition".to_string());
+                            state.tool_dialog = Some(ToolDialogState {
+                                tool_name: "format_partition".to_string(),
+                                parameters,
+                                current_param: 1, // Skip device, start at filesystem
+                                param_values,
+                                is_executing: false,
+                            });
+                            state.mode = AppMode::ToolDialog;
+                            state.status_message = "Select filesystem type for formatting".to_string();
                             return Ok(false);
                         }
                         "wipe_disk" => {
@@ -1286,7 +1307,11 @@ impl App {
                                 .unwrap_or_default();
                             let display_name = pending["display_name"].as_str().unwrap_or("tool").to_string();
 
-                            let script_path = format!("scripts/tools/{}", script_name);
+                            let script_path = crate::script_runner::scripts_base_dir()
+                                .join("tools")
+                                .join(&script_name)
+                                .to_string_lossy()
+                                .to_string();
                             // Set up floating output and spawn directly (already confirmed)
                             {
                                 let mut state = self.lock_state();
@@ -4321,7 +4346,11 @@ impl App {
 
         // Dry-run check: show what WOULD execute without actually running
         if is_dry_run() {
-            let script_path = format!("scripts/tools/{}", script_name);
+            let script_path = crate::script_runner::scripts_base_dir()
+                .join("tools")
+                .join(script_name)
+                .to_string_lossy()
+                .to_string();
             let env_display: Vec<String> = env_vars.iter().map(|(k,v)| format!("{}={}", k, v)).collect();
             let env_prefix = if env_display.is_empty() { String::new() } else { format!("{} ", env_display.join(" ")) };
             let would_execute = format!("{}bash {} {}", env_prefix, script_path, cli_args.join(" "));
@@ -4383,11 +4412,15 @@ impl App {
             return Ok(());
         }
 
-        let script_path = format!("scripts/tools/{}", script_name);
+        let script_path = crate::script_runner::scripts_base_dir()
+            .join("tools")
+            .join(script_name)
+            .to_string_lossy()
+            .to_string();
 
         // Manifest validation — destructive scripts are blocked without a manifest
-        let script_basename = script_name.trim_end_matches(".sh");
-        if let Some(manifest) = self.manifest_registry.get(script_basename) {
+        let manifest_key = format!("scripts/tools/{}", script_name);
+        if let Some(manifest) = self.manifest_registry.get(&manifest_key) {
             tracing::debug!("Manifest found for {}: v{}", script_name, manifest.version);
         } else if is_destructive {
             tracing::error!("BLOCKED: No manifest found for destructive script: {}", script_name);
@@ -4465,7 +4498,11 @@ impl App {
                     root: PathBuf::from(if !params.is_empty() && !params[0].is_empty() { &params[0] } else { "/mnt" }),
                     no_mount: params.len() >= 2 && params[1] == "true",
                 };
-                let script_path = format!("scripts/tools/{}", sa.script_name());
+                let script_path = crate::script_runner::scripts_base_dir()
+                    .join("tools")
+                    .join(sa.script_name())
+                    .to_string_lossy()
+                    .to_string();
                 let cli_args = sa.to_cli_args();
                 { let mut state = self.lock_state();
                     state.tool_dialog = None;
@@ -4476,7 +4513,11 @@ impl App {
                 return Ok(());
             }
             "manual_partition" => {
-                let script_path = "scripts/tools/manual_partition.sh";
+                let script_path = crate::script_runner::scripts_base_dir()
+                    .join("tools")
+                    .join("manual_partition.sh")
+                    .to_string_lossy()
+                    .to_string();
                 { let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = None;
@@ -4484,7 +4525,7 @@ impl App {
                 let full_cmd = if !params.is_empty() && !params[0].is_empty() {
                     format!("{} --device '{}'", script_path, params[0])
                 } else {
-                    script_path.to_string()
+                    script_path.clone()
                 };
                 let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, AppMode::DiskTools);
                 return Ok(());
