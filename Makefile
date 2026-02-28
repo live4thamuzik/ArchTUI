@@ -1,7 +1,7 @@
 # Makefile for archtui development and testing
 # NOTE: This Makefile is for DEVELOPMENT ONLY, not for use in Arch ISO
 
-.PHONY: help build test test-rust test-bash clean install dev-setup format lint deps dev quick ci iso-ready
+.PHONY: help build test test-rust test-bash clean install dev-setup format lint lint-rust lint-bash deps dev quick ci iso-ready
 
 # Default target
 help:
@@ -65,8 +65,20 @@ dev-setup:
 format:
 	cargo fmt
 
-lint:
+lint: lint-rust lint-bash
+
+lint-rust:
 	cargo clippy -- -D warnings
+
+lint-bash:
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		echo "Running shellcheck on all scripts..."; \
+		find scripts -name "*.sh" -exec shellcheck -x \
+			-P scripts -P scripts/strategies -P scripts/tools {} +; \
+		echo "shellcheck passed"; \
+	else \
+		echo "shellcheck not installed, skipping"; \
+	fi
 
 # Dependencies
 deps:
