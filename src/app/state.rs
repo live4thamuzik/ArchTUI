@@ -43,6 +43,29 @@ pub struct ToolDialogState {
     pub is_executing: bool,
 }
 
+/// Partition assignments for manual partitioning strategy
+///
+/// Stores user-selected partition→role mappings collected via TUI dialogs
+/// after cfdisk creates partition tables. Injected as MANUAL_* env vars
+/// for manual.sh to format and mount.
+#[derive(Debug, Clone, Default)]
+pub struct ManualPartitionMap {
+    /// Root partition device (required), e.g. "/dev/sda2"
+    pub root: String,
+    /// Root filesystem type (required), e.g. "ext4"
+    pub root_fs: String,
+    /// Boot partition device (required), e.g. "/dev/sda1"
+    pub boot: String,
+    /// EFI partition device (UEFI only, empty for BIOS)
+    pub efi: String,
+    /// Home partition device (optional)
+    pub home: String,
+    /// Home filesystem type (optional)
+    pub home_fs: String,
+    /// Swap partition device (optional)
+    pub swap: String,
+}
+
 /// Main application state
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -96,6 +119,8 @@ pub struct AppState {
     pub installer_pid: Option<u32>,
     /// Logging verbosity for installation ("INFO" or "VERBOSE")
     pub log_level: String,
+    /// Manual partitioning assignments (set via TUI dialogs after cfdisk)
+    pub manual_partition_map: Option<ManualPartitionMap>,
 }
 
 /// Application operating modes
@@ -165,6 +190,7 @@ impl Default for AppState {
             installer_button_selection: 2, // Default to "Start Install"
             installer_pid: None,
             log_level: std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string()),
+            manual_partition_map: None,
         }
     }
 }
