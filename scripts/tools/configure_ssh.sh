@@ -190,11 +190,6 @@ case "$ACTION" in
             sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
         fi
 
-        # Basic security settings
-        log_info "Applying basic security settings..."
-        sed -i 's/^#Protocol 2/Protocol 2/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
-        sed -i 's/^Protocol.*/Protocol 2/' /etc/ssh/sshd_config || error_exit "Failed to modify sshd_config"
-        
         # Restart SSH service to apply changes
         if systemctl is-active sshd >/dev/null 2>&1; then
             log_info "Restarting SSH service to apply changes..."

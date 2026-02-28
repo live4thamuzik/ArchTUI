@@ -136,9 +136,9 @@ configure_iptables() {
             iptables -A INPUT -i lo -j ACCEPT
             iptables -A OUTPUT -o lo -j ACCEPT
 
-            # Allow established connections
-            log_cmd "iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
-            iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Allow established connections (conntrack is the modern replacement for state)
+            log_cmd "iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT"
+            iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 
             # Allow SSH (if running)
             if systemctl is-active sshd >/dev/null 2>&1; then
@@ -194,9 +194,6 @@ configure_ufw() {
             # Allow SSH
             log_cmd "ufw allow 22/tcp"
             ufw allow 22/tcp
-
-            # Allow ping
-            ufw allow in on any to any port 22 proto tcp
 
             # Enable UFW
             log_cmd "ufw --force enable"
