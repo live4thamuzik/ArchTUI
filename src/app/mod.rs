@@ -2748,29 +2748,35 @@ impl App {
                 }
             }
             "AUR Helper" => {
-                let mut options = InputHandler::get_predefined_options(&option.name);
-
-                // When DE requires AUR packages, filter out "none" so the user can't deselect
-                let de_value = {
+                // When DE requires AUR, lock the field — user can't set to None
+                let de_requires_aur = {
                     let state = match self.lock_state() {
                         Ok(state) => state,
                         Err(_) => return Ok(()),
                     };
-                    state
+                    let de_value = state
                         .config
                         .options
                         .iter()
                         .find(|opt| opt.name == "Desktop Environment")
                         .map(|opt| opt.get_value().to_string())
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    let de: DesktopEnvironment = de_value.parse().unwrap_or_default();
+                    de.requires_aur()
                 };
-                let de: DesktopEnvironment = de_value.parse().unwrap_or_default();
-                if de.requires_aur() {
-                    options.retain(|o| o.to_lowercase() != "none");
-                }
 
-                self.input_handler
-                    .start_selection(option.name.clone(), options, option.value);
+                if de_requires_aur {
+                    // Block the dialog entirely, like encryption does for LUKS strategies
+                    if let Ok(mut state) = self.lock_state() {
+                        state.status_message =
+                            "AUR Helper is required by the selected desktop environment and cannot be set to None."
+                                .to_string();
+                    }
+                } else {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                }
             }
             _ => {
                 // Use predefined options for selection fields
@@ -2942,9 +2948,10 @@ impl App {
             self.auto_set_encryption(&value)?;
         }
 
-        // Auto-set display manager based on desktop environment
+        // Auto-set display manager and AUR helper based on desktop environment
         if option_name == "Desktop Environment" {
             self.auto_set_display_manager(&value)?;
+            self.auto_set_aur_helper(&value)?;
         }
 
         // Handle warning dialog acknowledgment
@@ -3046,6 +3053,35 @@ impl App {
             }
         }
 
+        Ok(())
+    }
+
+    /// Auto-set AUR helper based on desktop environment
+    fn auto_set_aur_helper(
+        &mut self,
+        desktop_env: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let de: DesktopEnvironment = desktop_env.parse().unwrap_or_default();
+        if let Ok(mut state) = self.lock_state() {
+            if de.requires_aur() {
+                // DE requires AUR — force helper to Paru if currently None
+                if let Some(aur_opt) = state
+                    .config
+                    .options
+                    .iter_mut()
+                    .find(|opt| opt.name == "AUR Helper")
+                {
+                    if aur_opt.get_value().to_lowercase() == "none" {
+                        aur_opt.value = "Paru".to_string();
+                    }
+                    state.status_message = format!(
+                        "{} requires AUR packages — AUR Helper set to {}",
+                        desktop_env,
+                        aur_opt.get_value()
+                    );
+                }
+            }
+        }
         Ok(())
     }
 
@@ -3415,43 +3451,6 @@ impl App {
                             .find(|opt| opt.name == "Mirror Country")
                         {
                             mirror_option.value = mirror_country.to_string();
-                        }
-                    }
-                }
-                "Desktop Environment" => {
-                    let de: DesktopEnvironment = value.parse().unwrap_or_default();
-                    if de.requires_aur() {
-                        if let Some(aur_opt) = state
-                            .config
-                            .options
-                            .iter_mut()
-                            .find(|opt| opt.name == "AUR Helper")
-                        {
-                            if aur_opt.get_value().to_lowercase() == "none" {
-                                aur_opt.value = "Paru".to_string();
-                                state.status_message = format!(
-                                    "{} requires AUR packages — AUR Helper set to Paru",
-                                    value
-                                );
-                            }
-                        }
-                    }
-                }
-                "AUR Helper" => {
-                    if value.to_lowercase() == "none" {
-                        let de_value = state
-                            .config
-                            .options
-                            .iter()
-                            .find(|opt| opt.name == "Desktop Environment")
-                            .map(|opt| opt.get_value().to_string())
-                            .unwrap_or_default();
-                        let de: DesktopEnvironment = de_value.parse().unwrap_or_default();
-                        if de.requires_aur() {
-                            state.status_message = format!(
-                                "Warning: {} requires AUR packages — install may fail without an AUR helper",
-                                de
-                            );
                         }
                     }
                 }
