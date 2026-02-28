@@ -1840,8 +1840,35 @@ impl App {
             return false;
         }
 
+        // Check AUR helper is selected when DE requires AUR packages
+        if self.de_requires_aur_helper(config) {
+            return false;
+        }
+
         // Then check secure boot requirements
         self.validate_secure_boot_requirements(config)
+    }
+
+    /// Check if the selected DE requires an AUR helper but none is configured
+    fn de_requires_aur_helper(&self, config: &Configuration) -> bool {
+        let de_value = config
+            .options
+            .iter()
+            .find(|opt| opt.name == "Desktop Environment")
+            .map(|opt| opt.get_value().to_string())
+            .unwrap_or_default();
+        let de: DesktopEnvironment = de_value.parse().unwrap_or_default();
+        if de.requires_aur() {
+            let aur_value = config
+                .options
+                .iter()
+                .find(|opt| opt.name == "AUR Helper")
+                .map(|opt| opt.get_value().to_string())
+                .unwrap_or_default();
+            let aur: AurHelper = aur_value.parse().unwrap_or_default();
+            return aur == AurHelper::None;
+        }
+        false
     }
 
     /// Validate secure boot requirements
@@ -1908,6 +1935,20 @@ impl App {
             .iter()
             .filter_map(|option| option.validation_error())
             .collect();
+
+        // Add AUR helper validation errors
+        if self.de_requires_aur_helper(config) {
+            let de_value = config
+                .options
+                .iter()
+                .find(|opt| opt.name == "Desktop Environment")
+                .map(|opt| opt.get_value().to_string())
+                .unwrap_or_default();
+            errors.push(format!(
+                "{} requires an AUR helper (packages like wlogout are AUR-only)",
+                de_value
+            ));
+        }
 
         // Add secure boot validation errors
         if let Some(secure_boot_option) =
