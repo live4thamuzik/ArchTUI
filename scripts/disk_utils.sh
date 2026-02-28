@@ -544,7 +544,7 @@ setup_luks_encryption() {
 
     # Format with password from stdin (LUKS2 with argon2id)
     log_cmd "cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 --key-size 512 --hash sha256 --pbkdf argon2id --batch-mode $partition"
-    echo -n "$password" | cryptsetup luksFormat \
+    printf '%s' "$password" | cryptsetup luksFormat \
         --type luks2 \
         --cipher aes-xts-plain64 \
         --key-size 512 \
@@ -558,7 +558,7 @@ setup_luks_encryption() {
 
     # Open mapping
     log_cmd "cryptsetup open $partition $mapper_name"
-    echo -n "$password" | cryptsetup open "$partition" "$mapper_name" - || {
+    printf '%s' "$password" | cryptsetup open "$partition" "$mapper_name" - || {
         log_error "cryptsetup open failed on $partition (mapper: $mapper_name)"
         return 1
     }

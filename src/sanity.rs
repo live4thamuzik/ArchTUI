@@ -80,6 +80,9 @@ pub fn verify_environment() -> SanityCheckResult {
 
 /// Print a pretty error message to stderr and exit
 /// This is called before TUI initialization, so we can safely print to stderr
+// EXCEPTION: process::exit outside main.rs — called pre-TUI before any threads
+// or terminal modes; returning Result would complicate run_preflight_checks() API
+// for callers with no benefit since the process must terminate immediately.
 pub fn print_error_and_exit(result: &SanityCheckResult) -> ! {
     eprintln!();
     eprintln!("╔══════════════════════════════════════════════════════════════════╗");

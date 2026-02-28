@@ -221,7 +221,8 @@ impl Installer {
             .stderr(Stdio::piped())
             .stdin(Stdio::null())
             .in_new_process_group()
-            .spawn()?;
+            .spawn()
+            .context("Failed to spawn install wrapper script")?;
 
         // Register child PID for Death Pact compliance and cancellation
         let child_pid = child.id();
