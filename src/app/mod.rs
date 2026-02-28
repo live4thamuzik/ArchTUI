@@ -1231,7 +1231,7 @@ impl App {
 
     /// Handle confirmation dialog Enter key
     fn handle_confirm_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (confirmed, action, _action_data, pre_mode) = {
+        let (confirmed, action, action_data, pre_mode) = {
             let state = self.lock_state();
             if let Some(ref dialog) = state.confirm_dialog {
                 (
@@ -1257,16 +1257,8 @@ impl App {
         }
 
         if confirmed {
-            // Execute the confirmed action
-            match action.as_str() {
-                "start_installation" => {
-                    tracing::info!("Confirmed: starting installation");
-                    self.start_installation()?;
-                }
-                _ => {
-                    tracing::warn!("Unknown confirm action: {}", action);
-                }
-            }
+            // Delegate to execute_confirmed_action which handles all action types
+            self.execute_confirmed_action(&action, action_data)?;
         }
 
         Ok(())
