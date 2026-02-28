@@ -8,7 +8,7 @@ set -euo pipefail
 cleanup_and_exit() {
     local sig="$1"
     echo "$(basename "$0"): Received $sig, aborting..." >&2
-    exit 130
+    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
 }
 trap 'cleanup_and_exit SIGTERM' SIGTERM
 trap 'cleanup_and_exit SIGINT' SIGINT
@@ -134,7 +134,12 @@ log_success "Locale configured"
 # --- Timezone ---
 log_info "Setting timezone to: $TIMEZONE"
 
-# Validate timezone exists
+# Validate timezone exists and path stays within /usr/share/zoneinfo (prevent path traversal)
+tz_real="$(realpath -m "/usr/share/zoneinfo/$TIMEZONE" 2>/dev/null)" || tz_real=""
+if [[ -z "$tz_real" || "$tz_real" != /usr/share/zoneinfo/* ]]; then
+    log_error "Invalid timezone path (traversal detected): $TIMEZONE"
+    exit 1
+fi
 if [[ ! -f "/usr/share/zoneinfo/$TIMEZONE" ]]; then
     log_error "Invalid timezone: $TIMEZONE"
     exit 1

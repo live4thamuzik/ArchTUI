@@ -16,7 +16,7 @@ set -euo pipefail
 cleanup_and_exit() {
     local sig="$1"
     echo "INSTALL_DOTFILES: Received $sig, aborting..." >&2
-    exit 130
+    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
 }
 trap 'cleanup_and_exit SIGTERM' SIGTERM
 trap 'cleanup_and_exit SIGINT' SIGINT

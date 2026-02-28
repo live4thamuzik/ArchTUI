@@ -36,7 +36,7 @@ use std::path::PathBuf;
 
 use crate::cli::Cli;
 use crate::config_file::InstallationConfig;
-use crate::process_guard::CommandProcessGroup;
+use crate::process_guard::{ChildRegistry, CommandProcessGroup};
 use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
 use crate::scripts::disk::{
@@ -272,6 +272,12 @@ fn run_installer_with_config(
             error::ArchTuiError::script(format!("Failed to spawn installer: {}", e))
         })?;
 
+    // Death Pact: register headless child with ChildRegistry for signal handler cleanup
+    let child_pid = child.id();
+    if let Ok(mut registry) = ChildRegistry::global().lock() {
+        registry.register(child_pid);
+    }
+
     // Create master log for headless mode (best-effort)
     let log_dir = "/var/log/archtui";
     let _ = fs::create_dir_all(log_dir);
@@ -317,6 +323,11 @@ fn run_installer_with_config(
     // Always wait for the child process to finish
     let output = child.wait_with_output()
         .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to wait for installer subprocess: {}", e).into() })?;
+
+    // Death Pact: unregister child now that it has exited
+    if let Ok(mut registry) = ChildRegistry::global().lock() {
+        registry.unregister(child_pid);
+    }
 
     if output.status.success() {
         info!("Installation completed successfully");
