@@ -10,7 +10,7 @@ cleanup_and_exit() {
     # Remove any stale NOPASSWD sudoers fragments
     rm -f /etc/sudoers.d/archtui_*
     echo "$(basename "$0"): Received $sig, aborting..." >&2
-    exit 130
+    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
 }
 trap 'cleanup_and_exit SIGTERM' SIGTERM
 trap 'cleanup_and_exit SIGINT' SIGINT
@@ -87,6 +87,7 @@ install_packages() {
     log_info "Installing $description (${#packages[@]} packages)..."
     log_info "Packages: ${packages[*]}"
 
+    log_cmd "pacman -S ${packages[*]} --noconfirm --needed"
     pacman -S "${packages[@]}" --noconfirm --needed 2>&1 | while IFS= read -r line; do
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*)
@@ -263,6 +264,7 @@ create_user_account() {
 
     # Create user with home directory and add to wheel group
     if ! id "$MAIN_USERNAME" &>/dev/null; then
+        log_cmd "useradd -m -G wheel,users,audio,video,storage,optical -s /bin/bash $MAIN_USERNAME"
         useradd -m -G wheel,users,audio,video,storage,optical -s /bin/bash "$MAIN_USERNAME" || { log_error "Failed to create user $MAIN_USERNAME"; return 1; }
         log_info "User $MAIN_USERNAME created"
     else
@@ -272,7 +274,9 @@ create_user_account() {
     # Set user password (tracing disabled to prevent password leak in verbose logs)
     if [[ -n "${MAIN_USER_PASSWORD:-}" ]]; then
         { set +x; } 2>/dev/null
+        log_cmd "printf '***:***' | chpasswd (user password)"
         printf '%s:%s\n' "$MAIN_USERNAME" "$MAIN_USER_PASSWORD" | chpasswd || log_warn "Failed to set user password"
+        unset MAIN_USER_PASSWORD  # ROE §8.1: clear immediately after use
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "User password set"
     fi
@@ -280,15 +284,12 @@ create_user_account() {
     # Set root password (tracing disabled to prevent password leak in verbose logs)
     if [[ -n "${ROOT_PASSWORD:-}" ]]; then
         { set +x; } 2>/dev/null
+        log_cmd "printf '***:***' | chpasswd (root password)"
         printf '%s:%s\n' "root" "$ROOT_PASSWORD" | chpasswd || log_warn "Failed to set root password"
+        unset ROOT_PASSWORD  # ROE §8.1: clear immediately after use
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "Root password set"
     fi
-
-    # ROE §8.1: Clear password variables after use (no longer needed)
-    { set +x; } 2>/dev/null
-    unset MAIN_USER_PASSWORD ROOT_PASSWORD
-    if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
 
     log_success "User account configured"
 }
@@ -316,9 +317,11 @@ enable_base_services() {
     log_info "Enabling base services..."
 
     # NetworkManager
+    log_cmd "systemctl enable NetworkManager.service"
     systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
 
     # SSH (optional, but useful)
+    log_cmd "systemctl enable sshd.service"
     systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
 
     # Time synchronization
@@ -613,8 +616,8 @@ install_systemd_boot() {
                 options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/mapper/${mapper_name}"
             fi
         else
-            options="root=UUID=${root_uuid}"
-            log_warn "LUKS_UUID not set for encrypted system"
+            log_error "LUKS_UUID not set for encrypted system — systemd-boot entry will be invalid"
+            return 1
         fi
     else
         options="root=UUID=${root_uuid}"
@@ -714,6 +717,9 @@ configure_grub_settings() {
             else
                 cmdline="$cmdline root=/dev/mapper/${mapper_name}"
             fi
+        else
+            log_error "LUKS_UUID not set for encrypted system — GRUB cmdline will be invalid"
+            return 1
         fi
     fi
 
@@ -1298,10 +1304,12 @@ install_aur_helper() {
             # Install paru dependencies
             pacman -S base-devel git --noconfirm --needed || { log_error "Failed to install paru dependencies"; return 1; }
 
+            log_cmd "runuser -u $MAIN_USERNAME -- bash (clone+build paru)"
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
 set -e
 cd /tmp/aur_build
 timeout 60 git clone https://aur.archlinux.org/paru.git
+[[ -d paru ]] || { echo "ERROR: paru clone directory not found"; exit 1; }
 cd paru
 timeout 300 makepkg -si --noconfirm
 AUREOF
@@ -1310,10 +1318,12 @@ AUREOF
             # Install yay dependencies
             pacman -S base-devel git go --noconfirm --needed || { log_error "Failed to install yay dependencies"; return 1; }
 
+            log_cmd "runuser -u $MAIN_USERNAME -- bash (clone+build yay)"
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
 set -e
 cd /tmp/aur_build
 timeout 60 git clone https://aur.archlinux.org/yay.git
+[[ -d yay ]] || { echo "ERROR: yay clone directory not found"; exit 1; }
 cd yay
 timeout 300 makepkg -si --noconfirm
 AUREOF
@@ -1321,10 +1331,12 @@ AUREOF
         "pikaur")
             pacman -S base-devel git python --noconfirm --needed || { log_error "Failed to install pikaur dependencies"; return 1; }
 
+            log_cmd "runuser -u $MAIN_USERNAME -- bash (clone+build pikaur)"
             runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
 set -e
 cd /tmp/aur_build
 timeout 60 git clone https://aur.archlinux.org/pikaur.git
+[[ -d pikaur ]] || { echo "ERROR: pikaur clone directory not found"; exit 1; }
 cd pikaur
 timeout 300 makepkg -si --noconfirm
 AUREOF

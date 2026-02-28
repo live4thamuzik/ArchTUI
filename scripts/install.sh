@@ -449,7 +449,8 @@ prepare_system() {
 
     # Update system clock
     log_info "Enabling NTP time synchronization..."
-    timedatectl set-ntp true
+    log_cmd "timedatectl set-ntp true"
+    timedatectl set-ntp true || log_warn "Failed to enable NTP (non-fatal)"
 
     # Wait for time sync
     log_info "Waiting for time sync..."
@@ -460,6 +461,7 @@ prepare_system() {
 
     # Update package database
     log_info "Updating package database (pacman -Sy)..."
+    log_cmd "pacman -Sy"
     pacman -Sy 2>&1 | while IFS= read -r line; do
         case "$line" in
             *"error"*|*"Error"*|*"ERROR"*)
@@ -488,6 +490,7 @@ configure_mirrors() {
 
     # Backup original mirrorlist
     log_info "Backing up original mirrorlist..."
+    log_cmd "cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup"
     cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
 
     # Use reflector if available, otherwise use default mirrors
@@ -778,7 +781,8 @@ generate_fstab() {
     log_info "Generating fstab..."
 
     # Generate fstab using UUIDs
-    genfstab -U /mnt >> /mnt/etc/fstab
+    log_cmd "genfstab -U /mnt >> /mnt/etc/fstab"
+    genfstab -U /mnt >> /mnt/etc/fstab || error_exit "genfstab failed — cannot generate fstab"
 
     # Verify fstab was generated
     if [[ ! -s /mnt/etc/fstab ]]; then
@@ -805,6 +809,7 @@ configure_chroot() {
 
     # Copy necessary scripts to target system
     log_info "Copying configuration scripts to /mnt/..."
+    log_cmd "cp chroot_config.sh utils.sh /mnt/"
     cp "$SCRIPT_DIR/chroot_config.sh" /mnt/ || error_exit "Failed to copy chroot_config.sh to /mnt/"
     cp "$SCRIPT_DIR/utils.sh" /mnt/ || error_exit "Failed to copy utils.sh to /mnt/"
 

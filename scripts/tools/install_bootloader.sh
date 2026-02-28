@@ -213,9 +213,10 @@ case "$BOOTLOADER_TYPE" in
         # Check if os-prober is available and install it if needed
         if arch-chroot "$ROOT_PATH" pacman -Qi os-prober >/dev/null 2>&1; then
             log_info "OS prober detected - enabling multi-boot support"
-            echo "GRUB_DISABLE_OS_PROBER=false" >> "$ROOT_PATH/etc/default/grub"
+            log_cmd "echo GRUB_DISABLE_OS_PROBER=false >> /etc/default/grub"
+            echo "GRUB_DISABLE_OS_PROBER=false" >> "$ROOT_PATH/etc/default/grub" || log_warn "Failed to write GRUB os-prober config"
         else
-            echo "GRUB_DISABLE_OS_PROBER=true" >> "$ROOT_PATH/etc/default/grub"
+            echo "GRUB_DISABLE_OS_PROBER=true" >> "$ROOT_PATH/etc/default/grub" || log_warn "Failed to write GRUB os-prober config"
         fi
         
         # Generate GRUB config
@@ -246,7 +247,7 @@ EOF
         
         # Create arch entry
         log_info "📝 Creating Arch Linux boot entry..."
-        mkdir -p "$ROOT_PATH/boot/loader/entries"
+        mkdir -p "$ROOT_PATH/boot/loader/entries" || error_exit "Failed to create loader entries directory"
         
         # Get root partition UUID - find the largest ext4/xfs/btrfs partition
         ROOT_PARTITION=""
@@ -267,12 +268,14 @@ EOF
         done < <(lsblk -ln -o PATH "$TARGET_DISK" | tail -n +2)
         
         if [[ -n "$ROOT_PARTITION" ]]; then
-            ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PARTITION")
+            ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PARTITION" 2>/dev/null) || error_exit "blkid failed for $ROOT_PARTITION"
+            [[ -n "$ROOT_UUID" ]] || error_exit "UUID is empty for $ROOT_PARTITION"
             log_info "Using root partition: $ROOT_PARTITION (UUID: $ROOT_UUID)"
         else
             error_exit "Could not find root partition for systemd-boot entry"
         fi
-        
+
+        log_cmd "Writing arch.conf boot entry (root=UUID=$ROOT_UUID)"
         {
             echo "title   Arch Linux"
             echo "linux   /vmlinuz-linux"
@@ -280,7 +283,7 @@ EOF
             [[ -f "$ROOT_PATH/boot/amd-ucode.img" ]] && echo "initrd  /amd-ucode.img"
             echo "initrd  /initramfs-linux.img"
             echo "options root=UUID=$ROOT_UUID rw"
-        } > "$ROOT_PATH/boot/loader/entries/arch.conf"
+        } > "$ROOT_PATH/boot/loader/entries/arch.conf" || error_exit "Failed to write arch.conf"
         
         # Update firmware boot manager
         log_info "🔄 Updating firmware boot manager..."
