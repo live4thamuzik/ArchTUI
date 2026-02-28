@@ -910,6 +910,11 @@ format_filesystem() {
     local device="$1"
     local fs_type="${2:-ext4}"
 
+    if [[ ! -b "$device" ]]; then
+        log_error "format_filesystem: $device is not a block device"
+        return 1
+    fi
+
     log_info "Formatting $device as $fs_type"
 
     case "$fs_type" in

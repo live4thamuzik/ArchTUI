@@ -25,7 +25,7 @@ cleanup_and_exit() {
     if [[ -f "/etc/pacman.d/mirrorlist.bak" ]]; then
         cp /etc/pacman.d/mirrorlist.bak /etc/pacman.d/mirrorlist 2>/dev/null || true
     fi
-    exit 130
+    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
 }
 trap 'cleanup_and_exit SIGTERM' SIGTERM
 trap 'cleanup_and_exit SIGINT' SIGINT

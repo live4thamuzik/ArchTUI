@@ -22,7 +22,7 @@ cleanup() {
     fi
     # Revoke temporary passwordless sudo if it was created
     rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
-    exit 130
+    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
 }
 trap cleanup SIGTERM SIGINT SIGHUP
 

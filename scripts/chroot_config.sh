@@ -212,16 +212,20 @@ configure_localization() {
     # Set timezone
     if [[ -n "${TIMEZONE_REGION:-}" && -n "${TIMEZONE:-}" ]]; then
         local tz_path="/usr/share/zoneinfo/${TIMEZONE_REGION}/${TIMEZONE}"
-        if [[ -f "$tz_path" ]]; then
+        # Validate timezone path stays within /usr/share/zoneinfo (prevent path traversal)
+        local tz_real
+        tz_real="$(realpath -m "$tz_path" 2>/dev/null)" || tz_real=""
+        if [[ -n "$tz_real" && "$tz_real" == /usr/share/zoneinfo/* && -f "$tz_path" ]]; then
             log_info "Setting timezone to: ${TIMEZONE_REGION}/${TIMEZONE}"
             ln -sf "$tz_path" /etc/localtime || { log_error "Failed to set timezone symlink"; return 1; }
         else
             # Try without region
             tz_path="/usr/share/zoneinfo/${TIMEZONE}"
-            if [[ -f "$tz_path" ]]; then
+            tz_real="$(realpath -m "$tz_path" 2>/dev/null)" || tz_real=""
+            if [[ -n "$tz_real" && "$tz_real" == /usr/share/zoneinfo/* && -f "$tz_path" ]]; then
                 ln -sf "$tz_path" /etc/localtime || { log_error "Failed to set timezone symlink"; return 1; }
             else
-                log_warn "Timezone not found: ${TIMEZONE_REGION}/${TIMEZONE}"
+                log_warn "Timezone not found or invalid path: ${TIMEZONE_REGION}/${TIMEZONE}"
             fi
         fi
     fi
@@ -280,6 +284,11 @@ create_user_account() {
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "Root password set"
     fi
+
+    # ROE §8.1: Clear password variables after use (no longer needed)
+    { set +x; } 2>/dev/null
+    unset MAIN_USER_PASSWORD ROOT_PASSWORD
+    if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
 
     log_success "User account configured"
 }
@@ -1359,6 +1368,17 @@ install_additional_packages() {
         local -a packages
         read -ra packages <<< "$ADDITIONAL_PACKAGES"
 
+        # Validate package names (alphanumeric, hyphens, dots, underscores, plus signs, @)
+        local -a validated_packages=()
+        for pkg in "${packages[@]}"; do
+            if [[ "$pkg" =~ ^[a-zA-Z0-9@._+-]+$ ]]; then
+                validated_packages+=("$pkg")
+            else
+                log_warn "Skipping invalid package name: $pkg"
+            fi
+        done
+        packages=("${validated_packages[@]}")
+
         if [[ ${#packages[@]} -gt 0 ]]; then
             pacman -S "${packages[@]}" --noconfirm --needed || log_warn "Some packages may have failed to install"
         fi
@@ -1599,6 +1619,12 @@ deploy_dotfiles() {
         return 0
     fi
 
+    # Validate URL scheme — only allow https:// for security (no ssh://, git://, file://)
+    if [[ "$GIT_REPOSITORY_URL" != https://* ]]; then
+        log_warn "Dotfiles URL rejected: only https:// URLs are allowed (got: $GIT_REPOSITORY_URL)"
+        return 0
+    fi
+
     log_info "Deploying dotfiles from: $GIT_REPOSITORY_URL"
 
     local user_home="/home/$MAIN_USERNAME"
@@ -1610,7 +1636,7 @@ deploy_dotfiles() {
 
     # Run install script if it exists
     if [[ -x "$user_home/dotfiles/install.sh" ]]; then
-        timeout 120 runuser -u "$MAIN_USERNAME" -- bash -c "cd \"$user_home/dotfiles\" && ./install.sh" || log_warn "Dotfiles install script failed or timed out"
+        timeout 120 runuser -u "$MAIN_USERNAME" -- bash -c "cd $(printf '%q' "$user_home/dotfiles") && ./install.sh" || log_warn "Dotfiles install script failed or timed out"
     fi
 
     log_success "Dotfiles deployed"

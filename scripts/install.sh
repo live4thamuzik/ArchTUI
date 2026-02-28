@@ -218,7 +218,10 @@ fi
 # Export for strategy scripts
 export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP SWAP_SIZE
 export ROOT_SIZE HOME_SIZE
+# ROE §8.1: Suppress set -x tracing for ENCRYPTION_PASSWORD export
+{ set +x; } 2>/dev/null
 export ENCRYPTION ENCRYPTION_PASSWORD
+[[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
 # Btrfs options
 BTRFS_SNAPSHOTS="${BTRFS_SNAPSHOTS:-No}"
@@ -331,12 +334,16 @@ validate_configuration() {
         "SYSTEM_HOSTNAME"
     )
 
+    # ROE §8.1: Suppress set -x — indirect expansion ${!var} traces password values
+    { set +x; } 2>/dev/null
     for var in "${required_vars[@]}"; do
         if [[ -z "${!var:-}" ]]; then
+            [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
             log_error "Required variable $var is not set"
             return 1
         fi
     done
+    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
     # Validate disk(s) exist
     if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
@@ -893,6 +900,8 @@ configure_chroot() {
     log_info "Entering chroot environment..."
     log_info "Running chroot_config.sh inside /mnt..."
 
+    # ROE §8.1: Suppress set -x before arch-chroot line (inline env vars contain passwords)
+    { set +x; } 2>/dev/null
     MAIN_USER_PASSWORD="$MAIN_USER_PASSWORD" \
     ROOT_PASSWORD="$ROOT_PASSWORD" \
     ENCRYPTION_PASSWORD="${ENCRYPTION_PASSWORD:-}" \
@@ -937,6 +946,12 @@ configure_chroot() {
     done
 
     local chroot_exit=${PIPESTATUS[0]}
+    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
+
+    # ROE §8.1: Clear password variables after chroot completes (no longer needed)
+    { set +x; } 2>/dev/null
+    unset MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
+    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
     # Clean up copied scripts
     rm -f /mnt/chroot_config.sh
