@@ -65,6 +65,8 @@ load_config_from_json() {
     export HOME_FILESYSTEM="$(jq -r '.home_filesystem // "ext4"' "$config_file")"
     export SEPARATE_HOME="$(jq -r '.separate_home // "No"' "$config_file")"
     export ENCRYPTION="$(jq -r '.encryption // "No"' "$config_file")"
+    # ROE §8.1: Suppress set -x tracing for password variables
+    { set +x; } 2>/dev/null
     export ENCRYPTION_PASSWORD="$(jq -r '.encryption_password // ""' "$config_file")"
     export SWAP="$(jq -r '.swap // "No"' "$config_file")"
     export SWAP_SIZE="$(jq -r '.swap_size // "N/A"' "$config_file")"
@@ -83,6 +85,7 @@ load_config_from_json() {
     export MAIN_USERNAME="$(jq -r '.username // ""' "$config_file")"
     export MAIN_USER_PASSWORD="$(jq -r '.user_password // ""' "$config_file")"
     export ROOT_PASSWORD="$(jq -r '.root_password // ""' "$config_file")"
+    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
     export MIRROR_COUNTRY="$(jq -r '.mirror_country // "United States"' "$config_file")"
     export BOOTLOADER="$(jq -r '.bootloader // "grub"' "$config_file")"

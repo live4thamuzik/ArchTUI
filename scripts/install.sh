@@ -186,7 +186,10 @@ PARTITIONING_STRATEGY="${PARTITIONING_STRATEGY:-auto_simple}"
 # Also set PARTITION_SCHEME for disk_strategies.sh compatibility
 export PARTITION_SCHEME="$PARTITIONING_STRATEGY"
 ENCRYPTION="${ENCRYPTION:-No}"
+# ROE §8.1: Suppress set -x tracing for password variables
+{ set +x; } 2>/dev/null
 ENCRYPTION_PASSWORD="${ENCRYPTION_PASSWORD:-}"
+[[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 ROOT_FILESYSTEM="${ROOT_FILESYSTEM:-ext4}"
 SEPARATE_HOME="${SEPARATE_HOME:-No}"
 HOME_FILESYSTEM="${HOME_FILESYSTEM:-ext4}"
@@ -238,8 +241,11 @@ GPU_DRIVERS="${GPU_DRIVERS:-Auto}"
 # User Setup
 SYSTEM_HOSTNAME="${SYSTEM_HOSTNAME:-archlinux}"
 MAIN_USERNAME="${MAIN_USERNAME:-user}"
+# ROE §8.1: Suppress set -x tracing for password variables
+{ set +x; } 2>/dev/null
 MAIN_USER_PASSWORD="${MAIN_USER_PASSWORD:-}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-}"
+[[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
 # Package Management
 AUR_HELPER="${AUR_HELPER:-none}"

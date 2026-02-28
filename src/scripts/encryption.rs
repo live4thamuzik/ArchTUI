@@ -94,11 +94,14 @@ impl SecretFile {
             .write(true)
             .create_new(true) // Fail if exists (prevents race)
             .mode(0o600) // Owner read/write only
-            .open(&path)?;
+            .open(&path)
+            .map_err(|e| std::io::Error::new(e.kind(), format!("Failed to create keyfile {:?}: {}", path, e)))?;
 
         // Write secret content
-        file.write_all(secret.as_bytes())?;
-        file.sync_all()?; // Ensure written to disk (well, RAM)
+        file.write_all(secret.as_bytes())
+            .map_err(|e| std::io::Error::new(e.kind(), format!("Failed to write keyfile {:?}: {}", path, e)))?;
+        file.sync_all()
+            .map_err(|e| std::io::Error::new(e.kind(), format!("Failed to sync keyfile {:?}: {}", path, e)))?; // Ensure written to disk (well, RAM)
 
         tracing::debug!("SecretFile created: {:?} ({} bytes)", path, secret.len());
 

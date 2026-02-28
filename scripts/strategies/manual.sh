@@ -9,6 +9,7 @@ source_or_die "$_STRATEGY_SCRIPT_DIR/../disk_utils.sh"
 
 # Execute manual partitioning strategy
 execute_manual_partitioning() {
+    setup_partitioning_trap
     echo "=== PHASE 1: Manual Partitioning (Guided) ==="
     log_info "Starting manual partitioning for $INSTALL_DISK..."
     

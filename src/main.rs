@@ -158,7 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(config) => match config.validate() {
                     Ok(_) => {
                         info!("Configuration validation successful");
-                        println!("✓ Configuration file is valid: {:?}", config);
+                        println!("✓ Configuration file is valid (all fields validated)");
                     }
                     Err(e) => {
                         error!("Configuration validation failed: {}", e);
@@ -315,7 +315,8 @@ fn run_installer_with_config(
     }
 
     // Always wait for the child process to finish
-    let output = child.wait_with_output()?;
+    let output = child.wait_with_output()
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to wait for installer subprocess: {}", e).into() })?;
 
     if output.status.success() {
         info!("Installation completed successfully");
@@ -486,9 +487,11 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                         // Password is read from stdin for CLI
                         eprintln!("Enter LUKS passphrase:");
                         let mut password = String::new();
-                        std::io::stdin().read_line(&mut password)?;
+                        std::io::stdin().read_line(&mut password)
+                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to read LUKS passphrase from stdin: {}", e).into() })?;
                         let password = password.trim().to_string();
-                        let secret_file = SecretFile::new(&password)?;
+                        let secret_file = SecretFile::new(&password)
+                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to create temporary keyfile: {}", e).into() })?;
                         let format_args = LuksFormatArgs {
                             device: PathBuf::from(dev),
                             key_file: secret_file.path().to_path_buf(),
@@ -506,9 +509,11 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                         });
                         eprintln!("Enter LUKS passphrase:");
                         let mut password = String::new();
-                        std::io::stdin().read_line(&mut password)?;
+                        std::io::stdin().read_line(&mut password)
+                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to read LUKS passphrase from stdin: {}", e).into() })?;
                         let password = password.trim().to_string();
-                        let secret_file = SecretFile::new(&password)?;
+                        let secret_file = SecretFile::new(&password)
+                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to create temporary keyfile: {}", e).into() })?;
                         let open_args = LuksOpenArgs {
                             device: PathBuf::from(dev),
                             key_file: secret_file.path().to_path_buf(),
@@ -615,10 +620,16 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&add_user_args)?;
             }
-            crate::cli::UserToolCommands::ResetPassword { username, password } => {
+            crate::cli::UserToolCommands::ResetPassword { username } => {
+                // ROE §8.1: Read password from env var, never from CLI args (/proc/PID/cmdline)
+                let password = std::env::var("USER_PASSWORD").unwrap_or_else(|_| {
+                    eprintln!("❌ USER_PASSWORD environment variable must be set");
+                    eprintln!("   Usage: USER_PASSWORD='secret' archtui tool user reset-password -u <user>");
+                    std::process::exit(1);
+                });
                 let reset_args = ResetPasswordArgs {
                     username: username.clone(),
-                    password: password.clone(),
+                    password,
                 };
                 execute_tool(&reset_args)?;
             }

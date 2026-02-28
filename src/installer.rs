@@ -797,7 +797,7 @@ pub fn install_base_system_with_extras(
 /// - Locale and timezone
 /// - User accounts
 /// - Bootloader
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[allow(dead_code)] // Library API - will be used when installer is integrated
 pub struct SystemConfig {
     /// Target root mountpoint (typically `/mnt`).
@@ -818,6 +818,23 @@ pub struct SystemConfig {
     pub user_sudo: bool,
     /// Optional root password (if None, root login disabled).
     pub root_password: Option<String>,
+}
+
+// ROE §8.1: Custom Debug impl redacts password fields
+impl std::fmt::Debug for SystemConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SystemConfig")
+            .field("target_root", &self.target_root)
+            .field("hostname", &self.hostname)
+            .field("locale", &self.locale)
+            .field("timezone", &self.timezone)
+            .field("keymap", &self.keymap)
+            .field("username", &self.username)
+            .field("user_password", &"********")
+            .field("user_sudo", &self.user_sudo)
+            .field("root_password", &"********")
+            .finish()
+    }
 }
 
 impl Default for SystemConfig {
@@ -994,7 +1011,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
 // ============================================================================
 
 /// Encryption configuration for a partition.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[allow(dead_code)] // Library API
 pub struct EncryptionConfig {
     /// Password for the encrypted volume (stored temporarily in SecretFile).
@@ -1005,6 +1022,18 @@ pub struct EncryptionConfig {
     pub label: Option<String>,
     /// Cipher configuration.
     pub cipher: LuksCipher,
+}
+
+// ROE §8.1: Custom Debug impl redacts password field
+impl std::fmt::Debug for EncryptionConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EncryptionConfig")
+            .field("password", &"********")
+            .field("mapper_name", &self.mapper_name)
+            .field("label", &self.label)
+            .field("cipher", &self.cipher)
+            .finish()
+    }
 }
 
 impl Default for EncryptionConfig {

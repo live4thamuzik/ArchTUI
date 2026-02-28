@@ -118,7 +118,7 @@ impl ScriptArgs for GenFstabArgs {
 /// let env = args.get_env_vars();
 /// assert!(env.iter().any(|(k, v)| k == "USER_PASSWORD" && v == "secret123"));
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UserAddArgs {
     /// Username for the new user.
     pub username: String,
@@ -136,6 +136,22 @@ pub struct UserAddArgs {
     pub create_home: bool,
     /// Whether to add to wheel group for sudo access.
     pub sudo: bool,
+}
+
+// ROE §8.1: Custom Debug impl redacts password field
+impl std::fmt::Debug for UserAddArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserAddArgs")
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "********"))
+            .field("groups", &self.groups)
+            .field("shell", &self.shell)
+            .field("full_name", &self.full_name)
+            .field("home_dir", &self.home_dir)
+            .field("create_home", &self.create_home)
+            .field("sudo", &self.sudo)
+            .finish()
+    }
 }
 
 impl ScriptArgs for UserAddArgs {

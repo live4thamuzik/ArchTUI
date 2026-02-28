@@ -14,7 +14,8 @@ use crate::types::{
 };
 
 /// Installation configuration that can be saved/loaded
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// NOTE: Debug impl redacts password fields (ROE §8.1)
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InstallationConfig {
     // Boot & System
     pub boot_mode: BootMode,
@@ -87,6 +88,42 @@ pub struct InstallationConfig {
     pub git_repository_url: String, // User-defined URL
 }
 
+// ROE §8.1: Custom Debug impl redacts password fields to prevent accidental leaks
+impl std::fmt::Debug for InstallationConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InstallationConfig")
+            .field("boot_mode", &self.boot_mode)
+            .field("secure_boot", &self.secure_boot)
+            .field("install_disk", &self.install_disk)
+            .field("partitioning_strategy", &self.partitioning_strategy)
+            .field("raid_level", &self.raid_level)
+            .field("root_filesystem", &self.root_filesystem)
+            .field("home_filesystem", &self.home_filesystem)
+            .field("separate_home", &self.separate_home)
+            .field("encryption", &self.encryption)
+            .field("encryption_password", &"********")
+            .field("swap", &self.swap)
+            .field("swap_size", &self.swap_size)
+            .field("root_size", &self.root_size)
+            .field("home_size", &self.home_size)
+            .field("btrfs_snapshots", &self.btrfs_snapshots)
+            .field("timezone_region", &self.timezone_region)
+            .field("timezone", &self.timezone)
+            .field("locale", &self.locale)
+            .field("keymap", &self.keymap)
+            .field("hostname", &self.hostname)
+            .field("username", &self.username)
+            .field("user_password", &"********")
+            .field("root_password", &"********")
+            .field("kernel", &self.kernel)
+            .field("gpu_drivers", &self.gpu_drivers)
+            .field("bootloader", &self.bootloader)
+            .field("desktop_environment", &self.desktop_environment)
+            .field("display_manager", &self.display_manager)
+            .finish()
+    }
+}
+
 fn default_raid_level() -> String {
     "raid1".to_string()
 }
@@ -107,13 +144,25 @@ impl InstallationConfig {
     }
 
     /// Save configuration to a JSON file
+    /// Passwords are redacted — they are NEVER written to disk (ROE §8.1)
     #[allow(dead_code)] // API: Used by --save-config CLI option
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let json = serde_json::to_string_pretty(self)
+        // Clone and redact passwords before serialization (ROE §8.1: never write passwords to disk)
+        let mut redacted = self.clone();
+        redacted.user_password = String::new();
+        redacted.root_password = String::new();
+        redacted.encryption_password = String::new();
+
+        let json = serde_json::to_string_pretty(&redacted)
             .context("Failed to serialize configuration to JSON")?;
 
         fs::write(&path, json)
             .with_context(|| format!("Failed to write configuration to {:?}", path.as_ref()))?;
+
+        tracing::warn!(
+            path = %path.as_ref().display(),
+            "Configuration saved to disk (passwords redacted)"
+        );
 
         Ok(())
     }
@@ -654,8 +703,9 @@ mod tests {
         assert_eq!(loaded.encryption, original.encryption);
         assert_eq!(loaded.hostname, original.hostname);
         assert_eq!(loaded.username, original.username);
-        assert_eq!(loaded.user_password, original.user_password);
-        assert_eq!(loaded.root_password, original.root_password);
+        // Passwords are redacted on save (ROE §8.1) — they should be empty after roundtrip
+        assert_eq!(loaded.user_password, "", "Passwords must be redacted on save");
+        assert_eq!(loaded.root_password, "", "Passwords must be redacted on save");
         assert_eq!(loaded.kernel, original.kernel);
         assert_eq!(loaded.bootloader, original.bootloader);
         assert_eq!(loaded.desktop_environment, original.desktop_environment);

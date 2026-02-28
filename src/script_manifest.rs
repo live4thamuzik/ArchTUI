@@ -267,8 +267,14 @@ impl ScriptManifest {
 
     /// Load a manifest from a JSON file
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, ManifestError> {
-        let content = std::fs::read_to_string(&path)?;
-        let manifest: Self = serde_json::from_str(&content)?;
+        let content = std::fs::read_to_string(&path).map_err(|e| ManifestError::IoError {
+            reason: format!("Failed to read manifest {:?}: {}", path.as_ref(), e),
+        })?;
+        let manifest: Self = serde_json::from_str(&content).map_err(|e| {
+            ManifestError::InvalidFormat {
+                reason: format!("Invalid JSON in {:?}: {}", path.as_ref(), e),
+            }
+        })?;
         manifest.validate_structure()?;
         tracing::debug!(
             script = %manifest.script,
