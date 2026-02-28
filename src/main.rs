@@ -29,7 +29,7 @@ mod types;
 mod ui;
 
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use log::{debug, error, info};
+use tracing::{debug, error, info};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io::stdout;
 use std::path::PathBuf;
@@ -59,31 +59,24 @@ use crate::scripts::user::{
 use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
 use crate::types::AurHelper;
 
-/// Initialize the logger for CLI mode (writes to stderr)
+/// Initialize the tracing subscriber for CLI mode (writes to stderr)
 fn init_logger_cli() {
-    use env_logger::Builder;
-    use std::io::Write;
+    use tracing_subscriber::{fmt, EnvFilter};
 
-    Builder::from_default_env()
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "[{} {}:{}] {}",
-                record.level(),
-                record.file().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
-                record.args()
-            )
-        })
-        .filter_level(log::LevelFilter::Info)
-        .parse_default_env()
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    fmt()
+        .with_env_filter(filter)
+        .with_file(true)
+        .with_line_number(true)
+        .with_target(false)
         .init();
 }
 
-/// Initialize the logger for TUI mode (writes to file to avoid corrupting the terminal)
+/// Initialize the tracing subscriber for TUI mode (writes to file to avoid corrupting the terminal)
 fn init_logger_tui() {
-    use env_logger::Builder;
-    use std::io::Write;
+    use tracing_subscriber::{fmt, EnvFilter};
 
     let target: Box<dyn std::io::Write + Send> =
         match std::fs::File::create("/tmp/archtui.log") {
@@ -94,20 +87,15 @@ fn init_logger_tui() {
             }
         };
 
-    Builder::from_default_env()
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "[{} {}:{}] {}",
-                record.level(),
-                record.file().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
-                record.args()
-            )
-        })
-        .filter_level(log::LevelFilter::Info)
-        .parse_default_env()
-        .target(env_logger::Target::Pipe(target))
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    fmt()
+        .with_env_filter(filter)
+        .with_file(true)
+        .with_line_number(true)
+        .with_target(false)
+        .with_writer(std::sync::Mutex::new(target))
         .init();
 }
 
@@ -134,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize signal handlers for graceful child process cleanup
     // This ensures bash scripts are terminated if we receive SIGINT/SIGTERM
     if let Err(e) = process_guard::init_signal_handlers() {
-        log::warn!("Failed to initialize signal handlers: {}", e);
+        tracing::warn!("Failed to initialize signal handlers: {}", e);
         // Continue anyway - cleanup will still work via Drop
     }
     debug!("Signal handlers initialized");

@@ -342,6 +342,7 @@ mod tests {
         let cli = args.to_cli_args();
 
         // Should contain wheel in groups
+        // SAFETY: sudo=true always adds --groups to cli args
         let groups_idx = cli.iter().position(|a| a == "--groups").unwrap();
         let groups_val = &cli[groups_idx + 1];
         assert!(

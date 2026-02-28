@@ -43,6 +43,7 @@ execute_raid_partitioning() {
 
         # 1. ESP partition on each disk (if UEFI) - NOT in RAID, 512MB
         if [ "$BOOT_MODE" = "UEFI" ]; then
+            log_cmd "sgdisk -n $efi_part_num:0:+512M -t $efi_part_num:$EFI_PARTITION_TYPE -c $efi_part_num:EFI $disk"
             sgdisk -n "$efi_part_num:0:+512M" -t "$efi_part_num:$EFI_PARTITION_TYPE" -c "$efi_part_num:EFI" "$disk" || error_exit "Failed to create ESP partition on $disk."
             current_start_mib=$((current_start_mib + 512))
         fi
@@ -50,16 +51,19 @@ execute_raid_partitioning() {
         # 2. Boot partition on each disk - NOT in RAID, 1GB ext4
         if [ "$BOOT_MODE" = "BIOS" ]; then
             # BIOS boot partition first
+            log_cmd "sgdisk -n 1:0:+1M -t 1:$BIOS_BOOT_PARTITION_TYPE -c 1:BIOSBOOT $disk"
             sgdisk -n "1:0:+1M" -t "1:$BIOS_BOOT_PARTITION_TYPE" -c "1:BIOSBOOT" "$disk" || error_exit "Failed to create BIOS boot partition on $disk."
             current_start_mib=$((current_start_mib + 1))
         fi
 
         # 3. Boot partition (for kernels) - NOT in RAID, standard Linux type
         local boot_part_num=$xbootldr_part_num
+        log_cmd "sgdisk -n $boot_part_num:0:+1024M -t $boot_part_num:$LINUX_PARTITION_TYPE -c $boot_part_num:BOOT $disk"
         sgdisk -n "$boot_part_num:0:+1024M" -t "$boot_part_num:$LINUX_PARTITION_TYPE" -c "$boot_part_num:BOOT" "$disk" || error_exit "Failed to create boot partition on $disk."
         current_start_mib=$((current_start_mib + 1024))
-        
+
         # 4. Data partition on each disk (takes rest of disk) - IN RAID
+        log_cmd "sgdisk -n $data_part_num:0:0 -t $data_part_num:$LINUX_PARTITION_TYPE $disk"
         sgdisk -n "$data_part_num:0:0" -t "$data_part_num:$LINUX_PARTITION_TYPE" "$disk" || error_exit "Failed to create data partition on $disk."
         
         sync_partitions "$disk"
@@ -76,6 +80,7 @@ execute_raid_partitioning() {
     done
     
     # Create RAID array
+    log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md0 ${data_partitions[*]}"
     mdadm --create --run --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
     
     # Wait for RAID to be ready

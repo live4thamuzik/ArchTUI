@@ -73,6 +73,7 @@ execute_lvm_luks_partitioning() {
     
     # LUKS partition for LVM (uses remaining space)
     log_info "Creating LUKS partition for LVM..."
+    log_cmd "sgdisk -n $part_num:0:0 -t $part_num:$LUKS_PARTITION_TYPE $INSTALL_DISK"
     sgdisk -n "$part_num:0:0" -t "$part_num:$LUKS_PARTITION_TYPE" "$INSTALL_DISK" || error_exit "Failed to create LUKS partition."
     sync_partitions "$INSTALL_DISK"
     local luks_dev
@@ -84,7 +85,9 @@ execute_lvm_luks_partitioning() {
     
     # Create LVM setup on encrypted device
     log_info "Setting up LVM on encrypted device..."
+    log_cmd "pvcreate /dev/mapper/cryptlvm"
     pvcreate /dev/mapper/cryptlvm || error_exit "Failed to create physical volume."
+    log_cmd "vgcreate archvg /dev/mapper/cryptlvm"
     vgcreate archvg /dev/mapper/cryptlvm || error_exit "Failed to create volume group."
     
     # Create logical volumes
@@ -97,19 +100,24 @@ execute_lvm_luks_partitioning() {
             log_warn "Root=Remaining with separate home: falling back to ${DEFAULT_ROOT_SIZE_MIB}MiB root"
             root_size_mib="$DEFAULT_ROOT_SIZE_MIB"
         fi
+        log_cmd "lvcreate -L ${root_size_mib}M -n root archvg"
         lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
 
         local home_size_mib
         home_size_mib=$(get_home_size_mib)
         if [[ "$home_size_mib" == "REMAINING" ]]; then
+            log_cmd "lvcreate -l 100%FREE -n home archvg"
             lvcreate -l 100%FREE -n home archvg || error_exit "Failed to create home logical volume."
         else
+            log_cmd "lvcreate -L ${home_size_mib}M -n home archvg"
             lvcreate -L "${home_size_mib}M" -n home archvg || error_exit "Failed to create home logical volume."
         fi
     else
         if [[ "$root_size_mib" == "REMAINING" ]]; then
+            log_cmd "lvcreate -l 100%FREE -n root archvg"
             lvcreate -l 100%FREE -n root archvg || error_exit "Failed to create root logical volume."
         else
+            log_cmd "lvcreate -L ${root_size_mib}M -n root archvg"
             lvcreate -L "${root_size_mib}M" -n root archvg || error_exit "Failed to create root logical volume."
         fi
     fi

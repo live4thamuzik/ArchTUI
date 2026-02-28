@@ -100,7 +100,7 @@ impl SecretFile {
         file.write_all(secret.as_bytes())?;
         file.sync_all()?; // Ensure written to disk (well, RAM)
 
-        log::debug!("SecretFile created: {:?} ({} bytes)", path, secret.len());
+        tracing::debug!("SecretFile created: {:?} ({} bytes)", path, secret.len());
 
         Ok(Self {
             path,
@@ -130,9 +130,9 @@ impl SecretFile {
 
         // Delete the file
         if let Err(e) = fs::remove_file(&self.path) {
-            log::warn!("Failed to remove keyfile {:?}: {}", self.path, e);
+            tracing::warn!("Failed to remove keyfile {:?}: {}", self.path, e);
         } else {
-            log::debug!("SecretFile securely wiped: {:?}", self.path);
+            tracing::debug!("SecretFile securely wiped: {:?}", self.path);
         }
     }
 }

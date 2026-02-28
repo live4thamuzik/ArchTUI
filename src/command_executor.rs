@@ -8,7 +8,7 @@
 use crate::process_guard::CommandProcessGroup;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
-use log::{debug, error};
+use tracing::{debug, error};
 
 /// Unique identifier for each command request/response pair.
 pub type CommandId = u64;

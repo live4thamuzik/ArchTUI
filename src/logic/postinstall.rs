@@ -111,11 +111,11 @@ pub fn install_aur_helper_safe(
     chroot_path: &Path,
 ) -> Result<(), String> {
     if helper == AurHelper::None {
-        log::info!("No AUR helper selected — skipping");
+        tracing::info!("No AUR helper selected — skipping");
         return Ok(());
     }
 
-    log::info!("Installing AUR helper: {} for user {}", helper, user);
+    tracing::info!("Installing AUR helper: {} for user {}", helper, user);
 
     let args = InstallAurHelperArgs {
         helper,
@@ -126,7 +126,7 @@ pub fn install_aur_helper_safe(
     match run_script_safe(&args) {
         Ok(output) => {
             if output.success {
-                log::info!("AUR helper {} installed successfully", helper);
+                tracing::info!("AUR helper {} installed successfully", helper);
                 Ok(())
             } else {
                 let msg = format!(
@@ -135,9 +135,9 @@ pub fn install_aur_helper_safe(
                     helper,
                     output.exit_code.unwrap_or(-1)
                 );
-                log::warn!("{}", msg);
+                tracing::warn!("{}", msg);
                 if !output.stderr.is_empty() {
-                    log::warn!("AUR stderr: {}", output.stderr.trim());
+                    tracing::warn!("AUR stderr: {}", output.stderr.trim());
                 }
                 Err(msg)
             }
@@ -148,7 +148,7 @@ pub fn install_aur_helper_safe(
                  user can install manually after reboot",
                 helper, e
             );
-            log::warn!("{}", msg);
+            tracing::warn!("{}", msg);
             Err(msg)
         }
     }
@@ -174,7 +174,7 @@ pub fn clone_dotfiles_safe(
     user: &str,
     branch: Option<&str>,
 ) -> Result<(), String> {
-    log::info!("Cloning dotfiles from {} for user {}", repo_url, user);
+    tracing::info!("Cloning dotfiles from {} for user {}", repo_url, user);
 
     let args = CloneDotfilesArgs {
         repo_url: repo_url.to_string(),
@@ -186,7 +186,7 @@ pub fn clone_dotfiles_safe(
     match run_script_safe(&args) {
         Ok(output) => {
             if output.success {
-                log::info!("Dotfiles cloned successfully for user {}", user);
+                tracing::info!("Dotfiles cloned successfully for user {}", user);
                 Ok(())
             } else {
                 let msg = format!(
@@ -194,9 +194,9 @@ pub fn clone_dotfiles_safe(
                      user can clone manually after reboot",
                     output.exit_code.unwrap_or(-1)
                 );
-                log::warn!("{}", msg);
+                tracing::warn!("{}", msg);
                 if !output.stderr.is_empty() {
-                    log::warn!("Dotfiles stderr: {}", output.stderr.trim());
+                    tracing::warn!("Dotfiles stderr: {}", output.stderr.trim());
                 }
                 Err(msg)
             }
@@ -207,7 +207,7 @@ pub fn clone_dotfiles_safe(
                  user can clone manually after reboot",
                 e
             );
-            log::warn!("{}", msg);
+            tracing::warn!("{}", msg);
             Err(msg)
         }
     }

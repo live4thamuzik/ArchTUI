@@ -68,7 +68,7 @@ pub fn verify_environment() -> SanityCheckResult {
     // Check optional binaries (just warn, don't add to missing)
     for binary in OPTIONAL_BINARIES {
         if !binary_exists(binary) {
-            log::debug!("Optional binary not found: {} (not required for TUI mode)", binary);
+            tracing::debug!("Optional binary not found: {} (not required for TUI mode)", binary);
         }
     }
 
@@ -138,7 +138,7 @@ fn get_package_for_binary(binary: &str) -> &'static str {
 /// Main entry point: verify environment and exit if checks fail
 /// Call this before initializing the TUI
 pub fn run_preflight_checks() {
-    log::debug!("Running pre-flight sanity checks...");
+    tracing::debug!("Running pre-flight sanity checks...");
 
     let result = verify_environment();
 
@@ -146,7 +146,7 @@ pub fn run_preflight_checks() {
         print_error_and_exit(&result);
     }
 
-    log::info!("Pre-flight checks passed: root={}, all binaries present", result.is_root);
+    tracing::info!("Pre-flight checks passed: root={}, all binaries present", result.is_root);
 }
 
 /// Skip root check (for development/testing)
@@ -159,13 +159,13 @@ pub fn should_skip_root_check() -> bool {
 
 /// Run pre-flight checks with optional root check skip
 pub fn run_preflight_checks_with_options(skip_root: bool) {
-    log::debug!("Running pre-flight sanity checks (skip_root={})...", skip_root);
+    tracing::debug!("Running pre-flight sanity checks (skip_root={})...", skip_root);
 
     let mut result = verify_environment();
 
     // Allow skipping root check for development
     if skip_root || should_skip_root_check() {
-        log::warn!("Root check skipped (ARCHTUI_SKIP_ROOT_CHECK=1)");
+        tracing::warn!("Root check skipped (ARCHTUI_SKIP_ROOT_CHECK=1)");
         result.is_root = true; // Pretend we're root
     }
 
@@ -173,7 +173,7 @@ pub fn run_preflight_checks_with_options(skip_root: bool) {
         print_error_and_exit(&result);
     }
 
-    log::info!("Pre-flight checks passed");
+    tracing::info!("Pre-flight checks passed");
 }
 
 #[cfg(test)]

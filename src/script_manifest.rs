@@ -267,9 +267,15 @@ impl ScriptManifest {
 
     /// Load a manifest from a JSON file
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, ManifestError> {
-        let content = std::fs::read_to_string(path)?;
+        let content = std::fs::read_to_string(&path)?;
         let manifest: Self = serde_json::from_str(&content)?;
         manifest.validate_structure()?;
+        tracing::debug!(
+            script = %manifest.script,
+            version = %manifest.version,
+            destructive = manifest.destructive,
+            "Manifest loaded"
+        );
         Ok(manifest)
     }
 
@@ -562,9 +568,11 @@ impl ManifestRegistry {
     /// Load all manifests from a directory
     pub fn load_from_directory(&mut self, dir: impl AsRef<Path>) -> Result<usize, ManifestError> {
         let dir = dir.as_ref();
+        tracing::info!(dir = %dir.display(), "Loading manifests from directory");
         let mut count = 0;
 
         if !dir.exists() {
+            tracing::warn!(dir = %dir.display(), "Manifest directory does not exist");
             return Ok(0);
         }
 
@@ -579,6 +587,7 @@ impl ManifestRegistry {
             }
         }
 
+        tracing::info!(count, "Manifests loaded successfully");
         Ok(count)
     }
 

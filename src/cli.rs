@@ -411,6 +411,7 @@ mod tests {
             "/path/to/config.json",
         ]);
         assert!(result.is_ok());
+        // SAFETY: asserted Ok above
         let cli = result.unwrap();
         match cli.command {
             Some(Commands::Install { config, .. }) => {
@@ -428,6 +429,7 @@ mod tests {
             "/path/to/config.json",
         ]);
         assert!(result.is_ok());
+        // SAFETY: asserted Ok above
         let cli = result.unwrap();
         match cli.command {
             Some(Commands::Validate { config }) => {

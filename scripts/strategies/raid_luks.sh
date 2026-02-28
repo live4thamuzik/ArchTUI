@@ -41,15 +41,23 @@ execute_raid_luks_partitioning() {
         
         if [[ "$PARTITION_TABLE" == "gpt" ]]; then
             # UEFI: ESP + XBOOTLDR + RAID member
+            log_cmd "sgdisk --zap-all $disk"
             sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
+            log_cmd "sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:$esp_type --change-name=1:ESP $disk"
             sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
+            log_cmd "sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:$xbootldr_type --change-name=2:XBOOTLDR $disk"
             sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$xbootldr_type" --change-name=2:XBOOTLDR "$disk" || error_exit "Failed to create XBOOTLDR on $disk"
+            log_cmd "sgdisk --new=3:0:0 --typecode=3:$LUKS_PARTITION_TYPE --change-name=3:RAID_MEMBER $disk"
             sgdisk --new=3:0:0 --typecode=3:"$LUKS_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member on $disk"
         else
             # BIOS: BIOS boot (EF02) + boot + RAID member
+            log_cmd "sgdisk --zap-all $disk"
             sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
+            log_cmd "sgdisk --new=1:0:+${BIOS_BOOT_PART_SIZE_MIB}MiB --typecode=1:$esp_type --change-name=1:BIOSBOOT $disk"
             sgdisk --new=1:0:+${BIOS_BOOT_PART_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:BIOSBOOT "$disk" || error_exit "Failed to create BIOS boot partition on $disk"
+            log_cmd "sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:$xbootldr_type --change-name=2:BOOT $disk"
             sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$xbootldr_type" --change-name=2:BOOT "$disk" || error_exit "Failed to create boot partition on $disk"
+            log_cmd "sgdisk --new=3:0:0 --typecode=3:$LUKS_PARTITION_TYPE --change-name=3:RAID_MEMBER $disk"
             sgdisk --new=3:0:0 --typecode=3:"$LUKS_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member partition on $disk"
         fi
         
@@ -60,7 +68,7 @@ execute_raid_luks_partitioning() {
     for disk in "${RAID_DEVICES[@]}"; do
         partprobe "$disk" || true
     done
-    udevadm settle --timeout=10 2>/dev/null || sleep 2
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out, falling back to sleep"; sleep 2; }
     
     # Create RAID arrays
     local raid_level="${RAID_LEVEL:-raid1}"
@@ -78,10 +86,12 @@ execute_raid_luks_partitioning() {
 
         # Create XBOOTLDR RAID1 array (always RAID1 for boot)
         log_info "Creating XBOOTLDR RAID1 array"
+        log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR ${XBOOTLDR_PARTS[*]}"
         mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
+        log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
         mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
         # Wait for RAID arrays to be ready
@@ -102,10 +112,12 @@ execute_raid_luks_partitioning() {
 
         # Create boot RAID1 array (always RAID1 for boot)
         log_info "Creating boot RAID1 array"
+        log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT ${BOOT_PARTS[*]}"
         mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
 
         # Create data RAID array
         log_info "Creating data RAID array"
+        log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
         mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
         # Wait for RAID arrays to be ready

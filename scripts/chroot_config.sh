@@ -443,6 +443,7 @@ configure_mkinitcpio() {
         fi
 
         # Regenerate initramfs
+        log_cmd "mkinitcpio -P"
         if ! mkinitcpio -P; then
             log_error "mkinitcpio failed — system may not boot"
             return 1
@@ -488,6 +489,7 @@ install_grub() {
         fi
 
         log_info "Installing GRUB for UEFI to $efi_dir"
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --recheck"
         grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --recheck || {
             log_error "GRUB installation failed"
             return 1
@@ -500,6 +502,7 @@ install_grub() {
             return 1
         fi
         log_info "Installing GRUB for BIOS to $bios_disk"
+        log_cmd "grub-install --target=i386-pc $bios_disk --recheck"
         grub-install --target=i386-pc "$bios_disk" --recheck || {
             log_error "GRUB installation failed"
             return 1
@@ -557,6 +560,7 @@ install_systemd_boot() {
         esp_path="/boot"
     fi
 
+    log_cmd "bootctl install --esp-path=$esp_path"
     bootctl install --esp-path="$esp_path" || {
         log_error "systemd-boot installation failed"
         return 1
@@ -780,6 +784,7 @@ WINEOF
 
     # Generate GRUB config
     mkdir -p /boot/grub
+    log_cmd "grub-mkconfig -o /boot/grub/grub.cfg"
     grub-mkconfig -o /boot/grub/grub.cfg || {
         log_error "grub-mkconfig failed — system may not boot correctly"
         return 1

@@ -165,7 +165,7 @@ impl PtyTerminal {
                         buffer.extend_from_slice(&buf[..n]);
                     }
                     Err(e) => {
-                        log::warn!("PTY read error: {}", e);
+                        tracing::warn!("PTY read error: {}", e);
                         // SAFETY: lock is never poisoned — no panic path while holding lock
                         *running.lock().unwrap() = false;
                         break;

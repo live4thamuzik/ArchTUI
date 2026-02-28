@@ -256,6 +256,7 @@ impl Default for Configuration {
 impl Configuration {
     /// Convert configuration to environment variables for the installer
     pub fn to_env_vars(&self) -> HashMap<String, String> {
+        tracing::debug!("Converting TUI configuration to environment variables");
         let mut env_vars = HashMap::new();
 
         // Map configuration options to environment variables by name (more maintainable)

@@ -12,7 +12,7 @@
 //! # Architecture
 //!
 //! - `PackageManager`: Main struct that owns the ALPM handle
-//! - `log_cb`: Routes ALPM log messages to `log::*` macros
+//! - `log_cb`: Routes ALPM log messages to `tracing::*` macros
 //! - `install_packages`: Runs a sync transaction on target packages
 //!
 //! # Feature Flag
@@ -70,7 +70,7 @@ impl PackageManager {
         // TRANSPARENCY REQUIREMENT: Wire up log callback
         handle.set_log_cb((), log_cb);
 
-        log::info!(
+        tracing::info!(
             "ALPM initialized: root={}, db_path={}",
             root.display(),
             db_path.display()
@@ -106,7 +106,7 @@ impl PackageManager {
                     .with_context(|| format!("Failed to add server {} to {}", server, repo.name))?;
             }
 
-            log::debug!(
+            tracing::debug!(
                 "Registered sync db: {} with {} servers",
                 repo.name,
                 repo.servers.len()
@@ -128,11 +128,11 @@ impl PackageManager {
     /// * `targets` - Package names to install
     pub fn install_packages(&mut self, targets: &[&str]) -> Result<()> {
         if targets.is_empty() {
-            log::warn!("install_packages called with empty target list");
+            tracing::warn!("install_packages called with empty target list");
             return Ok(());
         }
 
-        log::info!("Starting package installation: {:?}", targets);
+        tracing::info!("Starting package installation: {:?}", targets);
 
         // Refresh databases
         self.handle
@@ -140,7 +140,7 @@ impl PackageManager {
             .update(false)
             .context("Failed to update sync databases")?;
 
-        log::info!("Sync databases updated");
+        tracing::info!("Sync databases updated");
 
         // Verify all packages exist before starting transaction
         // Store (pkg_name, db_name) pairs as owned data to avoid borrow issues
@@ -151,7 +151,7 @@ impl PackageManager {
                 if db.pkg(*target).is_ok() {
                     pkg_locations.push(((*target).to_string(), db.name().to_string()));
                     found = true;
-                    log::debug!("Found {} in {}", target, db.name());
+                    tracing::debug!("Found {} in {}", target, db.name());
                     break;
                 }
             }
@@ -190,7 +190,7 @@ impl PackageManager {
                 let _ = self.handle.trans_release();
                 anyhow::bail!("Failed to add package to transaction: {}: {}", pkg_name, err_msg);
             }
-            log::info!("Queued for installation: {}", pkg_name);
+            tracing::info!("Queued for installation: {}", pkg_name);
         }
 
         // Prepare transaction (resolve dependencies)
@@ -201,11 +201,11 @@ impl PackageManager {
             anyhow::bail!("Transaction prepare failed: {}", err_msg);
         }
 
-        log::info!("Transaction prepared, resolving dependencies...");
+        tracing::info!("Transaction prepared, resolving dependencies...");
 
         // Log what will be installed
         for pkg in self.handle.trans_add() {
-            log::info!(
+            tracing::info!(
                 "Will install: {}-{} ({})",
                 pkg.name(),
                 pkg.version(),
@@ -220,14 +220,14 @@ impl PackageManager {
             anyhow::bail!("Transaction commit failed: {}", err_msg);
         }
 
-        log::info!("Transaction committed successfully");
+        tracing::info!("Transaction committed successfully");
 
         // Release transaction
         self.handle
             .trans_release()
             .context("Failed to release transaction")?;
 
-        log::info!("Package installation complete: {:?}", targets);
+        tracing::info!("Package installation complete: {:?}", targets);
 
         Ok(())
     }
@@ -256,16 +256,16 @@ fn log_cb(level: LogLevel, msg: &str, _: &mut ()) {
     let msg = msg.trim_end();
 
     if level.contains(LogLevel::ERROR) {
-        log::error!("[ALPM] {}", msg);
+        tracing::error!("[ALPM] {}", msg);
     } else if level.contains(LogLevel::WARNING) {
-        log::warn!("[ALPM] {}", msg);
+        tracing::warn!("[ALPM] {}", msg);
     } else if level.contains(LogLevel::DEBUG) {
-        log::debug!("[ALPM] {}", msg);
+        tracing::debug!("[ALPM] {}", msg);
     } else if level.contains(LogLevel::FUNCTION) {
-        log::trace!("[ALPM] {}", msg);
+        tracing::trace!("[ALPM] {}", msg);
     } else {
         // Default to info for any other level
-        log::info!("[ALPM] {}", msg);
+        tracing::info!("[ALPM] {}", msg);
     }
 }
 

@@ -101,6 +101,14 @@ pub fn get_tools_category_description(selection: usize) -> Vec<Line<'static>> {
                 "  • Install AUR Helper - paru/yay setup",
                 Styles::text_secondary(),
             )]),
+            Line::from(vec![Span::styled(
+                "  • Rebuild Initramfs  - mkinitcpio -P",
+                Styles::text_secondary(),
+            )]),
+            Line::from(vec![Span::styled(
+                "  • View Install Logs  - Browse log files",
+                Styles::text_secondary(),
+            )]),
         ],
         2 => vec![
             Line::from(""),
@@ -230,6 +238,8 @@ pub fn get_system_tool_description(selection: usize) -> Vec<Line<'static>> {
         4 => system_info_description(),
         5 => enable_services_description(),
         6 => install_aur_helper_description(),
+        7 => rebuild_initramfs_description(),
+        8 => view_install_logs_description(),
         _ => back_to_menu_description("Tools Menu"),
     }
 }
@@ -1214,6 +1224,83 @@ fn install_aur_helper_description() -> Vec<Line<'static>> {
                 Styles::warning(),
             ),
         ]),
+    ]
+}
+
+fn rebuild_initramfs_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Rebuild Initramfs",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Rebuild the initramfs via mkinitcpio -P inside a chroot.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Use this to recover from:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Failed mkinitcpio during installation",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Modified /etc/mkinitcpio.conf",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Changed HOOKS or MODULES",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ⚠️  ", Styles::warning()),
+            Span::styled(
+                "Requires system mounted at /mnt with bind mounts",
+                Styles::warning(),
+            ),
+        ]),
+    ]
+}
+
+fn view_install_logs_description() -> Vec<Line<'static>> {
+    vec![
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  View Install Logs",
+            Styles::category(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  View ArchTUI installation logs for diagnostics.",
+            Styles::text(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Available logs:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • Master log    - /var/log/archtui/install-*-master.log",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
+            "  • TUI debug log - /tmp/archtui.log",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Shows the most recent log by default.",
+            Styles::text_secondary(),
+        )]),
     ]
 }
 
