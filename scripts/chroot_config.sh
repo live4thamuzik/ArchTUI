@@ -1240,7 +1240,7 @@ set -e
 cd /tmp/aur_build
 timeout 60 git clone https://aur.archlinux.org/paru.git
 cd paru
-makepkg -si --noconfirm
+timeout 300 makepkg -si --noconfirm
 AUREOF
             ;;
         "yay")
@@ -1252,7 +1252,7 @@ set -e
 cd /tmp/aur_build
 timeout 60 git clone https://aur.archlinux.org/yay.git
 cd yay
-makepkg -si --noconfirm
+timeout 300 makepkg -si --noconfirm
 AUREOF
             ;;
         "pikaur")
@@ -1263,7 +1263,7 @@ set -e
 cd /tmp/aur_build
 timeout 60 git clone https://aur.archlinux.org/pikaur.git
 cd pikaur
-makepkg -si --noconfirm
+timeout 300 makepkg -si --noconfirm
 AUREOF
             ;;
         *)
@@ -1328,7 +1328,7 @@ install_additional_packages() {
                 chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
                 trap 'rm -f /etc/sudoers.d/temp-aur-packages' RETURN
 
-                runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some AUR packages may have failed to install"
+                timeout 600 runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some AUR packages may have failed to install"
             fi
         else
             log_warn "AUR packages requested but no AUR helper available"

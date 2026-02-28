@@ -358,8 +358,8 @@ create_partition_table() {
     
     # Use sgdisk for scripting (non-interactive)
     # --zap-all clears table, -o creates new GPT
-    sgdisk --zap-all "$disk"
-    sgdisk -o "$disk"
+    sgdisk --zap-all "$disk" || { log_error "Failed to zap partition table on $disk"; return 1; }
+    sgdisk -o "$disk" || { log_error "Failed to create new GPT on $disk"; return 1; }
     
     partprobe "$disk" || true
 }
@@ -374,12 +374,13 @@ create_esp_partition() {
     
     log_info "Creating ESP partition: $part_device (${size_mib}MiB)"
     
-    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${EFI_PARTITION_TYPE}" -c "${part_num}:EFI" "$disk"
+    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${EFI_PARTITION_TYPE}" -c "${part_num}:EFI" "$disk" || { log_error "sgdisk failed creating ESP on $disk"; return 1; }
 
     # Wait for udev to create device node
     udevadm settle --timeout=10 2>/dev/null || sleep 2
 
-    mkfs.fat -F32 "$part_device"
+    [[ -b "$part_device" ]] || { log_error "ESP device $part_device not found after partitioning"; return 1; }
+    mkfs.fat -F32 "$part_device" || { log_error "Failed to format ESP $part_device as FAT32"; return 1; }
 }
 
 create_boot_partition() {
@@ -393,13 +394,14 @@ create_boot_partition() {
     log_info "Creating boot partition: $part_device (${size_mib}MiB, ext4)"
 
     # Use standard Linux partition type (8300), NOT XBOOTLDR (EA00)
-    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:BOOT" "$disk"
+    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:BOOT" "$disk" || { log_error "sgdisk failed creating boot partition on $disk"; return 1; }
 
     # Wait for udev to create device node
     udevadm settle --timeout=10 2>/dev/null || sleep 2
 
     # Format as ext4 (standard for /boot) — -F prevents interactive prompt
-    mkfs.ext4 -F -L BOOT "$part_device"
+    [[ -b "$part_device" ]] || { log_error "Boot device $part_device not found after partitioning"; return 1; }
+    mkfs.ext4 -F -L BOOT "$part_device" || { log_error "Failed to format boot partition $part_device as ext4"; return 1; }
 }
 
 create_bios_boot_partition() {
@@ -407,7 +409,7 @@ create_bios_boot_partition() {
     local part_num="$2"
     
     log_info "Creating BIOS Boot partition: partition $part_num"
-    sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" -c "${part_num}:BIOSBOOT" "$disk"
+    sgdisk -n "${part_num}:0:+${BIOS_BOOT_PART_SIZE_MIB}M" -t "${part_num}:${BIOS_BOOT_PARTITION_TYPE}" -c "${part_num}:BIOSBOOT" "$disk" || { log_error "sgdisk failed creating BIOS boot partition on $disk"; return 1; }
     # Wait for udev to create device node
     udevadm settle --timeout=10 2>/dev/null || sleep 2
 }
@@ -422,11 +424,12 @@ create_swap_partition() {
     
     log_info "Creating Swap partition: $part_device (${size_mib}MiB)"
     
-    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${SWAP_PARTITION_TYPE}" -c "${part_num}:SWAP" "$disk"
+    sgdisk -n "${part_num}:0:+${size_mib}M" -t "${part_num}:${SWAP_PARTITION_TYPE}" -c "${part_num}:SWAP" "$disk" || { log_error "sgdisk failed creating swap partition on $disk"; return 1; }
 
     # Wait for udev to create device node
     udevadm settle --timeout=10 2>/dev/null || sleep 2
 
+    [[ -b "$part_device" ]] || { log_error "Swap device $part_device not found after partitioning"; return 1; }
     mkswap "$part_device" || { log_error "Failed to format swap on $part_device"; return 1; }
     swapon "$part_device" || log_warn "Failed to activate swap on $part_device"
 }
@@ -442,11 +445,12 @@ create_root_partition() {
     log_info "Creating Root partition: $part_device ($filesystem)"
     
     # Use remaining space (0)
-    sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$disk"
+    sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:ROOT" "$disk" || { log_error "sgdisk failed creating root partition on $disk"; return 1; }
 
     # Wait for udev to create device node
     udevadm settle --timeout=10 2>/dev/null || sleep 2
 
+    [[ -b "$part_device" ]] || { log_error "Root device $part_device not found after partitioning"; return 1; }
     format_filesystem "$part_device" "$filesystem"
 }
 
@@ -462,11 +466,12 @@ create_home_partition() {
     
     # This implies root didn't take 100%. Logic for splitting root/home should be in strategy.
     # For now, assumes we are appending to disk.
-    sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$disk"
+    sgdisk -n "${part_num}:0:0" -t "${part_num}:${LINUX_PARTITION_TYPE}" -c "${part_num}:HOME" "$disk" || { log_error "sgdisk failed creating home partition on $disk"; return 1; }
 
     # Wait for udev to create device node
     udevadm settle --timeout=10 2>/dev/null || sleep 2
 
+    [[ -b "$part_device" ]] || { log_error "Home device $part_device not found after partitioning"; return 1; }
     format_filesystem "$part_device" "$filesystem"
 }
 
