@@ -9,7 +9,7 @@
 mod state;
 
 // Re-export state types for external use
-pub use state::{AppMode, AppState, ToolDialogState, ToolParam, ToolParameter};
+pub use state::{AppMode, AppState, ManualPartitionMap, ToolDialogState, ToolParam, ToolParameter};
 
 use crate::components::confirm_dialog::{
     start_install_confirm, ConfirmDialogState,
@@ -702,6 +702,48 @@ impl App {
                         }
                         _ => {}
                     }
+                }
+
+                // Check if we're in the manual partition assignment flow
+                if self.input_handler.manual_assign_state.is_some() {
+                    if let Some(map) = self.input_handler.advance_manual_assignment(value) {
+                        let mut state = self.lock_state();
+                        state.manual_partition_map = Some(map);
+                        state.status_message =
+                            "Partition assignments complete. Ready to install."
+                                .to_string();
+                    } else {
+                        // More steps remain — update status hint
+                        if let Some(ref assign) = self.input_handler.manual_assign_state {
+                            let hint = match assign.step {
+                                crate::input::ManualAssignStep::Root => {
+                                    "Select ROOT partition"
+                                }
+                                crate::input::ManualAssignStep::RootFs => {
+                                    "Select ROOT filesystem"
+                                }
+                                crate::input::ManualAssignStep::Boot => {
+                                    "Select BOOT partition"
+                                }
+                                crate::input::ManualAssignStep::Efi => {
+                                    "Select EFI partition"
+                                }
+                                crate::input::ManualAssignStep::Home => {
+                                    "Select HOME partition (or skip)"
+                                }
+                                crate::input::ManualAssignStep::HomeFs => {
+                                    "Select HOME filesystem"
+                                }
+                                crate::input::ManualAssignStep::Swap => {
+                                    "Select SWAP partition (or skip)"
+                                }
+                            };
+                            let mut state = self.lock_state();
+                            state.status_message =
+                                format!("Assign partitions: {}", hint);
+                        }
+                    }
+                    return Ok(false);
                 }
 
                 // User confirmed input, update configuration
@@ -2086,6 +2128,37 @@ impl App {
             summary.push(format!("  {}={}", key, display));
         }
 
+        // Show manual partition assignments if applicable
+        {
+            let state = self.lock_state();
+            let strategy = state
+                .config
+                .options
+                .iter()
+                .find(|opt| opt.name == "Partitioning Strategy")
+                .map(|opt| opt.get_value())
+                .unwrap_or_default();
+            if strategy == "manual" {
+                summary.push(String::new());
+                summary.push("=== Manual Partition Assignments ===".to_string());
+                if let Some(ref map) = state.manual_partition_map {
+                    summary.push(format!("  Root:  {} ({})", map.root, map.root_fs));
+                    summary.push(format!("  Boot:  {} (ext4)", map.boot));
+                    if !map.efi.is_empty() {
+                        summary.push(format!("  EFI:   {} (vfat)", map.efi));
+                    }
+                    if !map.home.is_empty() {
+                        summary.push(format!("  Home:  {} ({})", map.home, map.home_fs));
+                    }
+                    if !map.swap.is_empty() {
+                        summary.push(format!("  Swap:  {}", map.swap));
+                    }
+                } else {
+                    summary.push("  [NOT ASSIGNED] — select Disk to run cfdisk and assign partitions".to_string());
+                }
+            }
+        }
+
         let mut state = self.lock_state();
         state.dry_run_summary = Some(summary);
         state.dry_run_scroll_offset = 0;
@@ -2140,6 +2213,26 @@ impl App {
     /// Start the installation process
     fn start_installation(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         info!("Starting installation process");
+
+        // Block manual strategy without partition assignments
+        {
+            let state = self.lock_state();
+            let strategy = state
+                .config
+                .options
+                .iter()
+                .find(|opt| opt.name == "Partitioning Strategy")
+                .map(|opt| opt.get_value())
+                .unwrap_or_default();
+            if strategy == "manual" && state.manual_partition_map.is_none() {
+                drop(state);
+                let mut state = self.lock_state();
+                state.status_message =
+                    "Manual strategy requires partition assignments. Select Disk first to run cfdisk and assign partitions."
+                        .to_string();
+                return Ok(());
+            }
+        }
 
         // Check if we need to save the config before starting
         if let Some(save_path) = &self.save_config_path {
@@ -2866,13 +2959,21 @@ impl App {
                     .validate_manual_partitioning(&disk_paths, &boot_mode)
                 {
                     Ok(layout) => {
-                        { let mut state = self.lock_state();
-                            state.status_message = format!(
-                                "Manual partitioning validated successfully! Found {} partitions with {} table",
-                                layout.partitions.len(),
-                                layout.table_type
-                            );
-                        }
+                        // Launch partition assignment dialog sequence
+                        let partitions: Vec<(String, String)> = layout
+                            .partitions
+                            .iter()
+                            .map(|p| (p.name.clone(), p.size.clone()))
+                            .collect();
+                        let is_uefi = boot_mode.to_lowercase() == "uefi"
+                            || self.is_uefi_supported();
+
+                        self.input_handler
+                            .start_manual_assignment(partitions, is_uefi);
+
+                        let mut state = self.lock_state();
+                        state.status_message =
+                            "Assign partitions: select ROOT partition".to_string();
                     }
                     Err(e) => {
                         { let mut state = self.lock_state();
@@ -3111,6 +3212,9 @@ impl App {
                     }
                 }
                 "Partitioning Strategy" => {
+                    // Clear stale manual partition assignments on strategy change
+                    state.manual_partition_map = None;
+
                     let is_plain_raid = (value == "auto_raid" || value == "auto_raid_luks")
                         && !value.contains("lvm");
 
@@ -3297,6 +3401,10 @@ impl App {
                             theme_option.value = "none".to_string();
                         }
                     }
+                }
+                "Disk" => {
+                    // Clear stale manual partition assignments on disk change
+                    state.manual_partition_map = None;
                 }
                 "Git Repository" => {
                     if value.to_lowercase() == "no" {

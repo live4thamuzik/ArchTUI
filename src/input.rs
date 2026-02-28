@@ -32,6 +32,7 @@ pub struct PartitionLayout {
     /// List of detected partitions
     pub partitions: Vec<PartitionInfo>,
     /// Partition table type (gpt or dos)
+    #[allow(dead_code)] // Used for validation context, not directly consumed
     pub table_type: String,
     /// Whether an EFI System Partition exists
     #[allow(dead_code)] // WIP: Manual partitioning validation
@@ -42,6 +43,35 @@ pub struct PartitionLayout {
     /// Whether a root partition exists
     #[allow(dead_code)] // WIP: Manual partitioning validation
     pub has_root: bool,
+}
+
+/// Steps in the manual partition assignment dialog sequence
+#[derive(Debug, Clone)]
+pub enum ManualAssignStep {
+    Root,
+    RootFs,
+    Boot,
+    Efi,
+    Home,
+    HomeFs,
+    Swap,
+}
+
+/// State for the manual partition assignment dialog sequence
+#[derive(Debug, Clone)]
+pub struct ManualAssignState {
+    /// Detected partitions: (device_path, size)
+    pub partitions: Vec<(String, String)>,
+    /// Current step in the assignment sequence
+    pub step: ManualAssignStep,
+    pub root: String,
+    pub root_fs: String,
+    pub boot: String,
+    pub efi: String,
+    pub home: String,
+    pub home_fs: String,
+    pub swap: String,
+    pub is_uefi: bool,
 }
 
 /// Types of input dialogs
@@ -619,6 +649,8 @@ pub enum InputResult {
 pub struct InputHandler {
     /// Current active dialog
     pub current_dialog: Option<InputDialog>,
+    /// Manual partition assignment state machine (active during assignment flow)
+    pub manual_assign_state: Option<ManualAssignState>,
 }
 
 impl Default for InputHandler {
@@ -632,6 +664,7 @@ impl InputHandler {
     pub fn new() -> Self {
         Self {
             current_dialog: None,
+            manual_assign_state: None,
         }
     }
 
@@ -1664,6 +1697,234 @@ impl InputHandler {
             }
         } else {
             0
+        }
+    }
+
+    /// Start the manual partition assignment dialog sequence
+    ///
+    /// After cfdisk creates partitions, this opens a sequence of selection dialogs
+    /// so the user assigns partition roles (root, boot, efi, home, swap).
+    pub fn start_manual_assignment(
+        &mut self,
+        partitions: Vec<(String, String)>,
+        is_uefi: bool,
+    ) {
+        let assign_state = ManualAssignState {
+            partitions: partitions.clone(),
+            step: ManualAssignStep::Root,
+            root: String::new(),
+            root_fs: String::new(),
+            boot: String::new(),
+            efi: String::new(),
+            home: String::new(),
+            home_fs: String::new(),
+            swap: String::new(),
+            is_uefi,
+        };
+
+        // Build options for root selection (all partitions)
+        let options: Vec<String> = partitions
+            .iter()
+            .map(|(dev, size)| format!("{} ({})", dev, size))
+            .collect();
+
+        self.start_selection(
+            "manual_assign_root".to_string(),
+            options,
+            String::new(),
+        );
+
+        self.manual_assign_state = Some(assign_state);
+    }
+
+    /// Advance the manual partition assignment state machine
+    ///
+    /// Called when the user selects a value in an assignment dialog.
+    /// Opens the next dialog, or returns `Some(ManualPartitionMap)` when complete.
+    pub fn advance_manual_assignment(
+        &mut self,
+        value: String,
+    ) -> Option<crate::app::ManualPartitionMap> {
+        let state = self.manual_assign_state.as_mut()?;
+
+        // Extract device path from formatted "device (size)" string
+        let device = value.split_whitespace().next().unwrap_or("").to_string();
+
+        match state.step {
+            ManualAssignStep::Root => {
+                state.root = device;
+                state.step = ManualAssignStep::RootFs;
+
+                // Filesystem selection for root
+                let fs_options = vec![
+                    "ext4".to_string(),
+                    "btrfs".to_string(),
+                    "xfs".to_string(),
+                ];
+                self.start_selection(
+                    "manual_assign_root_fs".to_string(),
+                    fs_options,
+                    String::new(),
+                );
+                None
+            }
+            ManualAssignStep::RootFs => {
+                state.root_fs = value;
+                state.step = ManualAssignStep::Boot;
+
+                // Boot partition selection — exclude already-assigned root
+                let options: Vec<String> = state
+                    .partitions
+                    .iter()
+                    .filter(|(dev, _)| *dev != state.root)
+                    .map(|(dev, size)| format!("{} ({})", dev, size))
+                    .collect();
+                self.start_selection(
+                    "manual_assign_boot".to_string(),
+                    options,
+                    String::new(),
+                );
+                None
+            }
+            ManualAssignStep::Boot => {
+                state.boot = device;
+
+                if state.is_uefi {
+                    state.step = ManualAssignStep::Efi;
+
+                    // EFI partition selection — exclude root and boot
+                    let options: Vec<String> = state
+                        .partitions
+                        .iter()
+                        .filter(|(dev, _)| *dev != state.root && *dev != state.boot)
+                        .map(|(dev, size)| format!("{} ({})", dev, size))
+                        .collect();
+                    self.start_selection(
+                        "manual_assign_efi".to_string(),
+                        options,
+                        String::new(),
+                    );
+                } else {
+                    // BIOS — skip EFI, go to home
+                    state.step = ManualAssignStep::Home;
+
+                    let mut options: Vec<String> = state
+                        .partitions
+                        .iter()
+                        .filter(|(dev, _)| *dev != state.root && *dev != state.boot)
+                        .map(|(dev, size)| format!("{} ({})", dev, size))
+                        .collect();
+                    options.insert(0, "None (skip)".to_string());
+                    self.start_selection(
+                        "manual_assign_home".to_string(),
+                        options,
+                        String::new(),
+                    );
+                }
+                None
+            }
+            ManualAssignStep::Efi => {
+                state.efi = device;
+                state.step = ManualAssignStep::Home;
+
+                // Home partition selection — exclude assigned partitions
+                let assigned = [&state.root, &state.boot, &state.efi];
+                let mut options: Vec<String> = state
+                    .partitions
+                    .iter()
+                    .filter(|(dev, _)| !assigned.contains(&dev))
+                    .map(|(dev, size)| format!("{} ({})", dev, size))
+                    .collect();
+                options.insert(0, "None (skip)".to_string());
+                self.start_selection(
+                    "manual_assign_home".to_string(),
+                    options,
+                    String::new(),
+                );
+                None
+            }
+            ManualAssignStep::Home => {
+                if value == "None (skip)" || device.is_empty() {
+                    // No home partition
+                    state.home = String::new();
+                    state.home_fs = String::new();
+                    state.step = ManualAssignStep::Swap;
+
+                    // Skip to swap
+                    let assigned = [&state.root, &state.boot, &state.efi];
+                    let mut options: Vec<String> = state
+                        .partitions
+                        .iter()
+                        .filter(|(dev, _)| !assigned.contains(&dev) && !dev.is_empty())
+                        .map(|(dev, size)| format!("{} ({})", dev, size))
+                        .collect();
+                    options.insert(0, "None (skip)".to_string());
+                    self.start_selection(
+                        "manual_assign_swap".to_string(),
+                        options,
+                        String::new(),
+                    );
+                } else {
+                    state.home = device;
+                    state.step = ManualAssignStep::HomeFs;
+
+                    // Filesystem selection for home
+                    let fs_options = vec![
+                        "ext4".to_string(),
+                        "btrfs".to_string(),
+                        "xfs".to_string(),
+                    ];
+                    self.start_selection(
+                        "manual_assign_home_fs".to_string(),
+                        fs_options,
+                        String::new(),
+                    );
+                }
+                None
+            }
+            ManualAssignStep::HomeFs => {
+                state.home_fs = value;
+                state.step = ManualAssignStep::Swap;
+
+                // Swap partition selection — exclude assigned partitions
+                let assigned = [&state.root, &state.boot, &state.efi, &state.home];
+                let mut options: Vec<String> = state
+                    .partitions
+                    .iter()
+                    .filter(|(dev, _)| !assigned.contains(&dev) && !dev.is_empty())
+                    .map(|(dev, size)| format!("{} ({})", dev, size))
+                    .collect();
+                options.insert(0, "None (skip)".to_string());
+                self.start_selection(
+                    "manual_assign_swap".to_string(),
+                    options,
+                    String::new(),
+                );
+                None
+            }
+            ManualAssignStep::Swap => {
+                if value == "None (skip)" || device.is_empty() {
+                    state.swap = String::new();
+                } else {
+                    state.swap = device;
+                }
+
+                // All assignments complete — build the map
+                let map = crate::app::ManualPartitionMap {
+                    root: state.root.clone(),
+                    root_fs: state.root_fs.clone(),
+                    boot: state.boot.clone(),
+                    efi: state.efi.clone(),
+                    home: state.home.clone(),
+                    home_fs: state.home_fs.clone(),
+                    swap: state.swap.clone(),
+                };
+
+                // Clean up state machine
+                self.manual_assign_state = None;
+
+                Some(map)
+            }
         }
     }
 

@@ -180,6 +180,28 @@ impl Installer {
         let log_level = std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
         env_vars.insert("LOG_LEVEL".to_string(), log_level.clone());
 
+        // Inject manual partition assignments (if set)
+        {
+            // SAFETY: unwrap is acceptable — poisoned mutex means main thread panicked,
+            // so failing here is correct
+            let state = self.app_state.lock().unwrap();
+            if let Some(ref map) = state.manual_partition_map {
+                env_vars.insert("MANUAL_ROOT_PARTITION".to_string(), map.root.clone());
+                env_vars.insert("MANUAL_ROOT_FS".to_string(), map.root_fs.clone());
+                env_vars.insert("MANUAL_BOOT_PARTITION".to_string(), map.boot.clone());
+                if !map.efi.is_empty() {
+                    env_vars.insert("MANUAL_EFI_PARTITION".to_string(), map.efi.clone());
+                }
+                if !map.home.is_empty() {
+                    env_vars.insert("MANUAL_HOME_PARTITION".to_string(), map.home.clone());
+                    env_vars.insert("MANUAL_HOME_FS".to_string(), map.home_fs.clone());
+                }
+                if !map.swap.is_empty() {
+                    env_vars.insert("MANUAL_SWAP_PARTITION".to_string(), map.swap.clone());
+                }
+            }
+        }
+
         // --- Master Log File ---
         // Create a persistent log that captures everything the TUI sees (and more),
         // surviving the 500-line ringbuffer cap. ANSI-stripped, timestamped.
