@@ -154,7 +154,9 @@ main() {
         log_success "Multilib repository enabled in chroot"
     fi
 
+    install_aur_helper || log_warn "AUR helper installation failed — continuing"
     install_desktop_environment
+    install_de_aur_packages || log_warn "DE AUR packages had issues — continuing"
     install_display_manager
     install_gpu_drivers || log_warn "GPU driver installation failed — continuing"
 
@@ -162,7 +164,6 @@ main() {
     log_info "=== Phase 4: Additional Software ==="
     echo "PROGRESS: Installing additional software"
 
-    install_aur_helper || log_warn "AUR helper installation failed — continuing"
     install_flatpak || log_warn "Flatpak installation failed — continuing"
     install_additional_packages || log_warn "Additional packages had issues — continuing"
     configure_plymouth || log_warn "Plymouth configuration failed — continuing"
@@ -1069,7 +1070,7 @@ install_desktop_environment() {
             install_packages "i3 Window Manager" i3-wm i3status i3lock dmenu rofi alacritty
             ;;
         "hyprland")
-            install_packages "Hyprland" hyprland waybar swaylock swayidle wlogout \
+            install_packages "Hyprland" hyprland waybar swaylock swayidle \
                 rofi-wayland grim slurp kitty xdg-desktop-portal-hyprland
             ;;
         "sway")
@@ -1094,6 +1095,43 @@ install_desktop_environment() {
     esac
 
     log_success "Desktop environment installation complete"
+}
+
+install_de_aur_packages() {
+    local de="${DESKTOP_ENVIRONMENT:-none}"
+    de="${de,,}"
+
+    local -a aur_packages=()
+
+    case "$de" in
+        "hyprland")
+            aur_packages=(wlogout)
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    if [[ ${#aur_packages[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    local helper="${AUR_HELPER:-none}"
+    helper="${helper,,}"
+
+    if [[ "$helper" == "none" || -z "$helper" ]] || ! command -v "$helper" &>/dev/null; then
+        log_warn "DE '$de' has AUR packages (${aur_packages[*]}) but no AUR helper available — skipping"
+        return 0
+    fi
+
+    log_info "Installing AUR packages for $de: ${aur_packages[*]}"
+
+    local sudoers_drop="/etc/sudoers.d/temp-de-aur"
+    echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
+    chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
+    trap 'rm -f /etc/sudoers.d/temp-de-aur' RETURN
+
+    timeout 600 runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some DE AUR packages may have failed to install"
 }
 
 install_display_manager() {
