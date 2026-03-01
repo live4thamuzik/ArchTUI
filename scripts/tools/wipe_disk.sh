@@ -89,8 +89,8 @@ is_ssd() {
 
     if [[ -f "$rotational_file" ]]; then
         local rotational
-        rotational=$(cat "$rotational_file")
-        if [[ "$rotational" == "0" ]]; then
+        rotational=$(tr -d '[:space:]' < "$rotational_file")
+        if [[ "${rotational:-1}" == "0" ]]; then
             return 0  # SSD (non-rotational)
         else
             return 1  # HDD (rotational)
@@ -109,16 +109,16 @@ is_ssd() {
 # Get human-readable disk type
 get_disk_type() {
     local device="$1"
+    local ret
 
-    if is_ssd "$device"; then
+    is_ssd "$device" && ret=0 || ret=$?
+
+    if [[ $ret -eq 0 ]]; then
         echo "SSD"
+    elif [[ $ret -eq 1 ]]; then
+        echo "HDD"
     else
-        local ret=$?
-        if [[ $ret -eq 1 ]]; then
-            echo "HDD"
-        else
-            echo "Unknown"
-        fi
+        echo "Unknown"
     fi
 }
 
@@ -138,8 +138,8 @@ supports_secure_erase() {
 
     if [[ -f "$discard_file" ]]; then
         local discard_max
-        discard_max=$(cat "$discard_file")
-        if [[ "$discard_max" -gt 0 ]]; then
+        discard_max=$(tr -d '[:space:]' < "$discard_file")
+        if [[ "${discard_max:-0}" -gt 0 ]]; then
             return 0
         fi
     fi
@@ -229,7 +229,8 @@ wipe_hdd_secure() {
     # 3. For HDDs, zeros are sufficient for non-forensic purposes
     # 4. Using urandom would waste system entropy
     log_cmd "dd if=/dev/zero of=$disk bs=4M conv=fsync"
-    dd if=/dev/zero of="$disk" bs=4M status=progress conv=fsync
+    # dd returns non-zero when it hits end-of-device (No space left), which is expected
+    dd if=/dev/zero of="$disk" bs=4M status=progress conv=fsync 2>&1 || true
 
     # Inform kernel of changes
     log_cmd "partprobe $disk"
