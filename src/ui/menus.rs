@@ -183,7 +183,7 @@ pub fn render_disk_tools_menu_in_area(
         .split(chunks[2]);
 
     let menu_items = [
-        ("💾", "Partition Disk", "cfdisk"),
+        ("💾", "Partition Disk", "GPT/MBR/cfdisk"),
         ("📀", "Format Partition", "mkfs"),
         ("🗑️ ", "Wipe Disk", "secure erase"),
         ("🔍", "Check Disk Health", "SMART"),

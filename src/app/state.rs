@@ -121,6 +121,9 @@ pub struct AppState {
     pub log_level: String,
     /// Manual partitioning assignments (set via TUI dialogs after cfdisk)
     pub manual_partition_map: Option<ManualPartitionMap>,
+    /// Device path stored across the disk layout → action → layout loop.
+    /// Set after DiskSelection, consumed when returning from FloatingOutput.
+    pub pending_tool_device: Option<String>,
 }
 
 /// Application operating modes
@@ -191,6 +194,7 @@ impl Default for AppState {
             installer_pid: None,
             log_level: std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string()),
             manual_partition_map: None,
+            pending_tool_device: None,
         }
     }
 }

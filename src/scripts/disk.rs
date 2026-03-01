@@ -270,16 +270,143 @@ impl ScriptArgs for MountPartitionArgs {
 }
 
 // ============================================================================
-// Manual Partition
+// Table Type (GPT / MBR)
 // ============================================================================
 
-/// Type-safe arguments for `scripts/tools/manual_partition.sh`.
+/// Partition table type for `create-table` action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableType {
+    /// GUID Partition Table (modern, supports > 2TB, required for UEFI)
+    Gpt,
+    /// Master Boot Record (legacy BIOS)
+    Mbr,
+}
+
+impl TableType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TableType::Gpt => "gpt",
+            TableType::Mbr => "mbr",
+        }
+    }
+}
+
+impl std::fmt::Display for TableType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for TableType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "gpt" => Ok(TableType::Gpt),
+            "mbr" | "dos" | "msdos" => Ok(TableType::Mbr),
+            _ => Err(format!("Invalid table type '{}'. Valid: gpt, mbr", s)),
+        }
+    }
+}
+
+// ============================================================================
+// Partition Type (sgdisk type codes)
+// ============================================================================
+
+/// Partition type codes for `add-partition` action.
+///
+/// Maps to sgdisk type codes (GPT) and sfdisk type IDs (MBR).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartitionType {
+    /// EFI System Partition (sgdisk EF00, MBR ef)
+    Efi,
+    /// BIOS Boot Partition (sgdisk EF02, MBR — N/A, GPT only)
+    BiosBoot,
+    /// Linux filesystem (sgdisk 8300, MBR 83)
+    Linux,
+    /// Linux swap (sgdisk 8200, MBR 82)
+    Swap,
+    /// Linux LVM (sgdisk 8E00, MBR 8e)
+    Lvm,
+    /// Linux LUKS (sgdisk 8309, MBR 83)
+    Luks,
+}
+
+#[allow(dead_code)] // Used by bash script mapping + tests
+impl PartitionType {
+    /// sgdisk type code for GPT tables.
+    pub fn as_sgdisk_code(&self) -> &'static str {
+        match self {
+            PartitionType::Efi => "EF00",
+            PartitionType::BiosBoot => "EF02",
+            PartitionType::Linux => "8300",
+            PartitionType::Swap => "8200",
+            PartitionType::Lvm => "8E00",
+            PartitionType::Luks => "8309",
+        }
+    }
+
+    /// sfdisk type ID for MBR tables.
+    pub fn as_mbr_id(&self) -> &'static str {
+        match self {
+            PartitionType::Efi => "ef",
+            PartitionType::BiosBoot => "ef", // BIOS boot is GPT-only; best MBR approximation
+            PartitionType::Linux => "83",
+            PartitionType::Swap => "82",
+            PartitionType::Lvm => "8e",
+            PartitionType::Luks => "83",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            PartitionType::Efi => "EFI System",
+            PartitionType::BiosBoot => "BIOS Boot",
+            PartitionType::Linux => "Linux",
+            PartitionType::Swap => "Linux Swap",
+            PartitionType::Lvm => "Linux LVM",
+            PartitionType::Luks => "Linux LUKS",
+        }
+    }
+}
+
+impl std::fmt::Display for PartitionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_sgdisk_code())
+    }
+}
+
+impl std::str::FromStr for PartitionType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "EF00" | "EFI" | "EFI SYSTEM" => Ok(PartitionType::Efi),
+            "EF02" | "BIOS BOOT" => Ok(PartitionType::BiosBoot),
+            "8300" | "LINUX" => Ok(PartitionType::Linux),
+            "8200" | "LINUX SWAP" | "SWAP" => Ok(PartitionType::Swap),
+            "8E00" | "LINUX LVM" | "LVM" => Ok(PartitionType::Lvm),
+            "8309" | "LINUX LUKS" | "LUKS" => Ok(PartitionType::Luks),
+            _ => Err(format!(
+                "Invalid partition type '{}'. Valid: EF00/EFI, EF02/BIOS Boot, 8300/Linux, 8200/Swap, 8E00/LVM, 8309/LUKS",
+                s
+            )),
+        }
+    }
+}
+
+// ============================================================================
+// Manual Partition (cfdisk mode)
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/manual_partition.sh --action cfdisk`.
 ///
 /// # Field to Flag Mapping
 ///
-/// | Rust Field | CLI Flag   | Required |
-/// |------------|------------|----------|
-/// | `device`   | `--device` | Yes      |
+/// | Rust Field | CLI Flag     | Required |
+/// |------------|--------------|----------|
+/// | `device`   | `--device`   | Yes      |
+/// | (action)   | `--action`   | Yes (always "cfdisk") |
 #[derive(Debug, Clone)]
 pub struct ManualPartitionArgs {
     /// Disk device path (e.g., `/dev/sda`).
@@ -288,11 +415,16 @@ pub struct ManualPartitionArgs {
 
 impl ScriptArgs for ManualPartitionArgs {
     fn to_cli_args(&self) -> Vec<String> {
-        vec!["--device".to_string(), self.device.display().to_string()]
+        vec![
+            "--device".to_string(),
+            self.device.display().to_string(),
+            "--action".to_string(),
+            "cfdisk".to_string(),
+        ]
     }
 
     fn get_env_vars(&self) -> Vec<(String, String)> {
-        vec![]
+        vec![("CONFIRM_MANUAL_PARTITION".to_string(), "yes".to_string())]
     }
 
     fn script_name(&self) -> &'static str {
@@ -300,6 +432,181 @@ impl ScriptArgs for ManualPartitionArgs {
     }
 
     /// Manual partitioning is DESTRUCTIVE - modifies partition table.
+    fn is_destructive(&self) -> bool {
+        true
+    }
+}
+
+// ============================================================================
+// Create Partition Table
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/manual_partition.sh --action create-table`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field    | CLI Flag       | Required |
+/// |---------------|----------------|----------|
+/// | `device`      | `--device`     | Yes      |
+/// | `table_type`  | `--table-type` | Yes      |
+/// | (action)      | `--action`     | Yes (always "create-table") |
+/// | `confirm`     | N/A (env)      | Sets `CONFIRM_MANUAL_PARTITION=yes` |
+#[derive(Debug, Clone)]
+pub struct CreateTableArgs {
+    /// Disk device path (e.g., `/dev/sda`).
+    pub device: PathBuf,
+    /// Partition table type (GPT or MBR).
+    pub table_type: TableType,
+    /// Whether to set `CONFIRM_MANUAL_PARTITION=yes`.
+    pub confirm: bool,
+}
+
+impl ScriptArgs for CreateTableArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        vec![
+            "--device".to_string(),
+            self.device.display().to_string(),
+            "--action".to_string(),
+            "create-table".to_string(),
+            "--table-type".to_string(),
+            self.table_type.as_str().to_string(),
+        ]
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        if self.confirm {
+            vec![("CONFIRM_MANUAL_PARTITION".to_string(), "yes".to_string())]
+        } else {
+            vec![]
+        }
+    }
+
+    fn script_name(&self) -> &'static str {
+        "manual_partition.sh"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+}
+
+// ============================================================================
+// Add Partition
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/manual_partition.sh --action add-partition`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field       | CLI Flag    | Required |
+/// |------------------|-------------|----------|
+/// | `device`         | `--device`  | Yes      |
+/// | `number`         | `--number`  | Yes      |
+/// | `size`           | `--size`    | Yes      |
+/// | `partition_type` | `--type`    | Yes      |
+/// | `label`          | `--label`   | No       |
+/// | `confirm`        | N/A (env)   | Sets `CONFIRM_MANUAL_PARTITION=yes` |
+#[derive(Debug, Clone)]
+pub struct AddPartitionArgs {
+    /// Disk device path (e.g., `/dev/sda`).
+    pub device: PathBuf,
+    /// Partition number (1-128 for GPT, 1-4 for MBR primary).
+    pub number: u8,
+    /// Partition size (e.g., "512M", "50G", "remaining").
+    pub size: String,
+    /// Partition type code.
+    pub partition_type: PartitionType,
+    /// Optional partition label (GPT only).
+    pub label: Option<String>,
+    /// Whether to set `CONFIRM_MANUAL_PARTITION=yes`.
+    pub confirm: bool,
+}
+
+impl ScriptArgs for AddPartitionArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        let mut args = vec![
+            "--device".to_string(),
+            self.device.display().to_string(),
+            "--action".to_string(),
+            "add-partition".to_string(),
+            "--number".to_string(),
+            self.number.to_string(),
+            "--size".to_string(),
+            self.size.clone(),
+            "--type".to_string(),
+            self.partition_type.as_sgdisk_code().to_string(),
+        ];
+        if let Some(ref label) = self.label {
+            args.push("--label".to_string());
+            args.push(label.clone());
+        }
+        args
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        if self.confirm {
+            vec![("CONFIRM_MANUAL_PARTITION".to_string(), "yes".to_string())]
+        } else {
+            vec![]
+        }
+    }
+
+    fn script_name(&self) -> &'static str {
+        "manual_partition.sh"
+    }
+
+    fn is_destructive(&self) -> bool {
+        true
+    }
+}
+
+// ============================================================================
+// Delete Partition
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/manual_partition.sh --action delete-partition`.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field | CLI Flag    | Required |
+/// |------------|-------------|----------|
+/// | `device`   | `--device`  | Yes      |
+/// | `number`   | `--number`  | Yes      |
+/// | `confirm`  | N/A (env)   | Sets `CONFIRM_MANUAL_PARTITION=yes` |
+#[derive(Debug, Clone)]
+pub struct DeletePartitionArgs {
+    /// Disk device path (e.g., `/dev/sda`).
+    pub device: PathBuf,
+    /// Partition number to delete.
+    pub number: u8,
+    /// Whether to set `CONFIRM_MANUAL_PARTITION=yes`.
+    pub confirm: bool,
+}
+
+impl ScriptArgs for DeletePartitionArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        vec![
+            "--device".to_string(),
+            self.device.display().to_string(),
+            "--action".to_string(),
+            "delete-partition".to_string(),
+            "--number".to_string(),
+            self.number.to_string(),
+        ]
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        if self.confirm {
+            vec![("CONFIRM_MANUAL_PARTITION".to_string(), "yes".to_string())]
+        } else {
+            vec![]
+        }
+    }
+
+    fn script_name(&self) -> &'static str {
+        "manual_partition.sh"
+    }
+
     fn is_destructive(&self) -> bool {
         true
     }
@@ -711,5 +1018,247 @@ mod tests {
             options: None,
         };
         assert_eq!(args.script_name(), "mount_partitions.sh");
+    }
+
+    // ========================================================================
+    // TableType Tests
+    // ========================================================================
+
+    #[test]
+    fn test_table_type_from_str() {
+        assert_eq!("gpt".parse::<TableType>().unwrap(), TableType::Gpt);
+        assert_eq!("GPT".parse::<TableType>().unwrap(), TableType::Gpt);
+        assert_eq!("mbr".parse::<TableType>().unwrap(), TableType::Mbr);
+        assert_eq!("MBR".parse::<TableType>().unwrap(), TableType::Mbr);
+        assert_eq!("dos".parse::<TableType>().unwrap(), TableType::Mbr);
+        assert_eq!("msdos".parse::<TableType>().unwrap(), TableType::Mbr);
+    }
+
+    #[test]
+    fn test_table_type_from_str_invalid() {
+        assert!("invalid".parse::<TableType>().is_err());
+    }
+
+    #[test]
+    fn test_table_type_display() {
+        assert_eq!(TableType::Gpt.to_string(), "gpt");
+        assert_eq!(TableType::Mbr.to_string(), "mbr");
+    }
+
+    // ========================================================================
+    // PartitionType Tests
+    // ========================================================================
+
+    #[test]
+    fn test_partition_type_sgdisk_codes() {
+        assert_eq!(PartitionType::Efi.as_sgdisk_code(), "EF00");
+        assert_eq!(PartitionType::BiosBoot.as_sgdisk_code(), "EF02");
+        assert_eq!(PartitionType::Linux.as_sgdisk_code(), "8300");
+        assert_eq!(PartitionType::Swap.as_sgdisk_code(), "8200");
+        assert_eq!(PartitionType::Lvm.as_sgdisk_code(), "8E00");
+        assert_eq!(PartitionType::Luks.as_sgdisk_code(), "8309");
+    }
+
+    #[test]
+    fn test_partition_type_mbr_ids() {
+        assert_eq!(PartitionType::Efi.as_mbr_id(), "ef");
+        assert_eq!(PartitionType::Linux.as_mbr_id(), "83");
+        assert_eq!(PartitionType::Swap.as_mbr_id(), "82");
+        assert_eq!(PartitionType::Lvm.as_mbr_id(), "8e");
+    }
+
+    #[test]
+    fn test_partition_type_from_str() {
+        assert_eq!("EF00".parse::<PartitionType>().unwrap(), PartitionType::Efi);
+        assert_eq!("EFI".parse::<PartitionType>().unwrap(), PartitionType::Efi);
+        assert_eq!("EFI System".parse::<PartitionType>().unwrap(), PartitionType::Efi);
+        assert_eq!("8300".parse::<PartitionType>().unwrap(), PartitionType::Linux);
+        assert_eq!("Linux".parse::<PartitionType>().unwrap(), PartitionType::Linux);
+        assert_eq!("Swap".parse::<PartitionType>().unwrap(), PartitionType::Swap);
+        assert_eq!("LVM".parse::<PartitionType>().unwrap(), PartitionType::Lvm);
+        assert_eq!("LUKS".parse::<PartitionType>().unwrap(), PartitionType::Luks);
+        assert_eq!("BIOS Boot".parse::<PartitionType>().unwrap(), PartitionType::BiosBoot);
+    }
+
+    #[test]
+    fn test_partition_type_from_str_invalid() {
+        assert!("invalid".parse::<PartitionType>().is_err());
+    }
+
+    #[test]
+    fn test_partition_type_display_name() {
+        assert_eq!(PartitionType::Efi.display_name(), "EFI System");
+        assert_eq!(PartitionType::BiosBoot.display_name(), "BIOS Boot");
+        assert_eq!(PartitionType::Linux.display_name(), "Linux");
+        assert_eq!(PartitionType::Swap.display_name(), "Linux Swap");
+        assert_eq!(PartitionType::Lvm.display_name(), "Linux LVM");
+        assert_eq!(PartitionType::Luks.display_name(), "Linux LUKS");
+    }
+
+    // ========================================================================
+    // ManualPartitionArgs Tests (cfdisk mode)
+    // ========================================================================
+
+    #[test]
+    fn test_manual_partition_args_includes_action_cfdisk() {
+        let args = ManualPartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+        };
+        let cli = args.to_cli_args();
+        assert_eq!(cli, vec!["--device", "/dev/sda", "--action", "cfdisk"]);
+    }
+
+    #[test]
+    fn test_manual_partition_args_sets_confirm_env() {
+        let args = ManualPartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+        };
+        let env = args.get_env_vars();
+        assert_eq!(env.len(), 1);
+        assert_eq!(env[0].0, "CONFIRM_MANUAL_PARTITION");
+        assert_eq!(env[0].1, "yes");
+    }
+
+    // ========================================================================
+    // CreateTableArgs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_create_table_args_gpt() {
+        let args = CreateTableArgs {
+            device: PathBuf::from("/dev/sda"),
+            table_type: TableType::Gpt,
+            confirm: true,
+        };
+        let cli = args.to_cli_args();
+        assert_eq!(
+            cli,
+            vec!["--device", "/dev/sda", "--action", "create-table", "--table-type", "gpt"]
+        );
+        let env = args.get_env_vars();
+        assert_eq!(env[0].0, "CONFIRM_MANUAL_PARTITION");
+    }
+
+    #[test]
+    fn test_create_table_args_mbr() {
+        let args = CreateTableArgs {
+            device: PathBuf::from("/dev/sda"),
+            table_type: TableType::Mbr,
+            confirm: false,
+        };
+        let cli = args.to_cli_args();
+        assert!(cli.contains(&"mbr".to_string()));
+        assert!(args.get_env_vars().is_empty());
+    }
+
+    #[test]
+    fn test_create_table_script_name() {
+        let args = CreateTableArgs {
+            device: PathBuf::from("/dev/sda"),
+            table_type: TableType::Gpt,
+            confirm: true,
+        };
+        assert_eq!(args.script_name(), "manual_partition.sh");
+        assert!(args.is_destructive());
+    }
+
+    // ========================================================================
+    // AddPartitionArgs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_add_partition_args_efi() {
+        let args = AddPartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+            number: 1,
+            size: "512M".to_string(),
+            partition_type: PartitionType::Efi,
+            label: Some("EFI".to_string()),
+            confirm: true,
+        };
+        let cli = args.to_cli_args();
+        assert_eq!(cli[0], "--device");
+        assert_eq!(cli[1], "/dev/sda");
+        assert_eq!(cli[2], "--action");
+        assert_eq!(cli[3], "add-partition");
+        assert_eq!(cli[4], "--number");
+        assert_eq!(cli[5], "1");
+        assert_eq!(cli[6], "--size");
+        assert_eq!(cli[7], "512M");
+        assert_eq!(cli[8], "--type");
+        assert_eq!(cli[9], "EF00");
+        assert_eq!(cli[10], "--label");
+        assert_eq!(cli[11], "EFI");
+    }
+
+    #[test]
+    fn test_add_partition_args_no_label() {
+        let args = AddPartitionArgs {
+            device: PathBuf::from("/dev/nvme0n1"),
+            number: 2,
+            size: "50G".to_string(),
+            partition_type: PartitionType::Linux,
+            label: None,
+            confirm: true,
+        };
+        let cli = args.to_cli_args();
+        assert_eq!(cli.len(), 10); // No --label pair
+        assert_eq!(cli[1], "/dev/nvme0n1");
+        assert_eq!(cli[9], "8300");
+    }
+
+    #[test]
+    fn test_add_partition_script_name() {
+        let args = AddPartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+            number: 1,
+            size: "512M".to_string(),
+            partition_type: PartitionType::Efi,
+            label: None,
+            confirm: true,
+        };
+        assert_eq!(args.script_name(), "manual_partition.sh");
+        assert!(args.is_destructive());
+    }
+
+    // ========================================================================
+    // DeletePartitionArgs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_delete_partition_args() {
+        let args = DeletePartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+            number: 3,
+            confirm: true,
+        };
+        let cli = args.to_cli_args();
+        assert_eq!(
+            cli,
+            vec!["--device", "/dev/sda", "--action", "delete-partition", "--number", "3"]
+        );
+        let env = args.get_env_vars();
+        assert_eq!(env[0].0, "CONFIRM_MANUAL_PARTITION");
+    }
+
+    #[test]
+    fn test_delete_partition_no_confirm() {
+        let args = DeletePartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+            number: 1,
+            confirm: false,
+        };
+        assert!(args.get_env_vars().is_empty());
+    }
+
+    #[test]
+    fn test_delete_partition_script_name() {
+        let args = DeletePartitionArgs {
+            device: PathBuf::from("/dev/sda"),
+            number: 1,
+            confirm: true,
+        };
+        assert_eq!(args.script_name(), "manual_partition.sh");
+        assert!(args.is_destructive());
     }
 }
