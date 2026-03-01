@@ -115,12 +115,12 @@ log_info "🧪 Test 1: Filesystem Integrity Check"
 echo "--------------------------------------------------"
 
 # Check if device is mounted
-mount_point=$(mount | grep "$DEVICE" | awk '{print $3}' | head -1)
+mount_point=$(mount | grep -F "$DEVICE" | awk '{print $3}' | head -1 || true)
 if [[ -n "$mount_point" ]]; then
     log_info "Device is mounted at: $mount_point"
-    
+
     # Check filesystem type
-    fs_type=$(mount | grep "$DEVICE" | awk '{print $5}' | head -1)
+    fs_type=$(mount | grep -F "$DEVICE" | awk '{print $5}' | head -1 || true)
     log_info "Filesystem type: $fs_type"
     
     # Run appropriate filesystem check
@@ -215,32 +215,29 @@ if command -v dd >/dev/null 2>&1; then
     read_speed=$(dd if="$DEVICE" of=/dev/null bs=1M count=1 2>&1 | grep -o '[0-9.]* MB/s' | tail -1 || echo "unknown")
     echo "  Read speed: $read_speed"
     
-    # Test write speed if device is not mounted (to avoid data corruption)
-    if [[ -z "$mount_point" ]]; then
-        log_info "Testing write performance (safe test)..."
-        # Create a small test file and measure write speed
-        test_file="/tmp/disk_test_$$"
-        if dd if=/dev/zero of="$test_file" bs=1M count=1 2>/dev/null; then
-            write_speed=$(dd if="$test_file" of="$DEVICE" bs=1M count=1 2>&1 | grep -o '[0-9.]* MB/s' | tail -1 || echo "unknown")
-            echo "  Write speed: $write_speed"
-            rm -f "$test_file"
-        else
-            echo "  Write speed: Test skipped (device access issue)"
-        fi
+    # Write speed test — only safe on mounted filesystems via temp file
+    if [[ -n "$mount_point" ]]; then
+        log_info "Testing write performance (temp file on mounted filesystem)..."
+        test_file="${mount_point}/.disk_health_test_$$"
+        write_speed=$(dd if=/dev/zero of="$test_file" bs=1M count=10 conv=fsync 2>&1 | grep -o '[0-9.]* MB/s' | tail -1 || echo "unknown")
+        echo "  Write speed: $write_speed"
+        rm -f "$test_file"
     else
-        echo "  Write speed: Test skipped (device is mounted)"
+        echo "  Write speed: Test skipped (device not mounted)"
     fi
     
     # Overall performance assessment
     if [[ "$read_speed" != "unknown" ]]; then
-        speed_num=$(echo "$read_speed" | grep -o '[0-9.]*' | head -1)
-        if (( $(echo "$speed_num > 50" | bc -l 2>/dev/null || echo "0") )); then
-            log_success "✅ Performance: GOOD"
-        elif (( $(echo "$speed_num > 10" | bc -l 2>/dev/null || echo "0") )); then
-            log_warning "⚠️  Performance: SLOW"
+        speed_num=$(echo "$read_speed" | grep -o '[0-9.]*' | head -1 || true)
+        speed_num="${speed_num:-0}"
+        speed_num=$(echo "$speed_num" | tr -d '[:space:]')
+        if (( $(echo "${speed_num} > 50" | bc -l 2>/dev/null || echo "0") )); then
+            log_success "Performance: GOOD"
+        elif (( $(echo "${speed_num} > 10" | bc -l 2>/dev/null || echo "0") )); then
+            log_warning "Performance: SLOW"
             echo "  Disk may be aging or experiencing issues"
         else
-            log_error "❌ Performance: VERY SLOW"
+            log_error "Performance: VERY SLOW"
             echo "  Disk may have serious issues"
         fi
     fi
@@ -260,7 +257,7 @@ if command -v smartctl >/dev/null 2>&1; then
         log_info "SMART is supported on this device"
         
         # Get overall health
-        health_status=$(smartctl -H "$DEVICE" 2>/dev/null | grep "SMART overall-health self-assessment test result" || echo "")
+        health_status=$(smartctl -H "$DEVICE" 2>/dev/null | grep "SMART overall-health self-assessment test result" || true)
         if [[ "$health_status" == *"PASSED"* ]]; then
             log_success "✅ SMART Health: GOOD"
         elif [[ "$health_status" == *"FAILED"* ]]; then
@@ -273,7 +270,7 @@ if command -v smartctl >/dev/null 2>&1; then
         # Check critical attributes if detailed mode
         if [[ "$DETAILED" == true ]]; then
             log_info "Critical SMART Attributes:"
-            smartctl -A "$DEVICE" 2>/dev/null | grep -E "(Reallocated_Sector|Current_Pending_Sector|Offline_Uncorrectable)" | sed 's/^/  /'
+            smartctl -A "$DEVICE" 2>/dev/null | grep -E "(Reallocated_Sector|Current_Pending_Sector|Offline_Uncorrectable)" | sed 's/^/  /' || true
         fi
     else
         log_info "SMART not supported on this device"
@@ -297,7 +294,7 @@ issues=0
 warnings=0
 
 # Check filesystem results (simplified assessment)
-if mount | grep -q "$DEVICE"; then
+if mount | grep -qF "$DEVICE"; then
     echo "✅ Device is properly mounted and accessible"
 else
     echo "ℹ️  Device is not mounted (normal for some devices)"
@@ -308,7 +305,7 @@ if command -v dd >/dev/null 2>&1; then
     echo "✅ Performance test completed"
 else
     echo "⚠️  Performance test skipped (dd not available)"
-    ((warnings++))
+    ((warnings++)) || true
 fi
 
 # Check bad blocks results
@@ -316,7 +313,7 @@ if command -v badblocks >/dev/null 2>&1; then
     echo "✅ Bad blocks scan completed"
 else
     echo "⚠️  Bad blocks scan skipped (badblocks not available)"
-    ((warnings++))
+    ((warnings++)) || true
 fi
 
 # SMART assessment
