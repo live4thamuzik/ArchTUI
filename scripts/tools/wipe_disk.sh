@@ -339,8 +339,8 @@ DISK_TYPE=$(get_disk_type "$DISK")
 log_info "Target disk: $DISK ($DISK_SIZE, $DISK_TYPE)"
 
 # Check if any partitions are mounted
-MOUNTED_PARTS=$(lsblk -n -o MOUNTPOINT "$DISK" 2>/dev/null | grep -v "^$" | wc -l || echo "0")
-if [[ "$MOUNTED_PARTS" -gt 0 ]]; then
+MOUNTED_PARTS=$(lsblk -n -o MOUNTPOINT "$DISK" 2>/dev/null | grep -cv "^$" || true)
+if [[ "${MOUNTED_PARTS:-0}" -gt 0 ]]; then
     error_exit "Disk $DISK has mounted partitions. Unmount before wiping."
 fi
 
