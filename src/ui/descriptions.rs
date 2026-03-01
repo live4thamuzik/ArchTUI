@@ -276,46 +276,57 @@ fn partition_disk_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  Partition Disk (cfdisk)",
+            "  Partition Disk (GPT/MBR/cfdisk)",
             Styles::category(),
         )]),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  Interactive partition editor for creating, deleting,",
+            "  Create partition tables and manage partitions.",
             Styles::text(),
         )]),
         Line::from(vec![Span::styled(
-            "  and resizing disk partitions.",
+            "  Shows disk layout before any action.",
             Styles::text(),
         )]),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  Usage:",
+            "  Actions:",
             Style::default()
                 .fg(Colors::SUCCESS)
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            "  • Use arrow keys to navigate partitions",
+            "  • Create Table  - Initialize GPT or MBR",
             Styles::text_secondary(),
         )]),
         Line::from(vec![Span::styled(
-            "  • [New] to create a new partition",
+            "  • Add Partition  - Set size, type, label",
             Styles::text_secondary(),
         )]),
         Line::from(vec![Span::styled(
-            "  • [Delete] to remove a partition",
+            "  • Delete Partition - Remove by number",
             Styles::text_secondary(),
         )]),
         Line::from(vec![Span::styled(
-            "  • [Write] to save changes to disk",
+            "  • cfdisk         - Interactive editor",
+            Styles::text_secondary(),
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Partition types:",
+            Style::default()
+                .fg(Colors::SUCCESS)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(vec![Span::styled(
+            "  EFI, BIOS Boot, Linux, Swap, LVM, LUKS",
             Styles::text_secondary(),
         )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  ⚠️  ", Styles::error()),
             Span::styled(
-                "Warning: Changes are permanent after [Write]",
+                "Warning: Partition changes are permanent",
                 Styles::error(),
             ),
         ]),

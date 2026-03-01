@@ -27,7 +27,10 @@ use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 use crate::script_manifest::ManifestRegistry;
 use crate::script_traits::{is_dry_run, shell_safe, ScriptArgs};
 use crate::scripts::config::{GenFstabArgs, UserAddArgs};
-use crate::scripts::disk::{CheckDiskHealthArgs, FormatPartitionArgs, WipeDiskArgs, WipeMethod};
+use crate::scripts::disk::{
+    AddPartitionArgs, CheckDiskHealthArgs, CreateTableArgs, DeletePartitionArgs,
+    FormatPartitionArgs, ManualPartitionArgs, WipeDiskArgs, WipeMethod,
+};
 use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
 use crate::scripts::network::{MirrorSortMethod, NetworkDiagnosticsArgs, TestNetworkArgs, UpdateMirrorsArgs};
 use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
@@ -349,6 +352,27 @@ impl App {
         }
         self.pty_terminal = None;
 
+        // Check if cfdisk exit should loop back to disk layout
+        let pending_device = {
+            let state = self.lock_state();
+            let tool_name = state.embedded_terminal.as_ref().map(|t| t.tool_name.clone());
+            if tool_name.as_deref() == Some("manual_partition") {
+                state.pending_tool_device.clone()
+            } else {
+                None
+            }
+        };
+
+        if let Some(device) = pending_device {
+            // cfdisk completed → show updated disk layout
+            let mut state = self.lock_state();
+            state.embedded_terminal = None;
+            state.current_tool = Some("manual_partition".to_string());
+            drop(state);
+            self.show_disk_layout(&device);
+            return Ok(());
+        }
+
         // Return to previous mode
         let mut state = self.lock_state();
         if let Some(terminal_state) = state.embedded_terminal.take() {
@@ -639,67 +663,14 @@ impl App {
                             self.execute_health_tool_with_disk(value)?;
                             return Ok(false);
                         }
-                        "format_partition" => {
-                            // Open ToolDialog with device pre-filled for filesystem selection
-                            let parameters = Self::get_tool_parameters("format_partition");
-                            let mut param_values: Vec<String> = parameters
-                                .iter()
-                                .map(|p| match &p.param_type {
-                                    ToolParameter::Selection(options, default_idx) => {
-                                        options.get(*default_idx).cloned().unwrap_or_default()
-                                    }
-                                    _ => String::new(),
-                                })
-                                .collect();
-                            // Extract device path from "/dev/sda (128G) info..."
+                        "manual_partition" | "format_partition" | "wipe_disk" => {
+                            // All three disk tools: show layout first, then proceed to action
                             let device = value.split_whitespace().next().unwrap_or(&value).to_string();
-                            param_values[0] = device;
-                            let mut state = self.lock_state();
-                            if state.pre_dialog_mode.is_none() {
-                                state.pre_dialog_mode = Some(AppMode::DiskTools);
+                            {
+                                let mut state = self.lock_state();
+                                state.pending_tool_device = Some(device.clone());
                             }
-                            state.current_tool = Some("format_partition".to_string());
-                            state.tool_dialog = Some(ToolDialogState {
-                                tool_name: "format_partition".to_string(),
-                                parameters,
-                                current_param: 1, // Skip device, start at filesystem
-                                param_values,
-                                is_executing: false,
-                            });
-                            state.mode = AppMode::ToolDialog;
-                            state.status_message = "Select filesystem type for formatting".to_string();
-                            return Ok(false);
-                        }
-                        "wipe_disk" => {
-                            // Open ToolDialog with device pre-filled for method selection
-                            let parameters = Self::get_tool_parameters("wipe_disk");
-                            let mut param_values: Vec<String> = parameters
-                                .iter()
-                                .map(|p| match &p.param_type {
-                                    ToolParameter::Selection(options, default_idx) => {
-                                        options.get(*default_idx).cloned().unwrap_or_default()
-                                    }
-                                    ToolParameter::Boolean(v) => v.to_string(),
-                                    _ => String::new(),
-                                })
-                                .collect();
-                            // Extract device path from "/dev/sda (128G) info..."
-                            let device = value.split_whitespace().next().unwrap_or(&value).to_string();
-                            param_values[0] = device;
-                            let mut state = self.lock_state();
-                            if state.pre_dialog_mode.is_none() {
-                                state.pre_dialog_mode = Some(AppMode::DiskTools);
-                            }
-                            state.current_tool = Some("wipe_disk".to_string());
-                            state.tool_dialog = Some(ToolDialogState {
-                                tool_name: "wipe_disk".to_string(),
-                                parameters,
-                                current_param: 1, // Skip device, start at method
-                                param_values,
-                                is_executing: false,
-                            });
-                            state.mode = AppMode::ToolDialog;
-                            state.status_message = "Select wipe method for disk".to_string();
+                            self.show_disk_layout(&device);
                             return Ok(false);
                         }
                         _ => {}
@@ -757,16 +728,62 @@ impl App {
         // Handle floating output mode
         if current_mode == AppMode::FloatingOutput {
             match key_event.code {
-                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('b') | KeyCode::Char('B') => {
-                    // Dismiss floating output and return to previous mode
+                KeyCode::Enter => {
                     let mut state = self.lock_state();
                     if let Some(output) = state.floating_output.take() {
                         if !output.complete {
-                            // Tool still running — terminate registered child processes
                             if let Ok(mut registry) = ChildRegistry::global().lock() {
                                 registry.terminate_current(Duration::from_secs(3));
                             }
                         }
+                        // Check if we're in the disk layout → action loop
+                        let pending_device = state.pending_tool_device.clone();
+                        let tool = state.current_tool.clone();
+                        if let (Some(device), Some(ref tool_name)) = (pending_device, &tool) {
+                            match tool_name.as_str() {
+                                "manual_partition" => {
+                                    // Enter = correct disk → show action menu
+                                    drop(state);
+                                    self.show_partition_action_menu(&device);
+                                    return Ok(false);
+                                }
+                                "format_partition" => {
+                                    // Enter = correct disk → open format ToolDialog
+                                    drop(state);
+                                    self.open_format_dialog_for_device(&device);
+                                    return Ok(false);
+                                }
+                                "wipe_disk" => {
+                                    // Enter = correct disk → open wipe ToolDialog
+                                    drop(state);
+                                    self.open_wipe_dialog_for_device(&device);
+                                    return Ok(false);
+                                }
+                                "partition_create_table" | "partition_add" | "partition_delete" => {
+                                    // Action completed → loop back: show updated layout
+                                    state.current_tool = Some("manual_partition".to_string());
+                                    drop(state);
+                                    self.show_disk_layout(&device);
+                                    return Ok(false);
+                                }
+                                _ => {}
+                            }
+                        }
+                        // Default: return to previous mode
+                        state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
+                        state.current_tool = None;
+                    }
+                }
+                KeyCode::Esc | KeyCode::Char('b') | KeyCode::Char('B') => {
+                    // Dismiss floating output and return to DiskTools (or previous mode)
+                    let mut state = self.lock_state();
+                    if let Some(output) = state.floating_output.take() {
+                        if !output.complete {
+                            if let Ok(mut registry) = ChildRegistry::global().lock() {
+                                registry.terminate_current(Duration::from_secs(3));
+                            }
+                        }
+                        state.pending_tool_device = None;
                         state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
                         state.current_tool = None;
                     }
@@ -787,7 +804,6 @@ impl App {
                         if output.scroll_offset < max {
                             output.scroll_offset += 1;
                         }
-                        // Re-enable auto-scroll when user reaches the bottom
                         if output.scroll_offset >= max {
                             output.auto_scroll = true;
                         }
@@ -1508,8 +1524,13 @@ impl App {
             AppMode::DiskTools => {
                 match selection {
                     0 => {
-                        // Partition Disk - Create dialog for device selection
-                        self.create_tool_dialog("manual_partition")?;
+                        // Partition Disk - Use disk selection dialog (then show layout)
+                        self.input_handler.start_disk_selection("".to_string());
+                        let mut state = self.lock_state();
+                        state.current_tool = Some("manual_partition".to_string());
+                        state.status_message =
+                            "Select disk to partition (Enter to select, Esc to cancel)"
+                                .to_string();
                     }
                     1 => {
                         // Format Partition - Use disk selection dialog
@@ -1770,7 +1791,10 @@ impl App {
                 if let Some(ref tool_name) = state.current_tool {
                     match tool_name.as_str() {
                         "format_partition" | "wipe_disk" | "health" | "mount"
-                        | "manual_partition" | "encrypt_device" => {
+                        | "manual_partition" | "encrypt_device"
+                        | "partition_create_table" | "partition_add"
+                        | "partition_delete" | "partition_action_menu" => {
+                            state.pending_tool_device = None;
                             state.mode = AppMode::DiskTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
@@ -1845,8 +1869,10 @@ impl App {
             AppMode::FloatingOutput => {
                 // Dismiss floating output and return to previous mode
                 if let Some(_output) = state.floating_output.take() {
+                    state.pending_tool_device = None;
                     state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
                     state.tools_menu_selection = 0;
+                    state.current_tool = None;
                     state.status_message =
                         "Arch Linux Tools - System repair and administration".to_string();
                 }
@@ -4045,6 +4071,109 @@ impl App {
                 param_type: ToolParameter::Text("".to_string()),
                 required: true,
             }],
+            "partition_create_table" => vec![
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Disk device (pre-filled from selection)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "table_type".to_string(),
+                    description: "GPT (modern, UEFI) or MBR (legacy BIOS)".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec!["gpt".to_string(), "mbr".to_string()],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "confirm".to_string(),
+                    description: "ALL DATA WILL BE DESTROYED. Type CONFIRM to proceed.".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+            ],
+            "partition_add" => vec![
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Disk device (pre-filled from selection)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "number".to_string(),
+                    description: "Partition number".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "1".to_string(), "2".to_string(), "3".to_string(),
+                            "4".to_string(), "5".to_string(), "6".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "size".to_string(),
+                    description: "Partition size (e.g., 512M, 50G, remaining)".to_string(),
+                    param_type: ToolParameter::Text("remaining".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "type".to_string(),
+                    description: "Partition type code".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "Linux".to_string(),
+                            "EFI System".to_string(),
+                            "Linux Swap".to_string(),
+                            "Linux LVM".to_string(),
+                            "Linux LUKS".to_string(),
+                            "BIOS Boot".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "label".to_string(),
+                    description: "Partition label (optional, GPT only)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: false,
+                },
+                ToolParam {
+                    name: "confirm".to_string(),
+                    description: "This will modify the partition table. Type CONFIRM to proceed.".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+            ],
+            "partition_delete" => vec![
+                ToolParam {
+                    name: "device".to_string(),
+                    description: "Disk device (pre-filled from selection)".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+                ToolParam {
+                    name: "number".to_string(),
+                    description: "Partition number to delete".to_string(),
+                    param_type: ToolParameter::Selection(
+                        vec![
+                            "1".to_string(), "2".to_string(), "3".to_string(),
+                            "4".to_string(), "5".to_string(), "6".to_string(),
+                        ],
+                        0,
+                    ),
+                    required: true,
+                },
+                ToolParam {
+                    name: "confirm".to_string(),
+                    description: "This will delete a partition. Type CONFIRM to proceed.".to_string(),
+                    param_type: ToolParameter::Text("".to_string()),
+                    required: true,
+                },
+            ],
             "rebuild_initramfs" => vec![ToolParam {
                 name: "root".to_string(),
                 description: "Root of the installed system (e.g., /mnt)".to_string(),
@@ -4124,7 +4253,10 @@ impl App {
                 if let Some(ref tool_name) = current_tool {
                     match tool_name.as_str() {
                         "format_partition" | "wipe_disk" | "health" | "mount"
-                        | "manual_partition" | "encrypt_device" => {
+                        | "manual_partition" | "encrypt_device"
+                        | "partition_create_table" | "partition_add"
+                        | "partition_delete" | "partition_action_menu" => {
+                            state.pending_tool_device = None;
                             state.mode = AppMode::DiskTools;
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
@@ -4412,6 +4544,209 @@ impl App {
         Ok(())
     }
 
+    // =========================================================================
+    // SECTION: Disk Layout Viewer + Partition Action Helpers
+    // =========================================================================
+
+    /// Show disk layout in a FloatingOutput window.
+    /// Called after DiskSelection for manual_partition, format_partition, wipe_disk.
+    fn show_disk_layout(&mut self, device: &str) {
+        // Run lsblk synchronously
+        let lsblk_output = Command::new("lsblk")
+            .args(["-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS,PTTYPE", device])
+            .output();
+
+        let mut lines = vec![
+            format!("  Disk Layout: {}", device),
+            String::new(),
+        ];
+
+        match lsblk_output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    lines.push(format!("  {}", line));
+                }
+            }
+            Err(e) => {
+                lines.push(format!("  Failed to run lsblk: {}", e));
+            }
+        }
+
+        lines.push(String::new());
+
+        // Also show sgdisk/fdisk for partition type codes
+        let sgdisk_output = Command::new("sgdisk")
+            .args(["-p", device])
+            .stderr(Stdio::null())
+            .output();
+
+        match sgdisk_output {
+            Ok(output) if output.status.success() => {
+                lines.push("  Partition table details:".to_string());
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    lines.push(format!("  {}", line));
+                }
+            }
+            _ => {
+                // Fallback to fdisk for MBR tables
+                let fdisk_output = Command::new("fdisk")
+                    .args(["-l", device])
+                    .stderr(Stdio::null())
+                    .output();
+                if let Ok(output) = fdisk_output {
+                    lines.push("  Partition table details:".to_string());
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    for line in stdout.lines() {
+                        lines.push(format!("  {}", line));
+                    }
+                }
+            }
+        }
+
+        let tool_name = {
+            let state = self.lock_state();
+            state.current_tool.clone().unwrap_or_default()
+        };
+        let status = if tool_name == "manual_partition" {
+            "Enter: partition actions | Esc: back to disk selection".to_string()
+        } else {
+            "Enter: continue | Esc: back to disk selection".to_string()
+        };
+
+        let mut state = self.lock_state();
+        state.floating_output = Some(FloatingOutputState {
+            title: format!("Disk Layout: {}", device),
+            content: lines,
+            scroll_offset: 0,
+            auto_scroll: false,
+            complete: true,
+            progress: None,
+            status,
+        });
+        state.pre_dialog_mode = Some(AppMode::DiskTools);
+        state.mode = AppMode::FloatingOutput;
+    }
+
+    /// Show the partition action menu (Selection dialog with 5 options).
+    /// Called when Enter is pressed on disk layout for manual_partition.
+    fn show_partition_action_menu(&mut self, device: &str) {
+        let options = vec![
+            "Create Partition Table".to_string(),
+            "Add Partition".to_string(),
+            "Delete Partition".to_string(),
+            "Advanced Editor (cfdisk)".to_string(),
+            "Back to Disk Selection".to_string(),
+        ];
+
+        let parameters = vec![ToolParam {
+            name: "action".to_string(),
+            description: format!("Select partition action for {}", device),
+            param_type: ToolParameter::Selection(options, 0),
+            required: true,
+        }];
+        let param_values = vec!["Create Partition Table".to_string()];
+
+        let mut state = self.lock_state();
+        state.pre_dialog_mode = Some(AppMode::DiskTools);
+        state.current_tool = Some("partition_action_menu".to_string());
+        state.tool_dialog = Some(ToolDialogState {
+            tool_name: "partition_action_menu".to_string(),
+            parameters,
+            current_param: 0,
+            param_values,
+            is_executing: false,
+        });
+        state.mode = AppMode::ToolDialog;
+        state.status_message = format!("Select partition action for {}", device);
+    }
+
+    /// Open the format ToolDialog with device pre-filled.
+    fn open_format_dialog_for_device(&mut self, device: &str) {
+        let parameters = Self::get_tool_parameters("format_partition");
+        let mut param_values: Vec<String> = parameters
+            .iter()
+            .map(|p| match &p.param_type {
+                ToolParameter::Selection(options, default_idx) => {
+                    options.get(*default_idx).cloned().unwrap_or_default()
+                }
+                _ => String::new(),
+            })
+            .collect();
+        param_values[0] = device.to_string();
+
+        let mut state = self.lock_state();
+        state.pre_dialog_mode = Some(AppMode::DiskTools);
+        state.current_tool = Some("format_partition".to_string());
+        state.tool_dialog = Some(ToolDialogState {
+            tool_name: "format_partition".to_string(),
+            parameters,
+            current_param: 1, // Skip device, start at filesystem
+            param_values,
+            is_executing: false,
+        });
+        state.mode = AppMode::ToolDialog;
+        state.status_message = "Select filesystem type for formatting".to_string();
+    }
+
+    /// Open the wipe ToolDialog with device pre-filled.
+    fn open_wipe_dialog_for_device(&mut self, device: &str) {
+        let parameters = Self::get_tool_parameters("wipe_disk");
+        let mut param_values: Vec<String> = parameters
+            .iter()
+            .map(|p| match &p.param_type {
+                ToolParameter::Selection(options, default_idx) => {
+                    options.get(*default_idx).cloned().unwrap_or_default()
+                }
+                ToolParameter::Boolean(v) => v.to_string(),
+                _ => String::new(),
+            })
+            .collect();
+        param_values[0] = device.to_string();
+
+        let mut state = self.lock_state();
+        state.pre_dialog_mode = Some(AppMode::DiskTools);
+        state.current_tool = Some("wipe_disk".to_string());
+        state.tool_dialog = Some(ToolDialogState {
+            tool_name: "wipe_disk".to_string(),
+            parameters,
+            current_param: 1, // Skip device, start at method
+            param_values,
+            is_executing: false,
+        });
+        state.mode = AppMode::ToolDialog;
+        state.status_message = "Select wipe method for disk".to_string();
+    }
+
+    /// Open a partition sub-tool ToolDialog with device pre-filled.
+    fn open_partition_tool_dialog(&mut self, tool_name: &str, device: &str) {
+        let parameters = Self::get_tool_parameters(tool_name);
+        let mut param_values: Vec<String> = parameters
+            .iter()
+            .map(|p| match &p.param_type {
+                ToolParameter::Selection(options, default_idx) => {
+                    options.get(*default_idx).cloned().unwrap_or_default()
+                }
+                _ => String::new(),
+            })
+            .collect();
+        param_values[0] = device.to_string();
+
+        let mut state = self.lock_state();
+        state.pre_dialog_mode = Some(AppMode::DiskTools);
+        state.current_tool = Some(tool_name.to_string());
+        state.tool_dialog = Some(ToolDialogState {
+            tool_name: tool_name.to_string(),
+            parameters,
+            current_param: 1, // Skip device, start at next param
+            param_values,
+            is_executing: false,
+        });
+        state.mode = AppMode::ToolDialog;
+        state.status_message = format!("Configure parameters for {}", tool_name);
+    }
+
     /// Execute a tool via ScriptArgs: set up floating output and spawn script.
     ///
     /// If `is_destructive` is true and `skip_confirm` is false, shows a confirmation
@@ -4608,21 +4943,84 @@ impl App {
                 return Ok(());
             }
             "manual_partition" => {
+                // cfdisk interactive mode (launched from action menu)
+                let device = if !params.is_empty() && !params[0].is_empty() {
+                    params[0].clone()
+                } else {
+                    let state = self.lock_state();
+                    state.pending_tool_device.clone().unwrap_or_default()
+                };
+                if device.is_empty() {
+                    let mut state = self.lock_state();
+                    state.status_message = "No device selected for partitioning".to_string();
+                    return Ok(());
+                }
+                let sa = ManualPartitionArgs {
+                    device: PathBuf::from(&device),
+                };
                 let script_path = crate::script_runner::scripts_base_dir()
                     .join("tools")
-                    .join("manual_partition.sh")
+                    .join(sa.script_name())
                     .to_string_lossy()
                     .to_string();
+                let cli_args = sa.to_cli_args();
+                let env_vars = sa.get_env_vars();
+                let env_prefix: String = env_vars.iter().map(|(k, v)| format!("{}='{}' ", k, v)).collect();
                 { let mut state = self.lock_state();
                     state.tool_dialog = None;
-                    state.current_tool = None;
+                    state.current_tool = Some("manual_partition".to_string());
                 }
-                let full_cmd = if !params.is_empty() && !params[0].is_empty() {
-                    format!("{} --device '{}'", script_path, params[0])
-                } else {
-                    script_path.clone()
+                let full_cmd = format!("{}{} {}", env_prefix, script_path, cli_args.iter().map(|a| format!("'{}'", a)).collect::<Vec<_>>().join(" "));
+                let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], "manual_partition", AppMode::DiskTools);
+                return Ok(());
+            }
+            "partition_action_menu" => {
+                // Route the selected action to the appropriate sub-tool
+                let action = params.first().cloned().unwrap_or_default();
+                let device = {
+                    let state = self.lock_state();
+                    state.pending_tool_device.clone().unwrap_or_default()
                 };
-                let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, AppMode::DiskTools);
+                if device.is_empty() {
+                    let mut state = self.lock_state();
+                    state.tool_dialog = None;
+                    state.current_tool = None;
+                    state.mode = AppMode::DiskTools;
+                    state.status_message = "No device selected".to_string();
+                    return Ok(());
+                }
+                // Clear the action menu dialog first
+                { let mut state = self.lock_state();
+                    state.tool_dialog = None;
+                }
+                match action.as_str() {
+                    "Create Partition Table" => {
+                        self.open_partition_tool_dialog("partition_create_table", &device);
+                    }
+                    "Add Partition" => {
+                        self.open_partition_tool_dialog("partition_add", &device);
+                    }
+                    "Delete Partition" => {
+                        self.open_partition_tool_dialog("partition_delete", &device);
+                    }
+                    "Advanced Editor (cfdisk)" => {
+                        self.execute_tool_with_params("manual_partition", vec![device])?;
+                    }
+                    "Back to Disk Selection" => {
+                        let mut state = self.lock_state();
+                        state.pending_tool_device = None;
+                        state.current_tool = Some("manual_partition".to_string());
+                        drop(state);
+                        self.input_handler.start_disk_selection("".to_string());
+                        let mut state = self.lock_state();
+                        state.status_message = "Select disk to partition (Enter to select, Esc to cancel)".to_string();
+                    }
+                    _ => {
+                        let mut state = self.lock_state();
+                        state.mode = AppMode::DiskTools;
+                        state.status_message = "Unknown action selected".to_string();
+                    }
+                }
                 return Ok(());
             }
             _ => {}
@@ -4684,6 +5082,107 @@ impl App {
                 self.execute_via_script_args(
                     sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
                     "wipe disk", sa.is_destructive(), true,
+                )
+            }
+            "partition_create_table" => {
+                let device = match Self::validate_required_param(&params, 0, "device") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state();
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let table_type: crate::scripts::disk::TableType = params.get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(crate::scripts::disk::TableType::Gpt);
+                let confirm_text = params.get(2).cloned().unwrap_or_default();
+                if confirm_text != "CONFIRM" {
+                    let mut state = self.lock_state();
+                    state.tool_dialog = None;
+                    state.current_tool = Some("manual_partition".to_string());
+                    state.mode = AppMode::DiskTools;
+                    state.status_message = "Create table cancelled — you must type CONFIRM exactly".to_string();
+                    return Ok(());
+                }
+                let sa = CreateTableArgs {
+                    device: PathBuf::from(&device),
+                    table_type,
+                    confirm: true,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "create partition table", sa.is_destructive(), true,
+                )
+            }
+            "partition_add" => {
+                let device = match Self::validate_required_param(&params, 0, "device") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state();
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let number: u8 = params.get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1);
+                let size = params.get(2).cloned().unwrap_or_else(|| "remaining".to_string());
+                let partition_type: crate::scripts::disk::PartitionType = params.get(3)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(crate::scripts::disk::PartitionType::Linux);
+                let label = params.get(4).filter(|s| !s.is_empty()).cloned();
+                let confirm_text = params.get(5).cloned().unwrap_or_default();
+                if confirm_text != "CONFIRM" {
+                    let mut state = self.lock_state();
+                    state.tool_dialog = None;
+                    state.current_tool = Some("manual_partition".to_string());
+                    state.mode = AppMode::DiskTools;
+                    state.status_message = "Add partition cancelled — you must type CONFIRM exactly".to_string();
+                    return Ok(());
+                }
+                let sa = AddPartitionArgs {
+                    device: PathBuf::from(&device),
+                    number,
+                    size,
+                    partition_type,
+                    label,
+                    confirm: true,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "add partition", sa.is_destructive(), true,
+                )
+            }
+            "partition_delete" => {
+                let device = match Self::validate_required_param(&params, 0, "device") {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let mut state = self.lock_state();
+                        state.status_message = e;
+                        return Ok(());
+                    }
+                };
+                let number: u8 = params.get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1);
+                let confirm_text = params.get(2).cloned().unwrap_or_default();
+                if confirm_text != "CONFIRM" {
+                    let mut state = self.lock_state();
+                    state.tool_dialog = None;
+                    state.current_tool = Some("manual_partition".to_string());
+                    state.mode = AppMode::DiskTools;
+                    state.status_message = "Delete partition cancelled — you must type CONFIRM exactly".to_string();
+                    return Ok(());
+                }
+                let sa = DeletePartitionArgs {
+                    device: PathBuf::from(&device),
+                    number,
+                    confirm: true,
+                };
+                self.execute_via_script_args(
+                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
+                    "delete partition", sa.is_destructive(), true,
                 )
             }
             "health" => {
