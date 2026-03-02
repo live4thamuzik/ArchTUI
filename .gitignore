@@ -1,4 +1,5 @@
 /target
+tui_test/target/
 dist/
 *.tar.gz
 archtui
