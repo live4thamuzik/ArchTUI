@@ -31,16 +31,31 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 /// Resolve the scripts base directory.
-/// Priority: ARCHTUI_SCRIPTS_DIR env > exe-adjacent scripts/ > cwd-relative scripts/
+/// Priority: ARCHTUI_SCRIPTS_DIR env > exe-adjacent scripts/ >
+///           walk up from exe dir (max 5 levels, check utils.sh) > cwd-relative scripts/
 pub fn scripts_base_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("ARCHTUI_SCRIPTS_DIR") {
         return PathBuf::from(dir);
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
+            // Check exe-adjacent first
             let candidate = parent.join("scripts");
             if candidate.is_dir() {
                 return candidate;
+            }
+            // Walk up from exe dir (handles cargo run from tui_test/target/debug/)
+            let mut dir = parent.to_path_buf();
+            for _ in 0..5 {
+                if let Some(up) = dir.parent() {
+                    let candidate = up.join("scripts");
+                    if candidate.join("utils.sh").exists() {
+                        return candidate;
+                    }
+                    dir = up.to_path_buf();
+                } else {
+                    break;
+                }
             }
         }
     }

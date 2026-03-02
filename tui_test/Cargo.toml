@@ -2,13 +2,14 @@
 name = "archtui-dev"
 version = "0.1.0"
 edition = "2021"
+default-run = "archtui"
 
 [lib]
 name = "archtui"
 path = "src/lib.rs"
 
 [[bin]]
-name = "archtui-dev"
+name = "archtui"
 path = "src/main.rs"
 
 [[bin]]
