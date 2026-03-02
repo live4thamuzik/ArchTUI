@@ -636,8 +636,11 @@ impl App {
             return Ok(false);
         }
 
-        // Global help toggle with '?' (except in dialogs and embedded terminal)
-        if key_event.code == KeyCode::Char('?') && !self.input_handler.is_dialog_active() {
+        // Global help toggle with '?' (except in dialogs, embedded terminal, and inline editing)
+        if key_event.code == KeyCode::Char('?')
+            && !self.input_handler.is_dialog_active()
+            && !self.lock_state().config_edit.is_active()
+        {
             self.toggle_help();
             return Ok(false);
         }
@@ -734,6 +737,13 @@ impl App {
                 // Dialog still active — sync right-panel to reflect current state
                 self.sync_config_edit_from_input();
             }
+            return Ok(false);
+        }
+
+        // Handle inline config editor (right-panel Selection/TextInput/PasswordInput)
+        if current_mode == AppMode::GuidedInstaller
+            && self.handle_config_edit_input(key_event)?
+        {
             return Ok(false);
         }
 
@@ -1712,7 +1722,7 @@ impl App {
         };
 
         if should_open_input {
-            self.open_input_dialog()?;
+            self.open_inline_editor()?;
         }
 
         if should_test_config {
@@ -2302,8 +2312,11 @@ impl App {
         Ok(())
     }
 
-    /// Open input dialog for the current configuration option
-    fn open_input_dialog(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    /// Open inline editor for the current configuration option.
+    ///
+    /// Selection/Text/Password options open in the right panel (inline).
+    /// Disk and Package options still use popup dialogs via InputHandler.
+    fn open_inline_editor(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let option = {
             let state = self.lock_state();
             let current_step = state.config_scroll.selected_index;
@@ -2315,54 +2328,27 @@ impl App {
 
         match option.name.as_str() {
             "Boot Mode" => {
-                // Show normal selection dialog
                 let options = InputHandler::get_predefined_options(&option.name);
-                self.input_handler
-                    .start_selection(option.name.clone(), options, option.value);
+                self.set_inline_selection(options, option.get_value());
             }
             "Secure Boot" => {
-                // Always show selection dialog with static warning about requirements
                 let mut options = InputHandler::get_predefined_options(&option.name);
-
-                // Check if UEFI is supported
                 let uefi_supported = self.is_uefi_supported();
 
-                // Insert static warning at the top of the options
-                options.insert(
-                    0,
-                    "⚠️  WARNING: Secure Boot requires UEFI firmware!".to_string(),
-                );
-                options.insert(
-                    1,
-                    "Make sure your motherboard supports UEFI and".to_string(),
-                );
-                options.insert(2, "Secure Boot is properly configured in BIOS.".to_string());
-                options.insert(3, "See: https://wiki.archlinux.org/title/UEFI".to_string());
-                options.insert(4, "".to_string());
-
-                // If UEFI is not supported, only show "No" option
                 if !uefi_supported {
                     options = vec!["No".to_string()];
-                    options.insert(
-                        0,
-                        "⚠️  WARNING: Secure Boot requires UEFI firmware!".to_string(),
-                    );
-                    options.insert(1, "UEFI is not supported on this system.".to_string());
-                    options.insert(2, "Secure Boot is not available.".to_string());
-                    options.insert(3, "".to_string());
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Secure Boot requires UEFI firmware (not available on this system)."
+                            .to_string();
                 }
 
-                self.input_handler
-                    .start_selection(option.name.clone(), options, option.value);
+                self.set_inline_selection(options, option.get_value());
             }
             "Encryption" => {
-                // Only allow encryption Yes/No for manual partitioning
                 let partitioning_strategy = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default()
@@ -2370,23 +2356,16 @@ impl App {
 
                 if partitioning_strategy == "manual" {
                     let options = vec!["Yes".to_string(), "No".to_string()];
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
+                    self.set_inline_selection(options, option.get_value());
                 } else {
-                    // Show message that encryption is auto-set for non-manual strategies
-                    { let mut state = self.lock_state();
-                        state.status_message = "Encryption is auto-set based on partitioning strategy. Use manual partitioning to control encryption.".to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message = "Encryption is auto-set based on partitioning strategy. Use manual partitioning to control encryption.".to_string();
                 }
             }
             "Swap Size" => {
-                // Only allow swap size configuration if swap is enabled
                 let swap_enabled = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Swap")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2394,28 +2373,21 @@ impl App {
 
                 if swap_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Swap size can only be configured when swap is enabled.".to_string();
                 }
             }
             "Root Size" => {
-                // Allow when Separate Home = Yes OR strategy contains "lvm"
                 let (home_enabled, strategy) = {
                     let state = self.lock_state();
-                    let home = state
-                        .config
-                        .options
-                        .iter()
+                    let home = state.config.options.iter()
                         .find(|opt| opt.name == "Separate Home Partition")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
-                    let strat = state
-                        .config
-                        .options
-                        .iter()
+                    let strat = state.config.options.iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default();
@@ -2424,21 +2396,17 @@ impl App {
 
                 if home_enabled || strategy.contains("lvm") {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Root size is configurable when using a separate home partition or LVM strategy.".to_string();
                 }
             }
             "Home Size" => {
-                // Only allow when Separate Home = Yes
                 let home_enabled = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Separate Home Partition")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2446,28 +2414,21 @@ impl App {
 
                 if home_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Home size is only configurable when separate home partition is enabled.".to_string();
                 }
             }
             "Btrfs Frequency" | "Btrfs Keep Count" | "Btrfs Assistant" => {
-                // Only allow btrfs configuration if root filesystem is btrfs AND snapshots are enabled
                 let (is_btrfs, snapshots_enabled) = {
                     let state = self.lock_state();
-                    let btrfs = state
-                        .config
-                        .options
-                        .iter()
+                    let btrfs = state.config.options.iter()
                         .find(|opt| opt.name == "Root Filesystem")
                         .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false);
-                    let snapshots = state
-                        .config
-                        .options
-                        .iter()
+                    let snapshots = state.config.options.iter()
                         .find(|opt| opt.name == "Btrfs Snapshots")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
@@ -2475,16 +2436,15 @@ impl App {
                 };
 
                 if !is_btrfs {
-                    { let mut state = self.lock_state();
-                        state.status_message =
-                            "Btrfs options are only available when Root Filesystem is btrfs."
-                                .to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Btrfs options are only available when Root Filesystem is btrfs."
+                            .to_string();
                 } else if snapshots_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message = format!(
                         "{} can only be configured when Btrfs snapshots are enabled.",
                         option.name
@@ -2492,20 +2452,13 @@ impl App {
                 }
             }
             "GRUB Theme" | "GRUB Theme Selection" => {
-                // Only allow GRUB theme options when bootloader is GRUB
                 let (is_grub, themes_enabled) = {
                     let state = self.lock_state();
-                    let grub = state
-                        .config
-                        .options
-                        .iter()
+                    let grub = state.config.options.iter()
                         .find(|opt| opt.name == "Bootloader")
                         .map(|opt| opt.get_value().to_lowercase() == "grub")
                         .unwrap_or(false);
-                    let themes = state
-                        .config
-                        .options
-                        .iter()
+                    let themes = state.config.options.iter()
                         .find(|opt| opt.name == "GRUB Theme")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
@@ -2513,59 +2466,46 @@ impl App {
                 };
 
                 if !is_grub {
-                    { let mut state = self.lock_state();
-                        state.status_message =
-                            "GRUB theme options are only available with the GRUB bootloader."
-                                .to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "GRUB theme options are only available with the GRUB bootloader."
+                            .to_string();
                 } else if option.name == "GRUB Theme Selection" && !themes_enabled {
-                    { let mut state = self.lock_state();
-                        state.status_message =
-                            "GRUB theme selection is only available when GRUB themes are enabled."
-                                .to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "GRUB theme selection is only available when GRUB themes are enabled."
+                            .to_string();
                 } else {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
+                    self.set_inline_selection(options, option.get_value());
                 }
             }
             "Git Repository URL" => {
-                // Only allow URL input if git repository is enabled
                 let git_enabled = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Git Repository")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
                 };
 
                 if git_enabled {
-                    self.input_handler.start_text_input(
-                        option.name.clone(),
-                        option.value,
-                        "Enter git repository URL".to_string(),
-                    );
-                } else { let mut state = self.lock_state();
+                    self.set_inline_text_input(option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Git repository URL can only be configured when git repository is enabled."
                             .to_string();
                 }
             }
             "Disk" => {
-                // Check if we need multi-disk selection
+                // Disk selection stays as popup
                 let state = self.lock_state();
-                let partitioning_strategy = state
-                    .config
-                    .options
-                    .iter()
+                let partitioning_strategy = state.config.options.iter()
                     .find(|opt| opt.name == "Partitioning Strategy")
                     .map(|opt| opt.get_value())
                     .unwrap_or_default();
-                drop(state); // Release the lock
+                drop(state);
 
                 match partitioning_strategy.as_str() {
                     "auto_raid" | "auto_raid_luks" | "auto_raid_lvm" | "auto_raid_lvm_luks"
@@ -2577,74 +2517,46 @@ impl App {
                         self.input_handler.start_disk_selection(option.value);
                     }
                 }
+                self.sync_config_edit_from_input();
             }
             "Username" | "Hostname" => {
-                let placeholder = match option.name.as_str() {
-                    "Username" => "Enter username",
-                    "Hostname" => "Enter hostname",
-                    _ => "Enter value",
-                }
-                .to_string();
-
-                self.input_handler
-                    .start_text_input(option.name.clone(), option.value, placeholder);
+                self.set_inline_text_input(option.get_value());
             }
             "Encryption Password" => {
-                // Only allow encryption password when encryption is enabled
                 let encryption_enabled = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Encryption")
                         .map(|opt| opt.get_value().to_lowercase() != "no")
                         .unwrap_or(false)
                 };
 
                 if encryption_enabled {
-                    self.input_handler.start_password_input(
-                        option.name.clone(),
-                        option.value,
-                        "Enter encryption passphrase".to_string(),
-                    );
-                } else { let mut state = self.lock_state();
+                    self.set_inline_password_input(option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Encryption password is only needed when encryption is enabled."
                             .to_string();
                 }
             }
             "User Password" | "Root Password" => {
-                let placeholder = match option.name.as_str() {
-                    "User Password" => "Enter user password",
-                    "Root Password" => "Enter root password",
-                    _ => "Enter password",
-                }
-                .to_string();
-
-                self.input_handler.start_password_input(
-                    option.name.clone(),
-                    option.value,
-                    placeholder,
-                );
+                self.set_inline_password_input(option.get_value());
             }
             "Additional Pacman Packages" | "Additional AUR Packages" => {
+                // Package selection stays as popup
                 self.input_handler
                     .start_package_selection(option.name.clone(), option.get_value());
+                self.sync_config_edit_from_input();
             }
             "Timezone Region" => {
                 let options = InputHandler::get_predefined_options(&option.name);
-                self.input_handler
-                    .start_selection(option.name.clone(), options, option.value);
+                self.set_inline_selection(options, option.get_value());
             }
             "Timezone" => {
-                // Get timezone options based on selected region
                 let timezone_region = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Timezone Region")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default()
@@ -2652,47 +2564,35 @@ impl App {
 
                 if !timezone_region.is_empty() {
                     let options = InputHandler::get_timezones_for_region(&timezone_region);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message = "Please select a timezone region first.".to_string();
                 }
             }
             "Display Manager" => {
-                // Check if desktop environment is set to something other than "none"
                 let desktop_env = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Desktop Environment")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default()
                 };
 
                 if desktop_env != "none" && !desktop_env.is_empty() {
-                    // Desktop environment is selected, display manager should be auto-set
-                    { let mut state = self.lock_state();
-                        state.status_message =
-                            "Display Manager is auto-set based on Desktop Environment selection."
-                                .to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Display Manager is auto-set based on Desktop Environment selection."
+                            .to_string();
                 } else {
-                    // No desktop environment or "none" selected, allow manual selection
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
+                    self.set_inline_selection(options, option.get_value());
                 }
             }
             "Plymouth Theme" => {
-                // Only allow theme selection when Plymouth is enabled
                 let plymouth_enabled = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Plymouth")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2700,22 +2600,18 @@ impl App {
 
                 if plymouth_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Plymouth theme can only be selected when Plymouth is enabled."
                             .to_string();
                 }
             }
             "OS Prober" => {
-                // Only relevant for GRUB bootloader
                 let is_grub = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Bootloader")
                         .map(|opt| opt.get_value().to_lowercase() == "grub")
                         .unwrap_or(false)
@@ -2723,21 +2619,17 @@ impl App {
 
                 if is_grub {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "OS Prober is only available with the GRUB bootloader.".to_string();
                 }
             }
             "Home Filesystem" => {
-                // Only relevant when Separate Home Partition is enabled
                 let home_enabled = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Separate Home Partition")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2745,22 +2637,18 @@ impl App {
 
                 if home_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Home filesystem can only be selected when Separate Home Partition is enabled."
                             .to_string();
                 }
             }
             "Separate Home Partition" => {
-                // Plain RAID strategies can't support separate home partitions
                 let is_plain_raid = {
                     let state = self.lock_state();
-                    let strat = state
-                        .config
-                        .options
-                        .iter()
+                    let strat = state.config.options.iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default();
@@ -2768,25 +2656,19 @@ impl App {
                 };
 
                 if is_plain_raid {
-                    { let mut state = self.lock_state();
-                        state.status_message =
-                            "Separate home not available for RAID without LVM."
-                                .to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Separate home not available for RAID without LVM."
+                            .to_string();
                 } else {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
+                    self.set_inline_selection(options, option.get_value());
                 }
             }
             "Btrfs Snapshots" => {
-                // Only allow toggling btrfs snapshots when root filesystem is btrfs
                 let is_btrfs = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Root Filesystem")
                         .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false)
@@ -2794,21 +2676,17 @@ impl App {
 
                 if is_btrfs {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "Btrfs Snapshots requires Root Filesystem to be btrfs.".to_string();
                 }
             }
             "RAID Level" => {
-                // Only allow RAID level selection when a RAID strategy is selected
                 let is_raid = {
                     let state = self.lock_state();
-                    state
-                        .config
-                        .options
-                        .iter()
+                    state.config.options.iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value().contains("raid"))
                         .unwrap_or(false)
@@ -2816,21 +2694,17 @@ impl App {
 
                 if is_raid {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
-                } else { let mut state = self.lock_state();
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
                     state.status_message =
                         "RAID Level is only available for RAID partitioning strategies.".to_string();
                 }
             }
             "AUR Helper" => {
-                // When DE requires AUR, lock the field — user can't set to None
                 let de_requires_aur = {
                     let state = self.lock_state();
-                    let de_value = state
-                        .config
-                        .options
-                        .iter()
+                    let de_value = state.config.options.iter()
                         .find(|opt| opt.name == "Desktop Environment")
                         .map(|opt| opt.get_value().to_string())
                         .unwrap_or_default();
@@ -2839,28 +2713,21 @@ impl App {
                 };
 
                 if de_requires_aur {
-                    // Block the dialog entirely, like encryption does for LUKS strategies
-                    { let mut state = self.lock_state();
-                        state.status_message =
-                            "AUR Helper is required by the selected desktop environment and cannot be set to None."
-                                .to_string();
-                    }
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "AUR Helper is required by the selected desktop environment and cannot be set to None."
+                            .to_string();
                 } else {
                     let options = InputHandler::get_predefined_options(&option.name);
-                    self.input_handler
-                        .start_selection(option.name.clone(), options, option.value);
+                    self.set_inline_selection(options, option.get_value());
                 }
             }
             _ => {
-                // Use predefined options for selection fields
+                // Default: use predefined options for inline selection
                 let options = InputHandler::get_predefined_options(&option.name);
-                self.input_handler
-                    .start_selection(option.name.clone(), options, option.value);
+                self.set_inline_selection(options, option.get_value());
             }
         }
-
-        // Sync the right-panel ConfigEditState from the InputHandler dialog
-        self.sync_config_edit_from_input();
 
         Ok(())
     }
@@ -2936,6 +2803,196 @@ impl App {
         };
         let mut state = self.lock_state();
         state.config_edit = edit_state;
+    }
+
+    // =========================================================================
+    // Inline config editor helpers — drive the right-panel directly
+    // =========================================================================
+
+    /// Open an inline selection editor in the right panel.
+    /// Finds `current_value` in `choices` to pre-select the matching index.
+    fn set_inline_selection(&mut self, choices: Vec<String>, current_value: String) {
+        let selected = choices
+            .iter()
+            .position(|c| c.eq_ignore_ascii_case(&current_value))
+            .unwrap_or(0);
+        let mut state = self.lock_state();
+        state.config_edit = ConfigEditState::Selection { choices, selected };
+    }
+
+    /// Open an inline text input editor in the right panel.
+    /// Strips "N/A" sentinel so the user starts with an empty field.
+    fn set_inline_text_input(&mut self, current_value: String) {
+        let value = if current_value == "N/A" {
+            String::new()
+        } else {
+            current_value
+        };
+        let cursor = value.len();
+        let mut state = self.lock_state();
+        state.config_edit = ConfigEditState::TextInput { value, cursor };
+    }
+
+    /// Open an inline password input editor in the right panel.
+    /// Strips "N/A" sentinel so the user starts with an empty field.
+    fn set_inline_password_input(&mut self, current_value: String) {
+        let value = if current_value == "N/A" {
+            String::new()
+        } else {
+            current_value
+        };
+        let cursor = value.len();
+        let mut state = self.lock_state();
+        state.config_edit = ConfigEditState::PasswordInput { value, cursor };
+    }
+
+    /// Handle keyboard input when the inline config editor is active.
+    /// Returns `true` if the event was consumed (caller should `return Ok(false)`).
+    fn handle_config_edit_input(
+        &mut self,
+        key_event: KeyEvent,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let is_active = {
+            let state = self.lock_state();
+            state.config_edit.is_active()
+        };
+        if !is_active {
+            return Ok(false);
+        }
+
+        // Clone current edit state to decide what to do
+        let edit_state = {
+            let state = self.lock_state();
+            state.config_edit.clone()
+        };
+
+        match edit_state {
+            ConfigEditState::Selection { choices, selected } => {
+                match key_event.code {
+                    KeyCode::Up => {
+                        let new = selected.saturating_sub(1);
+                        let mut state = self.lock_state();
+                        state.config_edit = ConfigEditState::Selection {
+                            choices,
+                            selected: new,
+                        };
+                    }
+                    KeyCode::Down => {
+                        let max = choices.len().saturating_sub(1);
+                        let new = (selected + 1).min(max);
+                        let mut state = self.lock_state();
+                        state.config_edit = ConfigEditState::Selection {
+                            choices,
+                            selected: new,
+                        };
+                    }
+                    KeyCode::Enter => {
+                        // Confirm selection
+                        if let Some(value) = choices.get(selected) {
+                            let value = value.clone();
+                            {
+                                let mut state = self.lock_state();
+                                state.config_edit = ConfigEditState::None;
+                            }
+                            self.update_configuration_value(value)?;
+                        }
+                    }
+                    KeyCode::Esc => {
+                        // Cancel — reset to None without updating value
+                        let mut state = self.lock_state();
+                        state.config_edit = ConfigEditState::None;
+                    }
+                    KeyCode::Char(c) => {
+                        // Jump-to-first-match: find first choice starting with `c`
+                        let lower = c.to_ascii_lowercase();
+                        if let Some(pos) = choices.iter().position(|ch| {
+                            ch.chars()
+                                .next()
+                                .map(|first| first.to_ascii_lowercase() == lower)
+                                .unwrap_or(false)
+                        }) {
+                            let mut state = self.lock_state();
+                            state.config_edit = ConfigEditState::Selection {
+                                choices,
+                                selected: pos,
+                            };
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            ConfigEditState::TextInput { .. } | ConfigEditState::PasswordInput { .. } => {
+                let is_password = matches!(edit_state, ConfigEditState::PasswordInput { .. });
+                let (mut value, mut cursor) = match edit_state {
+                    ConfigEditState::TextInput { value, cursor } => (value, cursor),
+                    ConfigEditState::PasswordInput { value, cursor } => (value, cursor),
+                    _ => unreachable!(),
+                };
+
+                match key_event.code {
+                    KeyCode::Char(c) => {
+                        value.insert(cursor, c);
+                        cursor += 1;
+                    }
+                    KeyCode::Backspace => {
+                        if cursor > 0 {
+                            value.remove(cursor - 1);
+                            cursor -= 1;
+                        }
+                    }
+                    KeyCode::Delete => {
+                        if cursor < value.len() {
+                            value.remove(cursor);
+                        }
+                    }
+                    KeyCode::Left => {
+                        cursor = cursor.saturating_sub(1);
+                    }
+                    KeyCode::Right => {
+                        cursor = (cursor + 1).min(value.len());
+                    }
+                    KeyCode::Home => {
+                        cursor = 0;
+                    }
+                    KeyCode::End => {
+                        cursor = value.len();
+                    }
+                    KeyCode::Enter => {
+                        // Confirm value
+                        let confirmed = value.clone();
+                        {
+                            let mut state = self.lock_state();
+                            state.config_edit = ConfigEditState::None;
+                        }
+                        self.update_configuration_value(confirmed)?;
+                        return Ok(true);
+                    }
+                    KeyCode::Esc => {
+                        let mut state = self.lock_state();
+                        state.config_edit = ConfigEditState::None;
+                        return Ok(true);
+                    }
+                    _ => {}
+                }
+
+                // Update state with new value/cursor
+                let mut state = self.lock_state();
+                state.config_edit = if is_password {
+                    ConfigEditState::PasswordInput { value, cursor }
+                } else {
+                    ConfigEditState::TextInput { value, cursor }
+                };
+            }
+            ConfigEditState::PackageInput { .. } => {
+                // Package input is still handled via popup InputHandler
+                return Ok(false);
+            }
+            ConfigEditState::None => {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
     }
 
     /// Update configuration value after input dialog

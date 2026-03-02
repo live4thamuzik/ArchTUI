@@ -87,6 +87,13 @@ pub enum ConfigEditState {
     },
 }
 
+impl ConfigEditState {
+    /// Returns true when the right panel is in an active editing mode
+    pub fn is_active(&self) -> bool {
+        !matches!(self, ConfigEditState::None)
+    }
+}
+
 /// Partition assignments for manual partitioning strategy
 ///
 /// Stores user-selected partition→role mappings collected via TUI dialogs
