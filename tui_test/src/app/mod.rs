@@ -24,7 +24,7 @@ use crate::components::pty_terminal::{PtyTerminal, PtyTerminalState};
 use crate::config::Configuration;
 use crate::error;
 use crate::hardware::HardwareInfo;
-use crate::input::InputHandler;
+use crate::input::{InputHandler, InputType};
 use crate::installer::Installer;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 use crate::script_manifest::ManifestRegistry;
@@ -653,6 +653,12 @@ impl App {
         // Check if we're in an input dialog
         if self.input_handler.is_dialog_active() {
             if let Some(value) = self.input_handler.handle_input(key_event) {
+                // Dialog completed — reset inline editor
+                {
+                    let mut state = self.lock_state();
+                    state.config_edit = ConfigEditState::None;
+                }
+
                 // Check if we're in disk selection mode for a tool
                 let current_tool = {
                     let state = self.state.lock().map_err(|_| "Failed to lock state")?;
@@ -724,6 +730,9 @@ impl App {
 
                 // User confirmed input, update configuration
                 self.update_configuration_value(value)?;
+            } else {
+                // Dialog still active — sync right-panel to reflect current state
+                self.sync_config_edit_from_input();
             }
             return Ok(false);
         }
@@ -2850,7 +2859,83 @@ impl App {
             }
         }
 
+        // Sync the right-panel ConfigEditState from the InputHandler dialog
+        self.sync_config_edit_from_input();
+
         Ok(())
+    }
+
+    /// Sync ConfigEditState to mirror the active InputHandler dialog.
+    /// This drives the right-panel inline editor in the redesigned UI.
+    fn sync_config_edit_from_input(&mut self) {
+        let edit_state = match &self.input_handler.current_dialog {
+            Some(dialog) => match &dialog.input_type {
+                InputType::Selection { options, scroll_state, .. } => {
+                    ConfigEditState::Selection {
+                        choices: options.clone(),
+                        selected: scroll_state.selected_index,
+                    }
+                }
+                InputType::TextInput { current_value, .. } => {
+                    ConfigEditState::TextInput {
+                        value: current_value.clone(),
+                        cursor: current_value.len(),
+                    }
+                }
+                InputType::PasswordInput { current_value, .. } => {
+                    ConfigEditState::PasswordInput {
+                        value: current_value.clone(),
+                        cursor: current_value.len(),
+                    }
+                }
+                InputType::DiskSelection { available_disks, scroll_state, .. } => {
+                    ConfigEditState::Selection {
+                        choices: available_disks.clone(),
+                        selected: scroll_state.selected_index,
+                    }
+                }
+                InputType::MultiDiskSelection { available_disks, scroll_state, .. } => {
+                    ConfigEditState::Selection {
+                        choices: available_disks.clone(),
+                        selected: scroll_state.selected_index,
+                    }
+                }
+                InputType::PackageSelection {
+                    current_input,
+                    output_lines,
+                    is_pacman,
+                    search_results,
+                    list_state,
+                    show_search_results,
+                    package_list,
+                    ..
+                } => {
+                    let packages: Vec<String> = if package_list.is_empty() {
+                        Vec::new()
+                    } else {
+                        package_list.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+                    };
+                    ConfigEditState::PackageInput {
+                        packages,
+                        current_input: current_input.clone(),
+                        output_lines: output_lines.clone(),
+                        is_pacman: *is_pacman,
+                        search_results: search_results.iter().map(|p| PackageResult {
+                            repo: p.repo.clone(),
+                            name: p.name.clone(),
+                            version: p.version.clone(),
+                            description: p.description.clone(),
+                        }).collect(),
+                        results_selected: list_state.selected().unwrap_or(0),
+                        show_search_results: *show_search_results,
+                    }
+                }
+                InputType::Warning { .. } => ConfigEditState::None,
+            },
+            None => ConfigEditState::None,
+        };
+        let mut state = self.lock_state();
+        state.config_edit = edit_state;
     }
 
     /// Update configuration value after input dialog
@@ -4673,6 +4758,8 @@ impl App {
         };
 
         let mut state = self.lock_state();
+        // Populate disk_layout for the redesigned tool dialog right-panel
+        state.disk_layout = crate::detection::get_disk_layout(device);
         state.floating_output = Some(FloatingOutputState {
             title: format!("Disk Layout: {}", device),
             content: lines,
