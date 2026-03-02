@@ -20,7 +20,6 @@ mod header;
 mod installer;
 pub(crate) mod menus;
 pub mod screens;
-mod loading;
 
 use std::path::PathBuf;
 
@@ -303,7 +302,7 @@ impl UiRenderer {
         }
 
         // Render nav bar (redesigned component)
-        let nav_items = keybinding_ctx.get_nav_items(&state.mode);
+        let nav_items = keybinding_ctx.get_nav_items(&state.mode, &state.config_edit);
         let nav_bar = NavBar::new(nav_items);
         nav_bar.render(f, nav_bar_area);
 

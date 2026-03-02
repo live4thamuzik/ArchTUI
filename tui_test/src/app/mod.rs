@@ -151,8 +151,9 @@ impl App {
 
         // Load script manifests for runtime validation
         let mut manifest_registry = ManifestRegistry::with_core_manifests();
-        if let Err(e) = manifest_registry.load_from_directory("scripts/manifests") {
-            tracing::warn!("Failed to load manifests from scripts/manifests: {}", e);
+        let manifests_dir = crate::script_runner::scripts_base_dir().join("manifests");
+        if let Err(e) = manifest_registry.load_from_directory(&manifests_dir) {
+            tracing::warn!("Failed to load manifests from {}: {}", manifests_dir.display(), e);
         } else {
             info!("Script manifests loaded successfully");
         }
@@ -973,7 +974,7 @@ impl App {
                 // Exit application
                 return Ok(true);
             }
-            KeyCode::Char('b') | KeyCode::Char('B') => {
+            KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Esc => {
                 // Go back in menu system
                 self.handle_back_key()?;
             }
@@ -2741,18 +2742,6 @@ impl App {
                     ConfigEditState::Selection {
                         choices: options.clone(),
                         selected: scroll_state.selected_index,
-                    }
-                }
-                InputType::TextInput { current_value, .. } => {
-                    ConfigEditState::TextInput {
-                        value: current_value.clone(),
-                        cursor: current_value.len(),
-                    }
-                }
-                InputType::PasswordInput { current_value, .. } => {
-                    ConfigEditState::PasswordInput {
-                        value: current_value.clone(),
-                        cursor: current_value.len(),
                     }
                 }
                 InputType::DiskSelection { available_disks, scroll_state, .. } => {

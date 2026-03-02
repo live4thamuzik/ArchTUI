@@ -52,12 +52,6 @@ impl ConfigOption {
         self
     }
 
-    /// Whether this option is a password field (masked in UI)
-    pub fn is_password(&self) -> bool {
-        let n = self.name.as_str();
-        n == "User Password" || n == "Root Password" || n == "Encryption Password"
-    }
-
     /// Get the current value, falling back to default if empty
     pub fn get_value(&self) -> String {
         if self.value.is_empty() {

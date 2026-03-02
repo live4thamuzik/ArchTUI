@@ -4,7 +4,7 @@
 
 #![allow(dead_code)]
 
-use crate::app::AppMode;
+use crate::app::{AppMode, ConfigEditState};
 
 /// Navigation bar item for display
 #[derive(Debug, Clone)]
@@ -35,7 +35,33 @@ impl KeybindingContext {
     }
 
     /// Get navigation bar items for display
-    pub fn get_nav_items(&self, mode: &AppMode) -> Vec<NavBarItem> {
+    pub fn get_nav_items(&self, mode: &AppMode, config_edit: &ConfigEditState) -> Vec<NavBarItem> {
+        // When inline editing is active, show editor-specific hints
+        if config_edit.is_active() {
+            return match config_edit {
+                ConfigEditState::Selection { .. } => vec![
+                    NavBarItem { key_display: "\u{2191}/\u{2193}".into(), action_label: "Navigate".into() },
+                    NavBarItem { key_display: "Enter".into(), action_label: "Confirm".into() },
+                    NavBarItem { key_display: "Esc".into(), action_label: "Cancel".into() },
+                    NavBarItem { key_display: "a-z".into(), action_label: "Jump".into() },
+                ],
+                ConfigEditState::TextInput { .. } => vec![
+                    NavBarItem { key_display: "Enter".into(), action_label: "Confirm".into() },
+                    NavBarItem { key_display: "Esc".into(), action_label: "Cancel".into() },
+                ],
+                ConfigEditState::PasswordInput { .. } => vec![
+                    NavBarItem { key_display: "Enter".into(), action_label: "Confirm".into() },
+                    NavBarItem { key_display: "Esc".into(), action_label: "Cancel".into() },
+                ],
+                ConfigEditState::PackageInput { .. } => vec![
+                    NavBarItem { key_display: "Enter".into(), action_label: "Execute".into() },
+                    NavBarItem { key_display: "Esc".into(), action_label: "Done".into() },
+                    NavBarItem { key_display: "\u{2191}/\u{2193}".into(), action_label: "Navigate".into() },
+                ],
+                ConfigEditState::None => unreachable!(),
+            };
+        }
+
         match mode {
             AppMode::MainMenu => vec![
                 NavBarItem { key_display: "\u{2191}/\u{2193}".into(), action_label: "Navigate".into() },
@@ -132,6 +158,7 @@ impl KeybindingContext {
                         ("Up/Down".into(), "Navigate options".into()),
                         ("PgUp/PgDn".into(), "Page scroll".into()),
                         ("Home/End".into(), "Jump to first/last".into()),
+                        ("Esc / b".into(), "Go back".into()),
                     ],
                 });
                 sections.push(HelpSection {
@@ -139,6 +166,14 @@ impl KeybindingContext {
                     items: vec![
                         ("Enter".into(), "Configure selected option".into()),
                         ("Space".into(), "Start installation".into()),
+                    ],
+                });
+                sections.push(HelpSection {
+                    title: "Inline Editing".into(),
+                    items: vec![
+                        ("Enter".into(), "Confirm value".into()),
+                        ("Esc".into(), "Cancel editing".into()),
+                        ("a-z".into(), "Jump to option (selection)".into()),
                     ],
                 });
             }

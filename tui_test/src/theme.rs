@@ -344,25 +344,6 @@ impl Borders {
 }
 
 // =============================================================================
-// UI CONSTANTS
-// =============================================================================
-
-pub struct UiConstants;
-
-impl UiConstants {
-    pub const DIALOG_WIDTH_PCT: u16 = 60;
-    pub const DIALOG_MAX_WIDTH: u16 = 80;
-    pub const DIALOG_MIN_WIDTH: u16 = 40;
-    pub const DIALOG_PADDING: u16 = 4;
-    pub const PANEL_PADDING: u16 = 1;
-    pub const NAV_BAR_HEIGHT: u16 = 1;
-    /// Compact header: 3 lines content + 1 padding = 4
-    pub const HEADER_HEIGHT: u16 = 4;
-    pub const STATUS_BAR_HEIGHT: u16 = 3;
-    pub const PAGE_SCROLL_SIZE: usize = 10;
-}
-
-// =============================================================================
 // TEXT CONSTANTS
 // =============================================================================
 

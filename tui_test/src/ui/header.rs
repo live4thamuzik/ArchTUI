@@ -163,7 +163,7 @@ pub fn render_nav_bar(
     keybinding_ctx: &crate::components::keybindings::KeybindingContext,
     area: Rect,
 ) {
-    let nav_items = keybinding_ctx.get_nav_items(&state.mode);
+    let nav_items = keybinding_ctx.get_nav_items(&state.mode, &state.config_edit);
     let nav_bar = crate::components::nav_bar::NavBar::new(nav_items);
     nav_bar.render(f, area);
 }

@@ -590,17 +590,6 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
         let selected_index = dialog.input_type.get_selected_index();
 
         match &mut dialog.input_type {
-            crate::input::InputType::TextInput { .. } => {
-                let input_text = dialog.get_display_value();
-                let display_text = if input_text.is_empty() {
-                    Span::styled("Enter value..._", Style::default().fg(Colors::FG_MUTED))
-                } else {
-                    Span::styled(format!("{}_", input_text), Style::default().fg(Colors::FG_PRIMARY))
-                };
-                let input_widget = Paragraph::new(Line::from(display_text))
-                    .style(Style::default().bg(Colors::BG_PRIMARY));
-                f.render_widget(input_widget, content_area);
-            }
             crate::input::InputType::Selection { scroll_state, options, .. } => {
                 let (start, end) = scroll_state.visible_range();
                 let items: Vec<ListItem> = options.iter().enumerate()
@@ -713,17 +702,6 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     .alignment(Alignment::Center)
                     .wrap(Wrap { trim: true });
                 f.render_widget(warning_widget, content_area);
-            }
-            crate::input::InputType::PasswordInput { .. } => {
-                let input_text = dialog.get_display_value();
-                let display_text = if input_text.is_empty() {
-                    Span::styled("Enter password..._", Style::default().fg(Colors::FG_MUTED))
-                } else {
-                    Span::styled(format!("{}_", input_text), Style::default().fg(Colors::FG_PRIMARY))
-                };
-                let input_widget = Paragraph::new(Line::from(display_text))
-                    .style(Style::default().bg(Colors::BG_PRIMARY));
-                f.render_widget(input_widget, content_area);
             }
             crate::input::InputType::MultiDiskSelection {
                 selected_disks, available_disks, scroll_state, min_disks, max_disks, ..

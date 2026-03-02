@@ -77,12 +77,6 @@ pub struct ManualAssignState {
 /// Types of input dialogs
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputType {
-    /// Text input for values like hostname, username, passwords
-    TextInput {
-        field_name: String,
-        current_value: String,
-        placeholder: String,
-    },
     /// Selection from predefined options
     Selection {
         field_name: String,
@@ -121,12 +115,6 @@ pub enum InputType {
         message: Vec<String>,
         acknowledged: bool,
     },
-    /// Password input with obscuring
-    PasswordInput {
-        field_name: String,
-        current_value: String,
-        placeholder: String,
-    },
 }
 
 /// Input dialog state
@@ -153,21 +141,6 @@ impl InputDialog {
     /// Handle keyboard input for the dialog
     pub fn handle_input(&mut self, key_event: crossterm::event::KeyEvent) -> InputResult {
         match &mut self.input_type {
-            InputType::TextInput { current_value, .. } => match key_event.code {
-                crossterm::event::KeyCode::Enter => {
-                    return InputResult::Confirm(current_value.clone());
-                }
-                crossterm::event::KeyCode::Esc => {
-                    return InputResult::Cancel;
-                }
-                crossterm::event::KeyCode::Backspace => {
-                    current_value.pop();
-                }
-                crossterm::event::KeyCode::Char(c) => {
-                    current_value.push(c);
-                }
-                _ => {}
-            },
             InputType::Selection {
                 scroll_state,
                 options,
@@ -544,81 +517,10 @@ impl InputDialog {
                 }
                 _ => {}
             },
-            InputType::PasswordInput { current_value, .. } => match key_event.code {
-                crossterm::event::KeyCode::Enter => {
-                    return InputResult::Confirm(current_value.clone());
-                }
-                crossterm::event::KeyCode::Esc => {
-                    return InputResult::Cancel;
-                }
-                crossterm::event::KeyCode::Backspace => {
-                    current_value.pop();
-                }
-                crossterm::event::KeyCode::Char(c) => {
-                    current_value.push(c);
-                }
-                _ => {}
-            },
         }
         InputResult::Continue
     }
 
-    /// Get the current display value for the input
-    pub fn get_display_value(&self) -> String {
-        match &self.input_type {
-            InputType::TextInput {
-                current_value,
-                placeholder,
-                ..
-            } => {
-                if current_value.is_empty() {
-                    placeholder.clone()
-                } else {
-                    current_value.clone()
-                }
-            }
-            InputType::Selection {
-                scroll_state,
-                options,
-                ..
-            } => options
-                .get(scroll_state.selected_index)
-                .cloned()
-                .unwrap_or_default(),
-            InputType::DiskSelection {
-                scroll_state,
-                available_disks,
-                ..
-            } => available_disks
-                .get(scroll_state.selected_index)
-                .cloned()
-                .unwrap_or_default(),
-            InputType::MultiDiskSelection { selected_disks, .. } => {
-                if selected_disks.is_empty() {
-                    "No disks selected".to_string()
-                } else {
-                    format!(
-                        "{} disk(s) selected: {}",
-                        selected_disks.len(),
-                        selected_disks.join(", ")
-                    )
-                }
-            }
-            InputType::PackageSelection { package_list, .. } => package_list.clone(),
-            InputType::Warning { .. } => "Press Enter to acknowledge".to_string(),
-            InputType::PasswordInput {
-                current_value,
-                placeholder,
-                ..
-            } => {
-                if current_value.is_empty() {
-                    placeholder.clone()
-                } else {
-                    "*".repeat(current_value.len())
-                }
-            }
-        }
-    }
 }
 
 impl InputType {
@@ -1139,46 +1041,6 @@ impl InputHandler {
             input_type,
             title,
             "Press Enter to acknowledge, Esc to cancel".to_string(),
-        ));
-    }
-
-    /// Start a password input dialog
-    pub fn start_password_input(
-        &mut self,
-        field_name: String,
-        current_value: String,
-        placeholder: String,
-    ) {
-        let input_type = InputType::PasswordInput {
-            field_name: field_name.clone(),
-            current_value,
-            placeholder,
-        };
-
-        self.current_dialog = Some(InputDialog::new(
-            input_type,
-            format!("Configure {}", field_name),
-            "Type the password and press Enter to confirm, Esc to cancel".to_string(),
-        ));
-    }
-
-    /// Start a text input dialog
-    pub fn start_text_input(
-        &mut self,
-        field_name: String,
-        current_value: String,
-        placeholder: String,
-    ) {
-        let input_type = InputType::TextInput {
-            field_name: field_name.clone(),
-            current_value,
-            placeholder,
-        };
-
-        self.current_dialog = Some(InputDialog::new(
-            input_type,
-            format!("Configure {}", field_name),
-            "Type the value and press Enter to confirm, Esc to cancel".to_string(),
         ));
     }
 

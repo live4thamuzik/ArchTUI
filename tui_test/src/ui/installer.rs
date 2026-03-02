@@ -307,6 +307,13 @@ fn render_detail_selection(
 
     let w = list_area.width.saturating_sub(2) as usize;
 
+    // Calculate visible window so long lists keep the selected item on-screen
+    let inner_h = list_area.height.saturating_sub(2) as usize; // borders
+    let header_lines = 3; // spacer + title + spacer
+    let visible = inner_h.saturating_sub(header_lines);
+    let offset = selected.saturating_sub(visible.saturating_sub(1));
+    let end = (offset + visible).min(choices.len());
+
     let mut lines: Vec<ListItem> = Vec::new();
 
     // Title spacer
@@ -319,7 +326,7 @@ fn render_detail_selection(
     ))));
     lines.push(ListItem::new(""));
 
-    for (i, choice) in choices.iter().enumerate() {
+    for (i, choice) in choices.iter().enumerate().skip(offset).take(end - offset) {
         let is_sel = i == selected;
         if is_sel {
             let text = format!(" \u{25b8} {}", choice);
@@ -442,10 +449,14 @@ fn render_detail_text_input(
         value.to_string()
     };
 
-    // Build cursor display: insert block cursor at position
-    let (before, after) = display_value.split_at(cursor.min(display_value.len()));
-    let cursor_char = if after.is_empty() { " " } else { &after[..1] };
-    let rest = if after.len() > 1 { &after[1..] } else { "" };
+    // Build cursor display: insert block cursor at position (char-safe for UTF-8)
+    let before: String = display_value.chars().take(cursor).collect();
+    let cursor_char: String = display_value
+        .chars()
+        .nth(cursor)
+        .map(|c| c.to_string())
+        .unwrap_or_else(|| " ".to_string());
+    let rest: String = display_value.chars().skip(cursor + 1).collect();
 
     let input_line = Line::from(vec![
         Span::styled("  ", Style::default()),
