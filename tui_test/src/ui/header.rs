@@ -93,6 +93,7 @@ pub fn render_installer_output(
 
     f.render_widget(content_block, area);
 
+    let pad_width = inner_area.width as usize;
     let visible_content: Vec<ListItem> = output[start..end]
         .iter()
         .map(|line| {
@@ -115,7 +116,8 @@ pub fn render_installer_output(
                     .fg(Colors::FG_PRIMARY)
                     .bg(Colors::BG_PRIMARY)
             };
-            ListItem::new(line.as_str()).style(style)
+            let padded = format!("{:<pad_width$}", line);
+            ListItem::new(padded).style(style)
         })
         .collect();
 
