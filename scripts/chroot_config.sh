@@ -1467,16 +1467,12 @@ configure_snapper() {
 
     log_info "Configuring Snapper for Btrfs snapshots..."
 
-    # Install snapper and related packages
-    pacman -S snapper snap-pac --noconfirm --needed || {
-        log_error "Failed to install snapper packages"
+    # Install snapper first (without snap-pac to avoid noisy pacman hooks
+    # in chroot where dbus is unavailable)
+    pacman -S snapper --noconfirm --needed || {
+        log_error "Failed to install snapper"
         return 1
     }
-
-    # Install grub-btrfs for boot integration if using GRUB
-    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-        pacman -S grub-btrfs --noconfirm --needed || log_warn "grub-btrfs not available"
-    fi
 
     # Remove the @snapshots mount if it exists (snapper will recreate it)
     if mountpoint -q /.snapshots 2>/dev/null; then
@@ -1488,8 +1484,8 @@ configure_snapper() {
         rmdir /.snapshots 2>/dev/null || true
     fi
 
-    # Create snapper config for root
-    if snapper -c root create-config /; then
+    # Create snapper config for root (--no-dbus: dbus is not running in chroot)
+    if snapper --no-dbus -c root create-config /; then
         log_info "Created snapper config for root"
     else
         log_warn "Failed to create snapper config (may already exist)"
@@ -1569,20 +1565,28 @@ configure_snapper() {
         log_info "Configured snapper timeline settings (frequency: $frequency, keep: $keep_count)"
     fi
 
+    # Enable snapper timers (before installing snap-pac to avoid hook noise)
+    systemctl enable snapper-timeline.timer 2>/dev/null || log_warn "Failed to enable snapper-timeline.timer"
+    systemctl enable snapper-cleanup.timer 2>/dev/null || log_warn "Failed to enable snapper-cleanup.timer"
+
+    # Install snap-pac LAST so its pacman hooks don't spam dbus errors during
+    # the above pacman calls (hooks fire on every transaction, dbus unavailable in chroot)
+    pacman -S snap-pac --noconfirm --needed || log_warn "Failed to install snap-pac"
+
+    # Install grub-btrfs for boot integration if using GRUB
+    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
+        pacman -S grub-btrfs --noconfirm --needed || log_warn "grub-btrfs not available"
+        # Enable grub-btrfs path monitoring if installed
+        if [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]]; then
+            systemctl enable grub-btrfsd.service 2>/dev/null || log_warn "Failed to enable grub-btrfsd.service"
+            log_info "Enabled grub-btrfs daemon for boot menu updates"
+        fi
+    fi
+
     # Install btrfs-assistant if requested
     if [[ "${BTRFS_ASSISTANT:-No}" == "Yes" ]]; then
         log_info "Installing btrfs-assistant..."
         pacman -S btrfs-assistant --noconfirm --needed || log_warn "Failed to install btrfs-assistant"
-    fi
-
-    # Enable snapper timers
-    systemctl enable snapper-timeline.timer 2>/dev/null || log_warn "Failed to enable snapper-timeline.timer"
-    systemctl enable snapper-cleanup.timer 2>/dev/null || log_warn "Failed to enable snapper-cleanup.timer"
-
-    # Enable grub-btrfs path monitoring if installed
-    if [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]]; then
-        systemctl enable grub-btrfsd.service 2>/dev/null || log_warn "Failed to enable grub-btrfsd.service"
-        log_info "Enabled grub-btrfs daemon for boot menu updates"
     fi
 
     log_success "Snapper configured for automatic Btrfs snapshots"
