@@ -481,6 +481,7 @@ impl App {
                         }
                         floating.append_line(String::new());
                         floating.append_line("Press Esc or Enter to close".to_string());
+                        floating.status = status_msg;
                         floating.mark_complete();
                     }
                 }
@@ -493,6 +494,7 @@ impl App {
                         floating.append_line(format!("❌ Error: {}", err));
                         floating.append_line(String::new());
                         floating.append_line("Press Esc or Enter to close".to_string());
+                        floating.status = format!("Error: {}", err);
                         floating.mark_complete();
                     }
                 }

@@ -344,6 +344,15 @@ impl FloatingWindow {
         let status_inner = status_block.inner(chunks[2]);
         f.render_widget(status_block, chunks[2]);
 
+        let status_color = if progress >= 100 {
+            if status.contains("Error") || status.contains("failed") {
+                Colors::ERROR
+            } else {
+                Colors::SUCCESS
+            }
+        } else {
+            Colors::WARNING
+        };
         let status_para = Paragraph::new(Line::from(vec![
             Span::styled(
                 " Status: ",
@@ -351,7 +360,7 @@ impl FloatingWindow {
                     .fg(Colors::FG_MUTED)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(status, Style::default().fg(Colors::WARNING)),
+            Span::styled(status, Style::default().fg(status_color)),
         ]))
         .alignment(Alignment::Center);
         f.render_widget(status_para, status_inner);
