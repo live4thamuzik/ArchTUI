@@ -185,9 +185,13 @@ impl FloatingWindow {
         let start = self.scroll_state.offset.min(max_offset);
         let end = (start + visible_height).min(content.len());
 
+        let pad_width = inner_area.width as usize;
         let visible_content: Vec<ListItem> = content[start..end]
             .iter()
-            .map(|line| ListItem::new(line.as_str()).style(Self::style_output_line(line)))
+            .map(|line| {
+                let padded = format!("{:<pad_width$}", line);
+                ListItem::new(padded).style(Self::style_output_line(line))
+            })
             .collect();
 
         let list = List::new(visible_content);
@@ -327,9 +331,13 @@ impl FloatingWindow {
         let start = self.scroll_state.offset.min(max_offset);
         let end = (start + visible_height).min(content.len());
 
+        let pad_width = inner_area.width as usize;
         let visible_content: Vec<ListItem> = content[start..end]
             .iter()
-            .map(|line| ListItem::new(line.as_str()).style(Self::style_output_line(line)))
+            .map(|line| {
+                let padded = format!("{:<pad_width$}", line);
+                ListItem::new(padded).style(Self::style_output_line(line))
+            })
             .collect();
 
         let list = List::new(visible_content);
