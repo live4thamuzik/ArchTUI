@@ -1332,7 +1332,7 @@ impl App {
                     }
                 }
             }
-            "start_installation" => {
+            "start_install" | "start_installation" => {
                 // Start the installation process
                 self.start_installation()?;
             }
@@ -3065,6 +3065,13 @@ impl App {
                     "Set {} to: {}",
                     state.config.options[current_step].name, parsed_value
                 );
+
+                // Populate disk layout when a disk is selected in GuidedInstaller
+                if option_name == "Disk" && !parsed_value.is_empty() {
+                    // Use first disk for layout display (for RAID, show first device)
+                    let first_disk = parsed_value.split(',').next().unwrap_or(&parsed_value);
+                    state.disk_layout = crate::detection::get_disk_layout(first_disk);
+                }
             }
         }
 
