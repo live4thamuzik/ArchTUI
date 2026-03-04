@@ -191,8 +191,8 @@ test_connectivity() {
     echo
     log_info "HTTP Connectivity Test:"
     if command -v curl >/dev/null 2>&1; then
-        if curl -s --connect-timeout 5 http://httpbin.org/ip >/dev/null 2>&1; then
-            local external_ip=$(curl -s --connect-timeout 5 http://httpbin.org/ip | grep -o '[0-9.]*' | head -1)
+        if curl -s --connect-timeout 5 https://httpbin.org/ip >/dev/null 2>&1; then
+            local external_ip=$(curl -s --connect-timeout 5 https://httpbin.org/ip | grep -o '[0-9.]*' | head -1)
             log_success "HTTP connectivity: OK (External IP: $external_ip)"
         else
             log_error "HTTP connectivity: FAILED"

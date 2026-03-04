@@ -400,7 +400,7 @@ configure_mkinitcpio() {
         # Save mdadm configuration
         if command -v mdadm &>/dev/null; then
             log_cmd "mdadm --detail --scan >> /etc/mdadm.conf"
-            mdadm --detail --scan >> /etc/mdadm.conf 2>/dev/null || true
+            mdadm --detail --scan >> /etc/mdadm.conf 2>/dev/null || log_warn "Failed to write mdadm.conf in chroot"
         fi
     fi
 
@@ -1093,7 +1093,8 @@ _grub_theme_git_clone() {
     local repo_url="$1"
     local clone_dir="$2"
     local theme_name="$3"
-    local tmp_dir="/tmp/grub-theme-$$"
+    local tmp_dir
+    tmp_dir=$(mktemp -d "/tmp/grub-theme.XXXXXX") || { log_error "Failed to create GRUB theme temp directory"; return 1; }
 
     if ! command -v git &>/dev/null; then
         log_warn "git not installed, cannot clone GRUB theme"
@@ -1103,7 +1104,6 @@ _grub_theme_git_clone() {
         }
     fi
 
-    mkdir -p "$tmp_dir"
     if timeout 30 git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>/dev/null; then
         mkdir -p "/boot/grub/themes/${theme_name}"
         # Look for theme.txt to find the theme root (may be in a subdirectory)
@@ -1646,9 +1646,9 @@ install_aur_helper() {
 
     log_info "Installing AUR helper: $helper"
 
-    # AUR helpers must be built as non-root user
-    local build_dir="/tmp/aur_build"
-    mkdir -p "$build_dir"
+    # AUR helpers must be built as non-root user (unique temp dir per invocation)
+    local build_dir
+    build_dir=$(mktemp -d "/tmp/aur_build.XXXXXX") || { log_error "Failed to create AUR build directory"; return 1; }
     chown "$MAIN_USERNAME:$MAIN_USERNAME" "$build_dir"
 
     # Grant temporary passwordless sudo — makepkg -si calls sudo pacman internally,
@@ -1664,9 +1664,9 @@ install_aur_helper() {
             pacman -S base-devel git --noconfirm --needed || { log_error "Failed to install paru dependencies"; return 1; }
 
             log_cmd "runuser -u $MAIN_USERNAME -- bash (clone+build paru)"
-            runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
+            AUR_BUILD_DIR="$build_dir" runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
 set -e
-cd /tmp/aur_build
+cd "$AUR_BUILD_DIR"
 timeout 60 git clone https://aur.archlinux.org/paru.git
 [[ -d paru ]] || { echo "ERROR: paru clone directory not found"; exit 1; }
 cd paru
@@ -1678,9 +1678,9 @@ AUREOF
             pacman -S base-devel git go --noconfirm --needed || { log_error "Failed to install yay dependencies"; return 1; }
 
             log_cmd "runuser -u $MAIN_USERNAME -- bash (clone+build yay)"
-            runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
+            AUR_BUILD_DIR="$build_dir" runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
 set -e
-cd /tmp/aur_build
+cd "$AUR_BUILD_DIR"
 timeout 60 git clone https://aur.archlinux.org/yay.git
 [[ -d yay ]] || { echo "ERROR: yay clone directory not found"; exit 1; }
 cd yay
@@ -1691,9 +1691,9 @@ AUREOF
             pacman -S base-devel git python --noconfirm --needed || { log_error "Failed to install pikaur dependencies"; return 1; }
 
             log_cmd "runuser -u $MAIN_USERNAME -- bash (clone+build pikaur)"
-            runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
+            AUR_BUILD_DIR="$build_dir" runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
 set -e
-cd /tmp/aur_build
+cd "$AUR_BUILD_DIR"
 timeout 60 git clone https://aur.archlinux.org/pikaur.git
 [[ -d pikaur ]] || { echo "ERROR: pikaur clone directory not found"; exit 1; }
 cd pikaur
