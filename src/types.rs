@@ -32,6 +32,9 @@ pub enum Filesystem {
     Xfs,
     #[strum(serialize = "btrfs")]
     Btrfs,
+    /// F2FS flash-friendly filesystem for SSDs/NVMe
+    #[strum(serialize = "f2fs")]
+    F2fs,
     /// FAT32 filesystem for EFI System Partition (internal use only, not user-selectable)
     #[strum(serialize = "fat32")]
     Fat32,
@@ -166,6 +169,8 @@ pub enum DisplayManager {
     Lxdm,
     #[strum(serialize = "ly")]
     Ly,
+    #[strum(serialize = "greetd")]
+    Greetd,
 }
 
 /// Bootloader selection

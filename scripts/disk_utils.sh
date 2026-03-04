@@ -961,6 +961,10 @@ format_filesystem() {
             log_cmd "mkfs.fat -F32 $device"
             mkfs.fat -F32 "$device" || { log_error "Failed to format $device as fat32"; return 1; }
             ;;
+        f2fs)
+            log_cmd "mkfs.f2fs -f $device"
+            mkfs.f2fs -f "$device" || { log_error "Failed to format $device as f2fs"; return 1; }
+            ;;
         *)
             log_error "Unknown filesystem type: $fs_type"
             return 1

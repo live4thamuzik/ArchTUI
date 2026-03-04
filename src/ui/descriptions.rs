@@ -365,6 +365,10 @@ fn format_partition_description() -> Vec<Line<'static>> {
             Styles::text_secondary(),
         )]),
         Line::from(vec![Span::styled(
+            "  • f2fs    - Flash-friendly for SSDs/NVMe",
+            Styles::text_secondary(),
+        )]),
+        Line::from(vec![Span::styled(
             "  • fat32   - For EFI system partitions",
             Styles::text_secondary(),
         )]),

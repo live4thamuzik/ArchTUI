@@ -56,6 +56,7 @@ KEY_SIZE="512"
 KEY_FILE=""
 MAPPER_NAME=""
 LABEL=""
+FIDO2=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -66,6 +67,7 @@ while [[ $# -gt 0 ]]; do
         --key-file) KEY_FILE="$2"; shift 2 ;;
         --mapper)   MAPPER_NAME="$2"; shift 2 ;;
         --label)    LABEL="$2"; shift 2 ;;
+        --fido2)    FIDO2=true; shift ;;
         *) error_exit "Unknown argument: $1" ;;
     esac
 done
@@ -137,6 +139,22 @@ case "$ACTION" in
         fi
 
         log_success "LUKS2 format completed on $DEVICE"
+
+        # FIDO2 enrollment (if requested)
+        if [[ "$FIDO2" == true ]]; then
+            log_info "Enrolling FIDO2 hardware key..."
+            if ! command -v systemd-cryptenroll >/dev/null 2>&1; then
+                log_error "systemd-cryptenroll not found — FIDO2 enrollment requires systemd 248+"
+            else
+                log_cmd "systemd-cryptenroll --fido2-device=auto $DEVICE (password piped via key-file)"
+                { set +x; } 2>/dev/null
+                if ! printf '%s' "$(cat "$KEY_FILE")" | systemd-cryptenroll --fido2-device=auto --password-file=/dev/stdin "$DEVICE"; then
+                    log_error "FIDO2 enrollment failed"
+                    return 1
+                fi
+                log_success "FIDO2 key enrolled on $DEVICE"
+            fi
+        fi
         ;;
 
     open)

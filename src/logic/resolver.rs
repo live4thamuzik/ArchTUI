@@ -138,6 +138,11 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         packages.push("xfsprogs");
     }
 
+    // 10b. F2FS tools (if F2FS filesystem selected)
+    if config.root_filesystem == Filesystem::F2fs || config.home_filesystem == Filesystem::F2fs {
+        packages.push("f2fs-tools");
+    }
+
     // 11. FAT tools (always needed for EFI partition)
     packages.push("dosfstools");
 
@@ -215,6 +220,7 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
         DisplayManager::Lightdm => services.push("lightdm"),
         DisplayManager::Lxdm => services.push("lxdm"),
         DisplayManager::Ly => services.push("ly"),
+        DisplayManager::Greetd => services.push("greetd"),
     }
 
     // Profile-specific services
