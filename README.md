@@ -20,9 +20,9 @@ It is not a replacement for reading the Arch Wiki or understanding how a manual 
 
 ## What it does
 
-**Guided installation** — walks through disk partitioning, filesystem creation, base system install, bootloader setup, user creation, locale/timezone, desktop environment selection, and package installation. Configuration options cascade automatically (e.g. selecting a desktop environment sets an appropriate display manager, disabling encryption clears the encryption password). Supports automated runs from a saved JSON configuration file.
+**Guided installation** — walks through disk partitioning, filesystem creation, base system install, bootloader setup, user creation, locale/timezone, desktop environment selection, and package installation. Configuration options cascade automatically (e.g. selecting a desktop environment sets an appropriate display manager, disabling encryption clears the encryption password and key type). Supports automated runs from a saved JSON configuration file.
 
-**System tools** — 26 standalone administration scripts accessible from the TUI or directly via CLI. Disk operations, service management, user/group administration, network configuration, security auditing.
+**System tools** — 28 standalone administration scripts accessible from the TUI or directly via CLI. Disk operations, service management, user/group administration, network configuration, security auditing, initramfs rebuilding, and install log viewing.
 
 ---
 
@@ -135,20 +135,21 @@ Run `./archtui tools --help` for the full list. Each subcommand has its own `--h
 | RAID + LVM | No | Yes | Yes | RAID with LVM on top |
 | RAID + LVM + LUKS | Yes | Yes | Yes | Full stack |
 | Manual | User choice | User choice | User choice | Guided manual partitioning via cfdisk |
+| Pre-mounted | N/A | N/A | N/A | Use already-mounted filesystems at /mnt |
 
 All automated strategies create an EFI System Partition and an XBOOTLDR partition. RAID strategies require 2+ disks and support RAID level selection (0, 1, 5, 6, 10).
 
 ## Supported options
 
-**Filesystems:** ext4, xfs, btrfs (with optional snapshot management via snapper — configurable frequency, keep count, and snapper assistant)
+**Filesystems:** ext4, xfs, btrfs (with optional snapshot management via snapper — configurable frequency, keep count, and snapper assistant), f2fs (flash-friendly for SSDs/NVMe)
 
-**Bootloaders:** GRUB (UEFI and BIOS, with theme selection: PolyDark, CyberEXS, CyberPunk, HyperFluent), systemd-boot (UEFI only)
+**Bootloaders:** GRUB (UEFI and BIOS, with theme selection: PolyDark, CyberEXS, CyberPunk, HyperFluent), systemd-boot (UEFI only), rEFInd (UEFI only), Limine (UEFI and BIOS), EFISTUB (UEFI only, direct kernel boot via efibootmgr)
 
 **Kernels:** linux, linux-lts, linux-zen, linux-hardened
 
-**Desktop environments:** GNOME, KDE Plasma, Hyprland, Sway, i3, Xfce, Cinnamon, Mate, Budgie, or none
+**Desktop environments:** GNOME, KDE Plasma, Hyprland, Sway, i3, Xfce, Cinnamon, Mate, Budgie, Cosmic, Deepin, LXDE, LXQt, bspwm, awesome, qtile, river, niri, labwc, xmonad, or none
 
-**Display managers:** GDM, SDDM, LightDM, LXDM, Ly, or none (auto-selected based on DE, user-overridable)
+**Display managers:** GDM, SDDM, LightDM, LXDM, Ly, greetd (with tuigreet), or none (auto-selected based on DE, user-overridable)
 
 **AUR helpers:** paru, yay, pikaur, or none
 
@@ -158,7 +159,7 @@ All automated strategies create an EFI System Partition and an XBOOTLDR partitio
 
 **Swap:** optional, configurable size (explicit value, "Equal to RAM", or "Double RAM")
 
-**Encryption:** LUKS encryption with secure password handling (tmpfs-backed SecretFile, RAII wipe, inline env vars — never written to disk)
+**Encryption:** LUKS2 encryption with secure password handling (tmpfs-backed SecretFile, RAII wipe, inline env vars — never written to disk). Encryption key types: Password, FIDO2 hardware key, or Password+FIDO2
 
 **Plymouth:** optional boot splash with theme selection (arch-glow, arch-mac-style)
 
@@ -178,10 +179,10 @@ archtui (Rust)
   v
 scripts/ (Bash)
   |-- install.sh              Main installation orchestrator
+  |-- chroot_config.sh        Chroot configuration (DEs, DMs, bootloaders, services)
   |-- config_loader.sh        JSON config → environment variables
-  |-- strategies/*.sh         9 partitioning strategies
-  |-- desktops/*.sh           Desktop environment installers (6)
-  |-- tools/*.sh              26 system administration tools
+  |-- strategies/*.sh         10 partitioning strategies
+  |-- tools/*.sh              28 system administration tools
   |-- utils.sh, disk_utils.sh Common utilities
 ```
 
@@ -200,7 +201,7 @@ Each bash script has a corresponding Rust struct implementing `ScriptArgs`. The 
 Destructive operations (disk wipe, format, partition, LUKS setup) require:
 - Explicit confirmation flags in environment variables
 - Validation before execution
-- Logged warnings before any write operation
+- `log_cmd` before any write operation
 - Dry-run mode support
 
 ---
@@ -227,10 +228,10 @@ ArchTUI/
 |
 |-- scripts/
 |   |-- install.sh          Main install orchestrator
+|   |-- chroot_config.sh    Chroot configuration (all DEs, DMs, services)
 |   |-- config_loader.sh    JSON config → env vars
-|   |-- strategies/         Partitioning strategy scripts (9)
-|   |-- desktops/           Desktop environment scripts (6)
-|   |-- tools/              System administration scripts (26)
+|   |-- strategies/         Partitioning strategy scripts (10)
+|   |-- tools/              System administration scripts (28)
 |
 |-- docs/                   Architecture, safety model, process safety documentation
 |-- .github/workflows/      CI: shellcheck + cargo clippy + cargo test + cargo build
@@ -247,7 +248,7 @@ Requires the Rust toolchain. On Arch: `sudo pacman -S rust`
 ```
 make build          # Release build, copies binary to ./archtui
 make test           # Run Rust and Bash test suites
-make lint           # Clippy with warnings as errors
+make lint           # Clippy + shellcheck on all scripts (must pass before every commit)
 make format         # rustfmt
 make dev            # format + lint + test + build
 make clean          # Remove build artifacts
@@ -271,7 +272,7 @@ The compiled binary has no runtime library dependencies (statically linked, LTO,
 
 What exists and works:
 - TUI framework, navigation, menus, dialogs, embedded PTY terminal
-- Full CLI with subcommands for all 26 tools
+- Full CLI with subcommands for all 28 tools
 - Typed argument system for all script categories
 - Process safety (death pact, group signaling, signal handling)
 - Dry-run mode
@@ -280,15 +281,14 @@ What exists and works:
 - Hardware detection (firmware mode, network state)
 - Pre-install orchestration (mirror ranking with network awareness)
 - Post-install orchestration (AUR helper, dotfiles — non-fatal)
-- Comprehensive logging (master log, per-script verbose trace, config dump)
-- 279 unit tests passing
-- CI pipeline (shellcheck + cargo clippy + cargo test)
+- Comprehensive logging (master log, per-script verbose trace, config dump, `log_cmd` before all destructive ops)
+- 298 unit tests passing
+- CI pipeline (shellcheck on all scripts + cargo clippy + cargo test)
 
 What is incomplete or untested:
 - End-to-end installation has not been validated on real hardware
 - Error recovery paths are not fully exercised
 - ALPM integration is feature-gated and lightly tested
-- Cinnamon, Mate, and Budgie are defined as enums but do not have dedicated desktop scripts
 - No release binaries are published
 
 Do not assume anything works until you have tested it yourself in a disposable environment.

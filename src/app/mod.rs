@@ -2811,6 +2811,30 @@ impl App {
                         "RAID Level is only available for RAID partitioning strategies.".to_string();
                 }
             }
+            "Encryption Key Type" => {
+                // Only allow key type selection when encryption is enabled
+                let encryption_enabled = {
+                    let state = self.lock_state();
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Encryption")
+                        .map(|opt| opt.get_value().to_lowercase() != "no")
+                        .unwrap_or(false)
+                };
+
+                if encryption_enabled {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.input_handler
+                        .start_selection(option.name.clone(), options, option.value);
+                } else {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Encryption Key Type is only available when encryption is enabled."
+                            .to_string();
+                }
+            }
             "AUR Helper" => {
                 // When DE requires AUR, lock the field — user can't set to None
                 let de_requires_aur = {
@@ -3064,14 +3088,24 @@ impl App {
                             encryption_value
                         );
                     }
-                    // Mark encryption password as N/A when encryption is disabled, clear when enabled
+                    // Mark encryption password and key type as N/A when encryption is disabled, clear when enabled
                     if encryption_value == "No" {
                         if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
                             pass_opt.value = "N/A".to_string();
                         }
-                    } else if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
-                        if pass_opt.value == "N/A" {
-                            pass_opt.value = String::new();
+                        if let Some(key_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Key Type") {
+                            key_opt.value = "N/A".to_string();
+                        }
+                    } else {
+                        if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
+                            if pass_opt.value == "N/A" {
+                                pass_opt.value = String::new();
+                            }
+                        }
+                        if let Some(key_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Key Type") {
+                            if key_opt.value == "N/A" {
+                                key_opt.value = "Password".to_string();
+                            }
                         }
                     }
                 }
@@ -3415,7 +3449,7 @@ impl App {
                 }
                 "Encryption" => {
                     if value.to_lowercase() == "no" {
-                        // Mark encryption password as N/A when encryption is disabled
+                        // Mark encryption password and key type as N/A when encryption is disabled
                         if let Some(pass_option) = state
                             .config
                             .options
@@ -3424,15 +3458,35 @@ impl App {
                         {
                             pass_option.value = "N/A".to_string();
                         }
-                    } else if let Some(pass_option) = state
-                        .config
-                        .options
-                        .iter_mut()
-                        .find(|opt| opt.name == "Encryption Password")
-                    {
-                        // Restore password field when encryption is re-enabled
-                        if pass_option.value == "N/A" {
-                            pass_option.value = String::new();
+                        if let Some(key_type_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Key Type")
+                        {
+                            key_type_option.value = "N/A".to_string();
+                        }
+                    } else {
+                        // Restore fields when encryption is re-enabled
+                        if let Some(pass_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Password")
+                        {
+                            if pass_option.value == "N/A" {
+                                pass_option.value = String::new();
+                            }
+                        }
+                        if let Some(key_type_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Key Type")
+                        {
+                            if key_type_option.value == "N/A" {
+                                key_type_option.value = "Password".to_string();
+                            }
                         }
                     }
                 }

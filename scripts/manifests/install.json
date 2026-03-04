@@ -57,7 +57,7 @@
     },
     {
       "name": "BOOTLOADER",
-      "description": "Bootloader (grub or systemd-boot)",
+      "description": "Bootloader (grub, systemd-boot, refind, limine, or efistub)",
       "default": "grub"
     },
     {
@@ -78,7 +78,7 @@
     {
       "name": "SWAP",
       "description": "Enable swap partition",
-      "default": "Yes"
+      "default": "No"
     },
     {
       "name": "ENCRYPTION",
@@ -88,7 +88,7 @@
     {
       "name": "AUR_HELPER",
       "description": "AUR helper to install",
-      "default": "paru"
+      "default": "none"
     }
   ]
 }

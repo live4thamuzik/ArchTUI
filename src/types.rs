@@ -370,6 +370,7 @@ mod tests {
         assert!(filesystems.contains(&"ext4".to_string()));
         assert!(filesystems.contains(&"btrfs".to_string()));
         assert!(filesystems.contains(&"xfs".to_string()));
+        assert!(filesystems.contains(&"f2fs".to_string()));
     }
 
     #[test]

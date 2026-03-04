@@ -108,55 +108,55 @@ case "$FILESYSTEM" in
     ext4)
         if [[ -n "$LABEL" ]]; then
             log_cmd "mkfs.ext4 -F -L $LABEL $DEVICE"
-            mkfs.ext4 -F -L "$LABEL" "$DEVICE"
+            mkfs.ext4 -F -L "$LABEL" "$DEVICE" || error_exit "Failed to format $DEVICE as ext4"
         else
             log_cmd "mkfs.ext4 -F $DEVICE"
-            mkfs.ext4 -F "$DEVICE"
+            mkfs.ext4 -F "$DEVICE" || error_exit "Failed to format $DEVICE as ext4"
         fi
         ;;
     xfs)
         if [[ -n "$LABEL" ]]; then
             log_cmd "mkfs.xfs -f -L $LABEL $DEVICE"
-            mkfs.xfs -f -L "$LABEL" "$DEVICE"
+            mkfs.xfs -f -L "$LABEL" "$DEVICE" || error_exit "Failed to format $DEVICE as xfs"
         else
             log_cmd "mkfs.xfs -f $DEVICE"
-            mkfs.xfs -f "$DEVICE"
+            mkfs.xfs -f "$DEVICE" || error_exit "Failed to format $DEVICE as xfs"
         fi
         ;;
     btrfs)
         if [[ -n "$LABEL" ]]; then
             log_cmd "mkfs.btrfs -f -L $LABEL $DEVICE"
-            mkfs.btrfs -f -L "$LABEL" "$DEVICE"
+            mkfs.btrfs -f -L "$LABEL" "$DEVICE" || error_exit "Failed to format $DEVICE as btrfs"
         else
             log_cmd "mkfs.btrfs -f $DEVICE"
-            mkfs.btrfs -f "$DEVICE"
+            mkfs.btrfs -f "$DEVICE" || error_exit "Failed to format $DEVICE as btrfs"
         fi
         ;;
     fat32)
         if [[ -n "$LABEL" ]]; then
             log_cmd "mkfs.fat -F 32 -n $LABEL $DEVICE"
-            mkfs.fat -F 32 -n "$LABEL" "$DEVICE"
+            mkfs.fat -F 32 -n "$LABEL" "$DEVICE" || error_exit "Failed to format $DEVICE as fat32"
         else
             log_cmd "mkfs.fat -F 32 $DEVICE"
-            mkfs.fat -F 32 "$DEVICE"
+            mkfs.fat -F 32 "$DEVICE" || error_exit "Failed to format $DEVICE as fat32"
         fi
         ;;
     ntfs)
         if [[ -n "$LABEL" ]]; then
             log_cmd "mkfs.ntfs --force -L $LABEL $DEVICE"
-            mkfs.ntfs --force -L "$LABEL" "$DEVICE"
+            mkfs.ntfs --force -L "$LABEL" "$DEVICE" || error_exit "Failed to format $DEVICE as ntfs"
         else
             log_cmd "mkfs.ntfs --force $DEVICE"
-            mkfs.ntfs --force "$DEVICE"
+            mkfs.ntfs --force "$DEVICE" || error_exit "Failed to format $DEVICE as ntfs"
         fi
         ;;
     f2fs)
         if [[ -n "$LABEL" ]]; then
             log_cmd "mkfs.f2fs -f -l $LABEL $DEVICE"
-            mkfs.f2fs -f -l "$LABEL" "$DEVICE"
+            mkfs.f2fs -f -l "$LABEL" "$DEVICE" || error_exit "Failed to format $DEVICE as f2fs"
         else
             log_cmd "mkfs.f2fs -f $DEVICE"
-            mkfs.f2fs -f "$DEVICE"
+            mkfs.f2fs -f "$DEVICE" || error_exit "Failed to format $DEVICE as f2fs"
         fi
         ;;
     *)
