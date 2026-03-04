@@ -68,10 +68,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help)
-            echo "Usage: $0 --type <grub|systemd-boot> --disk <device> [options]"
+            echo "Usage: $0 --type <grub|systemd-boot|refind|limine|efistub> --disk <device> [options]"
             echo ""
             echo "Required:"
-            echo "  --type <type>        Bootloader type: grub or systemd-boot"
+            echo "  --type <type>        Bootloader type: grub, systemd-boot, refind, limine, or efistub"
             echo "  --disk <device>      Target disk device (e.g., /dev/sda)"
             echo ""
             echo "Optional:"
@@ -97,7 +97,7 @@ done
 
 # Validate required arguments
 if [[ -z "$BOOTLOADER_TYPE" ]]; then
-    error_exit "Bootloader type is required (--type grub|systemd-boot)"
+    error_exit "Bootloader type is required (--type grub|systemd-boot|refind|limine|efistub)"
 fi
 
 if [[ -z "$TARGET_DISK" ]]; then
@@ -105,9 +105,10 @@ if [[ -z "$TARGET_DISK" ]]; then
 fi
 
 # Validate bootloader type
-if [[ "$BOOTLOADER_TYPE" != "grub" && "$BOOTLOADER_TYPE" != "systemd-boot" ]]; then
-    error_exit "Invalid bootloader type: $BOOTLOADER_TYPE (must be grub or systemd-boot)"
-fi
+case "$BOOTLOADER_TYPE" in
+    grub|systemd-boot|refind|limine|efistub) ;;
+    *) error_exit "Invalid bootloader type: $BOOTLOADER_TYPE (must be grub, systemd-boot, refind, limine, or efistub)" ;;
+esac
 
 # Validate target disk exists
 if [[ ! -b "$TARGET_DISK" ]]; then
@@ -177,6 +178,27 @@ case "$BOOTLOADER_TYPE" in
     systemd-boot)
         if ! command -v bootctl >/dev/null 2>&1; then
             error_exit "bootctl not found. systemd-boot requires systemd to be installed on the target system."
+        fi
+        ;;
+    refind)
+        if [[ "$BOOT_MODE" != "uefi" ]]; then
+            error_exit "rEFInd requires UEFI mode (BIOS not supported)"
+        fi
+        if ! command -v refind-install >/dev/null 2>&1; then
+            error_exit "refind-install not found. Install the refind package first."
+        fi
+        ;;
+    limine)
+        if ! command -v limine >/dev/null 2>&1; then
+            error_exit "limine not found. Install the limine package first."
+        fi
+        ;;
+    efistub)
+        if [[ "$BOOT_MODE" != "uefi" ]]; then
+            error_exit "EFISTUB requires UEFI mode (BIOS not supported)"
+        fi
+        if ! command -v efibootmgr >/dev/null 2>&1; then
+            error_exit "efibootmgr not found. Install the efibootmgr package first."
         fi
         ;;
 esac
@@ -293,6 +315,119 @@ EOF
         log_success "✅ systemd-boot installed successfully!"
         ;;
         
+    refind)
+        log_info "🔧 Installing rEFInd bootloader..."
+
+        log_cmd "arch-chroot $ROOT_PATH refind-install"
+        arch-chroot "$ROOT_PATH" refind-install || error_exit "refind-install failed"
+
+        log_success "✅ rEFInd bootloader installed successfully!"
+        ;;
+
+    limine)
+        log_info "🔧 Installing Limine bootloader..."
+
+        if [[ "$BOOT_MODE" == "uefi" ]]; then
+            log_info "Installing Limine for UEFI mode..."
+            limine_efi="$ROOT_PATH/usr/share/limine/BOOTX64.EFI"
+            if [[ ! -f "$limine_efi" ]]; then
+                error_exit "Limine EFI binary not found at $limine_efi"
+            fi
+            esp_dir="$ROOT_PATH${EFI_PATH}/EFI/BOOT"
+            mkdir -p "$esp_dir" || error_exit "Failed to create EFI boot directory"
+            log_cmd "cp BOOTX64.EFI to $esp_dir/"
+            cp "$limine_efi" "$esp_dir/BOOTX64.EFI" || error_exit "Failed to copy Limine EFI binary"
+        else
+            log_info "Installing Limine for BIOS mode..."
+            log_cmd "limine bios-install $TARGET_DISK"
+            limine bios-install "$TARGET_DISK" || error_exit "limine bios-install failed"
+        fi
+
+        # Create limine.conf if it doesn't exist
+        if [[ ! -f "$ROOT_PATH/boot/limine.conf" ]]; then
+            log_info "📝 Creating Limine configuration..."
+            cat > "$ROOT_PATH/boot/limine.conf" << EOF
+timeout: 4
+
+/Arch Linux
+    protocol: linux
+    kernel_path: boot():/vmlinuz-linux
+    kernel_cmdline: root=UUID=CHANGEME rw
+    module_path: boot():/initramfs-linux.img
+EOF
+            log_warn "limine.conf created with placeholder root UUID — edit /boot/limine.conf before reboot"
+        fi
+
+        log_success "✅ Limine bootloader installed successfully!"
+        ;;
+
+    efistub)
+        log_info "🔧 Creating EFISTUB boot entry..."
+
+        # Find the ESP partition number
+        esp_part=""
+        while IFS= read -r part; do
+            if [[ -b "$part" ]]; then
+                part_type=$(blkid -s TYPE -o value "$part" 2>/dev/null || echo "")
+                if [[ "$part_type" == "vfat" ]]; then
+                    esp_part="$part"
+                    break
+                fi
+            fi
+        done < <(lsblk -ln -o PATH "$TARGET_DISK" | tail -n +2)
+
+        if [[ -z "$esp_part" ]]; then
+            error_exit "Could not find ESP (vfat) partition on $TARGET_DISK"
+        fi
+
+        # Get disk and partition number for efibootmgr
+        disk_for_efi="$TARGET_DISK"
+        part_num=$(echo "$esp_part" | grep -oE '[0-9]+$')
+
+        # Get root UUID
+        root_part=""
+        max_size=0
+        while IFS= read -r part; do
+            if [[ -b "$part" ]]; then
+                pt=$(blkid -s TYPE -o value "$part" 2>/dev/null || echo "")
+                if [[ "$pt" == "ext4" || "$pt" == "xfs" || "$pt" == "btrfs" || "$pt" == "f2fs" ]]; then
+                    ps=$(blockdev --getsize64 "$part" 2>/dev/null || echo "0")
+                    if [[ "$ps" -gt "$max_size" ]]; then
+                        max_size="$ps"
+                        root_part="$part"
+                    fi
+                fi
+            fi
+        done < <(lsblk -ln -o PATH "$TARGET_DISK" | tail -n +2)
+
+        if [[ -z "$root_part" ]]; then
+            error_exit "Could not find root partition for EFISTUB entry"
+        fi
+
+        root_uuid=$(blkid -s UUID -o value "$root_part" 2>/dev/null) || error_exit "Failed to get UUID for $root_part"
+        [[ -n "$root_uuid" ]] || error_exit "UUID is empty for $root_part"
+
+        cmdline="root=UUID=$root_uuid rw"
+
+        # Build initrd args
+        initrd_args=""
+        [[ -f "$ROOT_PATH/boot/intel-ucode.img" ]] && initrd_args="--unicode initrd=\\intel-ucode.img"
+        [[ -f "$ROOT_PATH/boot/amd-ucode.img" ]] && initrd_args="$initrd_args --unicode initrd=\\amd-ucode.img"
+        initrd_args="$initrd_args --unicode initrd=\\initramfs-linux.img"
+
+        log_cmd "efibootmgr --create --disk $disk_for_efi --part $part_num --label 'Arch Linux' --loader /vmlinuz-linux"
+        # shellcheck disable=SC2086
+        efibootmgr --create \
+            --disk "$disk_for_efi" \
+            --part "$part_num" \
+            --label "Arch Linux" \
+            --loader "/vmlinuz-linux" \
+            $initrd_args \
+            --unicode "$cmdline" || error_exit "efibootmgr --create failed"
+
+        log_success "✅ EFISTUB boot entry created successfully!"
+        ;;
+
     *)
         error_exit "Unsupported bootloader type: $BOOTLOADER_TYPE"
         ;;
@@ -300,26 +435,46 @@ esac
 
 # Verify installation
 log_info "🔍 Verifying bootloader installation..."
-if [[ "$BOOTLOADER_TYPE" == "grub" ]]; then
-    if [[ -f "$ROOT_PATH/boot/grub/grub.cfg" ]]; then
-        log_success "✅ GRUB configuration file created"
-        log_info "GRUB config size: $(du -h "$ROOT_PATH/boot/grub/grub.cfg" | cut -f1)"
-    else
-        log_warning "⚠️  GRUB configuration file not found"
-    fi
-elif [[ "$BOOTLOADER_TYPE" == "systemd-boot" ]]; then
-    if [[ -f "$ROOT_PATH/boot/loader/loader.conf" ]]; then
-        log_success "✅ systemd-boot loader configuration created"
-    else
-        log_warning "⚠️  systemd-boot loader configuration not found"
-    fi
-    
-    if [[ -f "$ROOT_PATH/boot/loader/entries/arch.conf" ]]; then
-        log_success "✅ Arch Linux boot entry created"
-    else
-        log_warning "⚠️  Arch Linux boot entry not found"
-    fi
-fi
+case "$BOOTLOADER_TYPE" in
+    grub)
+        if [[ -f "$ROOT_PATH/boot/grub/grub.cfg" ]]; then
+            log_success "✅ GRUB configuration file created"
+            log_info "GRUB config size: $(du -h "$ROOT_PATH/boot/grub/grub.cfg" | cut -f1)"
+        else
+            log_warning "⚠️  GRUB configuration file not found"
+        fi
+        ;;
+    systemd-boot)
+        if [[ -f "$ROOT_PATH/boot/loader/loader.conf" ]]; then
+            log_success "✅ systemd-boot loader configuration created"
+        else
+            log_warning "⚠️  systemd-boot loader configuration not found"
+        fi
+        if [[ -f "$ROOT_PATH/boot/loader/entries/arch.conf" ]]; then
+            log_success "✅ Arch Linux boot entry created"
+        else
+            log_warning "⚠️  Arch Linux boot entry not found"
+        fi
+        ;;
+    refind)
+        if [[ -f "$ROOT_PATH/boot/refind_linux.conf" ]] || [[ -d "$ROOT_PATH/boot/EFI/refind" ]]; then
+            log_success "✅ rEFInd configuration found"
+        else
+            log_warning "⚠️  rEFInd configuration not found — may need manual setup"
+        fi
+        ;;
+    limine)
+        if [[ -f "$ROOT_PATH/boot/limine.conf" ]]; then
+            log_success "✅ Limine configuration file found"
+        else
+            log_warning "⚠️  Limine configuration file not found at /boot/limine.conf"
+        fi
+        ;;
+    efistub)
+        log_info "Checking EFI boot entries..."
+        efibootmgr 2>/dev/null | grep -q "Arch Linux" && log_success "✅ EFISTUB entry found" || log_warning "⚠️  EFISTUB entry not found"
+        ;;
+esac
 
 log_success "🎉 Bootloader installation completed successfully!"
 log_info "Next steps:"

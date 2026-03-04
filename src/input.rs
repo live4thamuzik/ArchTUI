@@ -1316,10 +1316,10 @@ impl InputHandler {
             ],
             "Encryption" => AutoToggle::iter().map(|v| v.to_string()).collect(),
             "Root Filesystem" => Filesystem::iter()
-                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs))
+                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs | Filesystem::F2fs))
                 .map(|v| v.to_string()).collect(),
             "Home Filesystem" => Filesystem::iter()
-                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs))
+                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs | Filesystem::F2fs))
                 .map(|v| v.to_string()).collect(),
             "Separate Home Partition" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Swap" => Toggle::iter().map(|v| v.to_string()).collect(),

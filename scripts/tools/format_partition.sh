@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help)
             echo "Usage: $0 --device <partition> --filesystem <fs_type> [--label <label>] [--force]"
-            echo "Supported filesystems: ext4, xfs, btrfs, fat32, ntfs"
+            echo "Supported filesystems: ext4, xfs, btrfs, f2fs, fat32, ntfs"
             exit 0
             ;;
         *)
@@ -148,6 +148,15 @@ case "$FILESYSTEM" in
         else
             log_cmd "mkfs.ntfs --force $DEVICE"
             mkfs.ntfs --force "$DEVICE"
+        fi
+        ;;
+    f2fs)
+        if [[ -n "$LABEL" ]]; then
+            log_cmd "mkfs.f2fs -f -l $LABEL $DEVICE"
+            mkfs.f2fs -f -l "$LABEL" "$DEVICE"
+        else
+            log_cmd "mkfs.f2fs -f $DEVICE"
+            mkfs.f2fs -f "$DEVICE"
         fi
         ;;
     *)

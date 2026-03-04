@@ -173,7 +173,6 @@ impl Profile {
             Profile::Kde => &[
                 // Core KDE Plasma
                 "plasma-meta",
-                "plasma-wayland-session",
                 "kde-applications-meta",
                 "konsole",
                 "dolphin",

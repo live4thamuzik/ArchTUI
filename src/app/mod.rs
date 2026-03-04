@@ -3587,9 +3587,15 @@ impl App {
             "install_bootloader" => vec![
                 ToolParam {
                     name: "bootloader".to_string(),
-                    description: "Bootloader to install (GRUB supports BIOS+UEFI, systemd-boot is UEFI only)".to_string(),
+                    description: "Bootloader to install (GRUB: BIOS+UEFI, systemd-boot/refind/efistub: UEFI only, limine: BIOS+UEFI)".to_string(),
                     param_type: ToolParameter::Selection(
-                        vec!["grub".to_string(), "systemd-boot".to_string()],
+                        vec![
+                            "grub".to_string(),
+                            "systemd-boot".to_string(),
+                            "refind".to_string(),
+                            "limine".to_string(),
+                            "efistub".to_string(),
+                        ],
                         0,
                     ),
                     required: true,
@@ -3643,6 +3649,7 @@ impl App {
                             "ext4".to_string(),
                             "xfs".to_string(),
                             "btrfs".to_string(),
+                            "f2fs".to_string(),
                             "fat32".to_string(),
                             "ntfs".to_string(),
                         ],
@@ -4022,7 +4029,7 @@ impl App {
                     name: "helper".to_string(),
                     description: "AUR helper to install".to_string(),
                     param_type: ToolParameter::Selection(
-                        vec!["paru".to_string(), "yay".to_string()],
+                        vec!["paru".to_string(), "yay".to_string(), "pikaur".to_string()],
                         0,
                     ),
                     required: true,
