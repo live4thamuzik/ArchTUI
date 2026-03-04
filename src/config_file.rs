@@ -292,13 +292,9 @@ impl InstallationConfig {
             if url.is_empty() {
                 anyhow::bail!("Git repository URL must be specified when Git Repository is enabled");
             }
-            if !url.starts_with("http://")
-                && !url.starts_with("https://")
-                && !url.starts_with("git://")
-                && !url.starts_with("ssh://")
-            {
+            if !url.starts_with("http://") && !url.starts_with("https://") {
                 anyhow::bail!(
-                    "Git repository URL must start with http://, https://, git://, or ssh://"
+                    "Git repository URL must start with http:// or https://"
                 );
             }
         }
@@ -322,6 +318,14 @@ impl InstallationConfig {
                 anyhow::bail!(
                     "RAID strategies require at least 2 disks (found {}). Select multiple disks.",
                     disk_count
+                );
+            }
+            let valid_levels = ["raid0", "raid1", "raid5", "raid6", "raid10"];
+            if !valid_levels.contains(&self.raid_level.as_str()) {
+                anyhow::bail!(
+                    "Invalid RAID level: '{}'. Must be one of: {}",
+                    self.raid_level,
+                    valid_levels.join(", ")
                 );
             }
         }
@@ -919,13 +923,50 @@ mod tests {
         let mut config = create_test_config();
         config.git_repository = Toggle::Yes;
 
-        // Test all valid schemes
-        for scheme in &["https://", "http://", "git://", "ssh://"] {
+        // Test valid schemes (https:// and http:// only — git:// is unencrypted, ssh:// rejected by bash)
+        for scheme in &["https://", "http://"] {
             config.git_repository_url = format!("{}example.com/repo.git", scheme);
             assert!(
                 config.validate().is_ok(),
                 "Should accept {} URLs",
                 scheme
+            );
+        }
+
+        // git:// and ssh:// should be rejected (unencrypted / not supported by install_dotfiles.sh)
+        for scheme in &["git://", "ssh://"] {
+            config.git_repository_url = format!("{}example.com/repo.git", scheme);
+            assert!(
+                config.validate().is_err(),
+                "Should reject {} URLs",
+                scheme
+            );
+        }
+    }
+
+    #[test]
+    fn test_validation_raid_level() {
+        let mut config = create_test_config();
+        config.partitioning_strategy = PartitionScheme::AutoRaid;
+        config.install_disk = "/dev/sda,/dev/sdb".to_string();
+
+        // Valid RAID levels
+        for level in &["raid0", "raid1", "raid5", "raid6", "raid10"] {
+            config.raid_level = level.to_string();
+            assert!(
+                config.validate().is_ok(),
+                "Should accept RAID level: {}",
+                level
+            );
+        }
+
+        // Invalid RAID levels
+        for level in &["raid2", "invalid", "mirror", ""] {
+            config.raid_level = level.to_string();
+            assert!(
+                config.validate().is_err(),
+                "Should reject RAID level: '{}'",
+                level
             );
         }
     }
