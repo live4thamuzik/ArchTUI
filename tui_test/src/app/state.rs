@@ -179,6 +179,8 @@ pub struct AppState {
     pub config_edit: ConfigEditState,
     /// Cached disk layout lines for the currently selected device
     pub disk_layout: Vec<String>,
+    /// Whether the Secure Boot pre-selection warning has been shown this cycle
+    pub secure_boot_warning_shown: bool,
 }
 
 /// Application operating modes
@@ -252,6 +254,7 @@ impl Default for AppState {
             pending_tool_device: None,
             config_edit: ConfigEditState::None,
             disk_layout: Vec::new(),
+            secure_boot_warning_shown: false,
         }
     }
 }

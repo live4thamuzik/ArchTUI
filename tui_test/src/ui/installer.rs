@@ -967,14 +967,34 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
 
     let crumb = if is_success { "Complete" } else { "Failed" };
 
+    // Check if Secure Boot is enabled in config
+    let secure_boot_enabled = is_success
+        && state
+            .config
+            .options
+            .iter()
+            .find(|opt| opt.name == "Secure Boot")
+            .map(|opt| opt.get_value().to_lowercase() == "yes")
+            .unwrap_or(false);
+
     let layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1), // Breadcrumb
-            Constraint::Length(5), // Status banner
-            Constraint::Min(1),   // Output log
-            Constraint::Length(1), // Hint
-        ])
+        .constraints(if secure_boot_enabled {
+            vec![
+                Constraint::Length(1), // Breadcrumb
+                Constraint::Length(5), // Status banner
+                Constraint::Length(7), // Secure Boot reminder
+                Constraint::Min(1),   // Output log
+                Constraint::Length(1), // Hint
+            ]
+        } else {
+            vec![
+                Constraint::Length(1), // Breadcrumb
+                Constraint::Length(5), // Status banner
+                Constraint::Min(1),   // Output log
+                Constraint::Length(1), // Hint
+            ]
+        })
         .split(area);
 
     render_breadcrumb(f, layout[0], &["Installation", crumb]);
@@ -1001,6 +1021,39 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
         .alignment(Alignment::Left);
     f.render_widget(banner, layout[1]);
 
+    // Secure Boot post-install reminder
+    let log_idx = if secure_boot_enabled {
+        let sb_lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  ACTION REQUIRED \u{2014} Secure Boot",
+                Style::default()
+                    .fg(Colors::WARNING)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "    1. Boot into Arch with Secure Boot OFF",
+                Style::default().fg(Colors::WARNING),
+            )),
+            Line::from(Span::styled(
+                "    2. Run: /root/enroll-secure-boot-keys.sh",
+                Style::default().fg(Colors::WARNING),
+            )),
+            Line::from(Span::styled(
+                "    3. Reboot to UEFI firmware and enable Secure Boot",
+                Style::default().fg(Colors::WARNING),
+            )),
+        ];
+        let sb_para = Paragraph::new(sb_lines)
+            .block(panel_active("Secure Boot"))
+            .alignment(Alignment::Left);
+        f.render_widget(sb_para, layout[2]);
+        3 // output log at index 3
+    } else {
+        2 // output log at index 2
+    };
+    let hint_idx = log_idx + 1;
+
     // Output log (tail)
     let total_lines = state.installer_output.len();
     let pos_text = format!(" {}/{} lines ", total_lines, total_lines);
@@ -1011,8 +1064,8 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
         )])
         .alignment(Alignment::Right),
     );
-    let inner_area = output_block.inner(layout[2]);
-    f.render_widget(output_block, layout[2]);
+    let inner_area = output_block.inner(layout[log_idx]);
+    f.render_widget(output_block, layout[log_idx]);
 
     let visible_height = inner_area.height as usize;
     let start = state.installer_output.len().saturating_sub(visible_height);
@@ -1048,7 +1101,7 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
             .thumb_symbol("\u{2588}")
             .track_style(Style::default().fg(Colors::SCROLLBAR_TRACK))
             .thumb_style(Style::default().fg(Colors::SCROLLBAR_THUMB));
-        f.render_stateful_widget(scrollbar, layout[2], &mut scrollbar_state);
+        f.render_stateful_widget(scrollbar, layout[log_idx], &mut scrollbar_state);
     }
 
     // Hint bar
@@ -1065,7 +1118,7 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
     let hint_para = Paragraph::new(hint)
         .style(Style::default().bg(Colors::BG_SECONDARY))
         .alignment(Alignment::Center);
-    f.render_widget(hint_para, layout[3]);
+    f.render_widget(hint_para, layout[hint_idx]);
 }
 
 // =============================================================================
