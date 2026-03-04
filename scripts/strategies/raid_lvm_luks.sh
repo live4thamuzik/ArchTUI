@@ -130,7 +130,12 @@ execute_raid_lvm_luks_partitioning() {
     # Set up LUKS encryption on data RAID array using helper function (non-interactive)
     local encrypted_dev
     encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptlvm")
-    
+
+    # FIDO2 enrollment (if configured)
+    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        enroll_fido2 "/dev/md/DATA" || log_warn "FIDO2 enrollment failed — password-only fallback"
+    fi
+
     # Set up LVM on encrypted RAID array
     log_info "Setting up LVM on encrypted RAID array"
 

@@ -345,8 +345,10 @@ validate_configuration() {
     done
     [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
-    # Validate disk(s) exist
-    if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
+    # Validate disk(s) exist (skip for pre_mounted — uses existing mounts)
+    if [[ "$PARTITIONING_STRATEGY" == "pre_mounted" ]]; then
+        log_info "Pre-mounted strategy — skipping disk validation"
+    elif [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
         # RAID: validate each comma-separated disk
         IFS=',' read -ra _validate_disks <<< "$INSTALL_DISK"
         for _disk in "${_validate_disks[@]}"; do
@@ -397,7 +399,7 @@ validate_configuration() {
 
     # Validate partitioning strategy
     case "$PARTITIONING_STRATEGY" in
-        auto_simple|auto_simple_luks|auto_lvm|auto_luks_lvm|auto_raid|auto_raid_luks|auto_raid_lvm|auto_raid_lvm_luks|manual) ;;
+        auto_simple|auto_simple_luks|auto_lvm|auto_luks_lvm|auto_raid|auto_raid_luks|auto_raid_lvm|auto_raid_lvm_luks|manual|pre_mounted) ;;
         *) log_error "Unknown partitioning strategy: $PARTITIONING_STRATEGY"; return 1 ;;
     esac
 
@@ -411,7 +413,7 @@ validate_configuration() {
 
     # Validate bootloader
     case "$BOOTLOADER" in
-        grub|systemd-boot) ;;
+        grub|systemd-boot|refind|limine|efistub) ;;
         *) log_error "Unknown bootloader: $BOOTLOADER"; return 1 ;;
     esac
 
@@ -595,6 +597,10 @@ partition_disk() {
         "manual")
             strategy_func="do_manual_partitioning_guided"
             log_info "Using manual partitioning (guided)"
+            ;;
+        "pre_mounted")
+            strategy_func="do_pre_mounted_partitioning"
+            log_info "Using pre-mounted partitions (detection only)"
             ;;
         *)
             log_error "Unknown partitioning strategy: $PARTITIONING_STRATEGY"

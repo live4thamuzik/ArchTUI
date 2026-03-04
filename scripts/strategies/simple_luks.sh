@@ -110,6 +110,11 @@ execute_simple_luks_partitioning() {
     local encrypted_dev
     encrypted_dev=$(setup_luks_encryption "$luks_dev" "cryptroot")
 
+    # FIDO2 enrollment (if configured)
+    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        enroll_fido2 "$luks_dev" || log_warn "FIDO2 enrollment failed — password-only fallback"
+    fi
+
     # Format root filesystem
     log_info "Creating $ROOT_FILESYSTEM_TYPE filesystem on $encrypted_dev..."
     format_filesystem "$encrypted_dev" "$ROOT_FILESYSTEM_TYPE"

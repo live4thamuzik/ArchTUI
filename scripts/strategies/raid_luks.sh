@@ -130,7 +130,12 @@ execute_raid_luks_partitioning() {
     # Set up LUKS encryption on data RAID array using helper function (non-interactive)
     local encrypted_dev
     encrypted_dev=$(setup_luks_encryption "/dev/md/DATA" "cryptroot")
-    
+
+    # FIDO2 enrollment (if configured)
+    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        enroll_fido2 "/dev/md/DATA" || log_warn "FIDO2 enrollment failed — password-only fallback"
+    fi
+
     # Format encrypted array
     log_info "Formatting encrypted RAID array"
     format_filesystem "/dev/mapper/cryptroot" "$ROOT_FILESYSTEM_TYPE"

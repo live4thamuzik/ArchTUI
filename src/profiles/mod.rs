@@ -20,6 +20,17 @@
 //! | Cinnamon  | Cinnamon desktop | LightDM |
 //! | Mate      | MATE desktop | LightDM |
 //! | Budgie    | Budgie desktop | LightDM |
+//! | Cosmic    | COSMIC desktop (AUR) | None |
+//! | Deepin    | Deepin desktop | LightDM |
+//! | Lxde      | LXDE desktop | LXDM |
+//! | Lxqt      | LXQt desktop | SDDM |
+//! | Bspwm     | bspwm (X11 tiling) | LightDM |
+//! | Awesome   | Awesome WM (X11 tiling) | LightDM |
+//! | Qtile     | Qtile WM (X11 tiling) | LightDM |
+//! | River     | River (Wayland tiling) | SDDM |
+//! | Niri      | Niri (Wayland tiling) | SDDM |
+//! | Labwc     | Labwc (Wayland stacking) | SDDM |
+//! | Xmonad    | XMonad (X11 tiling) | LightDM |
 //!
 //! # Package List Philosophy
 //!
@@ -79,6 +90,50 @@ pub enum Profile {
     /// Budgie desktop environment.
     /// Modern, simple desktop by Solus.
     Budgie,
+
+    /// COSMIC desktop environment.
+    /// Modern Rust-based DE by System76 (AUR packages).
+    Cosmic,
+
+    /// Deepin desktop environment.
+    /// Elegant Chinese-developed desktop.
+    Deepin,
+
+    /// LXDE desktop environment.
+    /// Extremely lightweight GTK desktop.
+    Lxde,
+
+    /// LXQt desktop environment.
+    /// Lightweight Qt-based desktop.
+    Lxqt,
+
+    /// bspwm tiling window manager (X11).
+    /// Binary space partitioning WM.
+    Bspwm,
+
+    /// Awesome tiling window manager (X11).
+    /// Highly configurable Lua-based WM.
+    Awesome,
+
+    /// Qtile tiling window manager (X11).
+    /// Python-based tiling WM.
+    Qtile,
+
+    /// River Wayland compositor.
+    /// Dynamic tiling Wayland compositor.
+    River,
+
+    /// Niri Wayland compositor.
+    /// Scrollable-tiling Wayland compositor.
+    Niri,
+
+    /// Labwc Wayland compositor.
+    /// Openbox-like stacking Wayland compositor.
+    Labwc,
+
+    /// XMonad tiling window manager (X11).
+    /// Haskell-based tiling WM.
+    Xmonad,
 }
 
 impl Profile {
@@ -312,6 +367,283 @@ impl Profile {
                 // Utilities
                 "firefox",
             ],
+
+            Profile::Cosmic => &[
+                // COSMIC (minimal — most packages come from AUR)
+                "networkmanager",
+                "pipewire",
+                "pipewire-pulse",
+                "firefox",
+            ],
+
+            Profile::Deepin => &[
+                // Deepin desktop
+                "deepin",
+                "deepin-extra",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Lxde => &[
+                // LXDE desktop
+                "lxde",
+                // Display manager
+                "lxdm",
+                // Network
+                "networkmanager",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Lxqt => &[
+                // LXQt desktop
+                "lxqt",
+                "breeze-icons",
+                // Display manager
+                "sddm",
+                // Network
+                "networkmanager",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Bspwm => &[
+                // bspwm window manager
+                "bspwm",
+                "sxhkd",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
+                // Terminal
+                "alacritty",
+                // Launcher
+                "dmenu",
+                // Compositor
+                "picom",
+                // Wallpaper
+                "feh",
+                // File manager
+                "thunar",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Awesome => &[
+                // Awesome window manager
+                "awesome",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
+                // Terminal
+                "alacritty",
+                // Compositor
+                "picom",
+                // File manager
+                "thunar",
+                // Wallpaper
+                "feh",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Qtile => &[
+                // Qtile window manager
+                "qtile",
+                "python-psutil",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
+                // Terminal
+                "alacritty",
+                // Compositor
+                "picom",
+                // File manager
+                "thunar",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::River => &[
+                // River Wayland compositor
+                "river",
+                "xdg-desktop-portal-wlr",
+                // Status bar
+                "waybar",
+                // Terminal
+                "foot",
+                // Launcher
+                "wofi",
+                // Notification
+                "mako",
+                // Screenshot
+                "grim",
+                "slurp",
+                // Clipboard
+                "wl-clipboard",
+                // File manager
+                "thunar",
+                // Display manager
+                "sddm",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Niri => &[
+                // Niri Wayland compositor
+                "niri",
+                "xdg-desktop-portal-gnome",
+                // Status bar
+                "waybar",
+                // Terminal
+                "foot",
+                // Launcher
+                "fuzzel",
+                // Notification
+                "mako",
+                // Screenshot
+                "grim",
+                "slurp",
+                // Clipboard
+                "wl-clipboard",
+                // File manager
+                "nautilus",
+                // Display manager
+                "sddm",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Labwc => &[
+                // Labwc Wayland compositor
+                "labwc",
+                "xdg-desktop-portal-wlr",
+                // Status bar
+                "waybar",
+                // Terminal
+                "foot",
+                // Launcher
+                "wofi",
+                // Notification
+                "mako",
+                // Screenshot
+                "grim",
+                "slurp",
+                // Clipboard
+                "wl-clipboard",
+                // File manager
+                "thunar",
+                // Display manager
+                "sddm",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
+
+            Profile::Xmonad => &[
+                // XMonad window manager
+                "xmonad",
+                "xmonad-contrib",
+                "xmobar",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
+                // Launcher
+                "dmenu",
+                // Terminal
+                "alacritty",
+                // Compositor
+                "picom",
+                // File manager
+                "thunar",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
         }
     }
 
@@ -321,16 +653,14 @@ impl Profile {
     /// Returns `None` for profiles without a GUI.
     pub fn get_display_manager(&self) -> Option<&'static str> {
         match self {
-            Profile::Minimal => None,
+            Profile::Minimal | Profile::Cosmic => None,
             Profile::Gnome => Some("gdm"),
-            Profile::Kde => Some("sddm"),
-            Profile::Hyprland => Some("sddm"),
-            Profile::Sway => Some("sddm"),
-            Profile::I3 => Some("lightdm"),
-            Profile::Xfce => Some("lightdm"),
-            Profile::Cinnamon => Some("lightdm"),
-            Profile::Mate => Some("lightdm"),
-            Profile::Budgie => Some("lightdm"),
+            Profile::Kde | Profile::Hyprland | Profile::Sway
+            | Profile::Lxqt | Profile::River | Profile::Niri | Profile::Labwc => Some("sddm"),
+            Profile::I3 | Profile::Xfce | Profile::Cinnamon | Profile::Mate
+            | Profile::Budgie | Profile::Deepin | Profile::Bspwm | Profile::Awesome
+            | Profile::Qtile | Profile::Xmonad => Some("lightdm"),
+            Profile::Lxde => Some("lxdm"),
         }
     }
 
@@ -338,24 +668,27 @@ impl Profile {
     ///
     /// Returns service names for systemctl enable.
     pub fn get_services(&self) -> &'static [&'static str] {
-        match self {
-            Profile::Minimal => &["NetworkManager"],
-            Profile::Gnome | Profile::Kde => &["NetworkManager"],
-            Profile::Hyprland | Profile::Sway | Profile::I3 | Profile::Xfce
-            | Profile::Cinnamon | Profile::Mate | Profile::Budgie => {
-                &["NetworkManager"]
-            }
-        }
+        // All profiles need NetworkManager
+        &["NetworkManager"]
     }
 
     /// Check if this profile uses Wayland.
     pub fn is_wayland(&self) -> bool {
-        matches!(self, Profile::Gnome | Profile::Kde | Profile::Hyprland | Profile::Sway)
+        matches!(
+            self,
+            Profile::Gnome | Profile::Kde | Profile::Hyprland | Profile::Sway
+            | Profile::Cosmic | Profile::River | Profile::Niri | Profile::Labwc
+        )
     }
 
     /// Check if this profile is a tiling WM.
     pub fn is_tiling(&self) -> bool {
-        matches!(self, Profile::Hyprland | Profile::Sway | Profile::I3)
+        matches!(
+            self,
+            Profile::Hyprland | Profile::Sway | Profile::I3
+            | Profile::Bspwm | Profile::Awesome | Profile::Qtile
+            | Profile::River | Profile::Niri | Profile::Xmonad
+        )
     }
 
     /// Check if this profile is a traditional desktop environment.
@@ -364,6 +697,7 @@ impl Profile {
             self,
             Profile::Gnome | Profile::Kde | Profile::Xfce
             | Profile::Cinnamon | Profile::Mate | Profile::Budgie
+            | Profile::Deepin | Profile::Lxde | Profile::Lxqt
         )
     }
 
@@ -380,6 +714,17 @@ impl Profile {
             Profile::Cinnamon => "Cinnamon desktop environment (traditional)",
             Profile::Mate => "MATE desktop environment (GNOME 2 fork)",
             Profile::Budgie => "Budgie desktop environment (modern, simple)",
+            Profile::Cosmic => "COSMIC desktop environment (Rust-based, AUR)",
+            Profile::Deepin => "Deepin desktop environment (elegant)",
+            Profile::Lxde => "LXDE desktop environment (ultra-lightweight)",
+            Profile::Lxqt => "LXQt desktop environment (lightweight Qt)",
+            Profile::Bspwm => "bspwm tiling window manager (X11)",
+            Profile::Awesome => "Awesome window manager (Lua, X11)",
+            Profile::Qtile => "Qtile window manager (Python, X11)",
+            Profile::River => "River Wayland compositor (dynamic tiling)",
+            Profile::Niri => "Niri Wayland compositor (scrollable tiling)",
+            Profile::Labwc => "Labwc Wayland compositor (Openbox-like)",
+            Profile::Xmonad => "XMonad window manager (Haskell, X11)",
         }
     }
 }
@@ -445,6 +790,15 @@ pub mod bootloader_packages {
 
     /// systemd-boot (included in systemd, no extra packages needed).
     pub const SYSTEMD_BOOT: &[&str] = &[];
+
+    /// rEFInd bootloader packages.
+    pub const REFIND: &[&str] = &["refind"];
+
+    /// Limine bootloader packages.
+    pub const LIMINE: &[&str] = &["limine"];
+
+    /// EFISTUB (uses efibootmgr to create boot entries).
+    pub const EFISTUB: &[&str] = &["efibootmgr"];
 }
 
 /// AUR helper packages (installed from AUR, not official repos).

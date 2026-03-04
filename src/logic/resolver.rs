@@ -99,6 +99,9 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     let boot_pkgs = match config.bootloader {
         Bootloader::Grub => bootloader_packages::GRUB,
         Bootloader::SystemdBoot => bootloader_packages::SYSTEMD_BOOT,
+        Bootloader::Refind => bootloader_packages::REFIND,
+        Bootloader::Limine => bootloader_packages::LIMINE,
+        Bootloader::Efistub => bootloader_packages::EFISTUB,
     };
     packages.extend_from_slice(boot_pkgs);
 
@@ -114,6 +117,10 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     // 7. Encryption tools (if encryption is enabled)
     if config.partitioning_strategy.uses_encryption() {
         packages.push("cryptsetup");
+        // FIDO2 hardware key support
+        if config.encryption_key_type != EncryptionKeyType::Password {
+            packages.push("libfido2");
+        }
     }
 
     // 8. LVM tools (if LVM is enabled)
@@ -254,6 +261,17 @@ fn desktop_to_profile(de: DesktopEnvironment) -> Profile {
         DesktopEnvironment::Cinnamon => Profile::Cinnamon,
         DesktopEnvironment::Mate => Profile::Mate,
         DesktopEnvironment::Budgie => Profile::Budgie,
+        DesktopEnvironment::Cosmic => Profile::Cosmic,
+        DesktopEnvironment::Deepin => Profile::Deepin,
+        DesktopEnvironment::Lxde => Profile::Lxde,
+        DesktopEnvironment::Lxqt => Profile::Lxqt,
+        DesktopEnvironment::Bspwm => Profile::Bspwm,
+        DesktopEnvironment::Awesome => Profile::Awesome,
+        DesktopEnvironment::Qtile => Profile::Qtile,
+        DesktopEnvironment::River => Profile::River,
+        DesktopEnvironment::Niri => Profile::Niri,
+        DesktopEnvironment::Labwc => Profile::Labwc,
+        DesktopEnvironment::Xmonad => Profile::Xmonad,
     }
 }
 
@@ -549,5 +567,16 @@ mod tests {
         assert_eq!(desktop_to_profile(DesktopEnvironment::Cinnamon), Profile::Cinnamon);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Mate), Profile::Mate);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Budgie), Profile::Budgie);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Cosmic), Profile::Cosmic);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Deepin), Profile::Deepin);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Lxde), Profile::Lxde);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Lxqt), Profile::Lxqt);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Bspwm), Profile::Bspwm);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Awesome), Profile::Awesome);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Qtile), Profile::Qtile);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::River), Profile::River);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Niri), Profile::Niri);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Labwc), Profile::Labwc);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Xmonad), Profile::Xmonad);
     }
 }

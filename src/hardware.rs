@@ -121,8 +121,11 @@ impl HardwareInfo {
     /// systemd-boot requires UEFI. GRUB works with both UEFI and BIOS.
     pub fn is_bootloader_compatible(&self, bootloader: &crate::types::Bootloader) -> bool {
         match bootloader {
-            crate::types::Bootloader::SystemdBoot => self.firmware.is_uefi(),
-            crate::types::Bootloader::Grub => true,
+            crate::types::Bootloader::SystemdBoot
+            | crate::types::Bootloader::Refind
+            | crate::types::Bootloader::Efistub => self.firmware.is_uefi(),
+            crate::types::Bootloader::Grub
+            | crate::types::Bootloader::Limine => true,
         }
     }
 }

@@ -115,6 +115,12 @@ do_manual_partitioning_guided() {
     execute_manual_partitioning
 }
 
+# Pre-mounted partitioning (detect existing mounts)
+do_pre_mounted_partitioning() {
+    source_or_die "$_STRAT_DIR/strategies/pre_mounted.sh"
+    execute_pre_mounted_partitioning
+}
+
 # --- Legacy Functions (for backward compatibility) ---
 # These map to the new modular functions
 

@@ -232,7 +232,20 @@ impl Default for Configuration {
                 // Desktop Environment (38-39)
                 ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
                 ConfigOption::new("Display Manager", false, "Display manager", "none"),
-                // Boot Splash and Final Setup (40-44)
+                // Advanced Boot (40-41)
+                ConfigOption::new(
+                    "Unified Kernel Image",
+                    false,
+                    "Build UKI (.efi) instead of separate kernel+initramfs",
+                    "No",
+                ),
+                ConfigOption::new(
+                    "Encryption Key Type",
+                    false,
+                    "LUKS unlock method (Password, FIDO2, or both)",
+                    "Password",
+                ),
+                // Boot Splash and Final Setup (42-46)
                 ConfigOption::new("Plymouth", false, "Boot splash screen", "No"),
                 ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "arch-glow"),
                 ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot", "No"),
@@ -313,6 +326,8 @@ impl Configuration {
                 "Numlock on Boot" => "NUMLOCK_ON_BOOT",
                 "Git Repository" => "GIT_REPOSITORY",
                 "Git Repository URL" => "GIT_REPOSITORY_URL",
+                "Unified Kernel Image" => "UNIFIED_KERNEL_IMAGE",
+                "Encryption Key Type" => "ENCRYPTION_KEY_TYPE",
                 _ => continue, // Skip unknown options
             };
 

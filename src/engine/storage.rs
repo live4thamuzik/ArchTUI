@@ -248,6 +248,12 @@ pub fn calculate_storage_plan(config: &InstallationConfig) -> Result<StoragePlan
                  it is handled interactively by the TUI."
             )
         }
+        PartitionScheme::PreMounted => {
+            bail!(
+                "Pre-mounted partitioning does not use the storage engine — \
+                 it detects existing mounts at /mnt."
+            )
+        }
     }
 }
 
