@@ -135,7 +135,8 @@ execute_raid_partitioning() {
 
     # Save RAID configuration for boot
     mkdir -p /mnt/etc
-    mdadm --detail --scan > /mnt/etc/mdadm.conf
+    log_cmd "mdadm --detail --scan > /mnt/etc/mdadm.conf"
+    mdadm --detail --scan > /mnt/etc/mdadm.conf || log_warn "Failed to write mdadm.conf"
     log_info "Saved RAID configuration to /mnt/etc/mdadm.conf"
 
     log_partitioning_complete "RAID (ESP + boot + RAID array)"

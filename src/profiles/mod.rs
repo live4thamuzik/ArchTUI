@@ -194,7 +194,7 @@ impl Profile {
                 // Terminal
                 "kitty",
                 // Launcher
-                "wofi",
+                "rofi-wayland",
                 // Notification daemon
                 "mako",
                 // Screenshot
@@ -233,7 +233,7 @@ impl Profile {
                 // Terminal
                 "foot",
                 // Launcher
-                "wofi",
+                "rofi-wayland",
                 // Notification
                 "mako",
                 // Screenshot
@@ -515,7 +515,7 @@ impl Profile {
                 // Terminal
                 "foot",
                 // Launcher
-                "wofi",
+                "rofi-wayland",
                 // Notification
                 "mako",
                 // Screenshot
@@ -585,7 +585,7 @@ impl Profile {
                 // Terminal
                 "foot",
                 // Launcher
-                "wofi",
+                "rofi-wayland",
                 // Notification
                 "mako",
                 // Screenshot
@@ -887,7 +887,7 @@ mod tests {
         assert!(packages.contains(&"hyprland"));
         assert!(packages.contains(&"waybar"));
         assert!(packages.contains(&"kitty"));
-        assert!(packages.contains(&"wofi"));
+        assert!(packages.contains(&"rofi-wayland"));
         assert!(packages.contains(&"sddm")); // Display manager included
     }
 

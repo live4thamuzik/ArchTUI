@@ -158,10 +158,11 @@ main() {
     # Enable multilib repository in chroot if requested
     if [[ "${MULTILIB:-No}" == "Yes" ]]; then
         log_info "Enabling multilib repository in chroot..."
-        sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf
+        sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf || log_warn "Failed to enable multilib in pacman.conf"
         if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
             log_warn "Could not enable multilib in pacman.conf — lib32 packages may not install"
         fi
+        log_cmd "pacman -Sy"
         pacman -Sy || log_warn "Failed to sync multilib repository"
         log_success "Multilib repository enabled in chroot"
     fi
@@ -393,6 +394,7 @@ configure_mkinitcpio() {
 
         # Save mdadm configuration
         if command -v mdadm &>/dev/null; then
+            log_cmd "mdadm --detail --scan >> /etc/mdadm.conf"
             mdadm --detail --scan >> /etc/mdadm.conf 2>/dev/null || true
         fi
     fi
@@ -1002,7 +1004,7 @@ configure_grub_settings() {
     fi
 
     # Update GRUB_CMDLINE_LINUX_DEFAULT
-    sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"|" "$grub_default"
+    sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"|" "$grub_default" || log_warn "Failed to update GRUB_CMDLINE_LINUX_DEFAULT"
 
     # Enable os-prober if requested OR if other OS was detected during partitioning
     # This ensures dual-boot is properly configured even if user forgot to enable it

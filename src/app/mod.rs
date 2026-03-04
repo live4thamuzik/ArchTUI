@@ -652,7 +652,7 @@ impl App {
             if let Some(value) = self.input_handler.handle_input(key_event) {
                 // Check if we're in disk selection mode for a tool
                 let current_tool = {
-                    let state = self.state.lock().map_err(|_| "Failed to lock state")?;
+                    let state = self.lock_state();
                     state.current_tool.clone()
                 };
 
@@ -2880,10 +2880,7 @@ impl App {
         value: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (current_step, option_name) = {
-            let state = self
-                .state
-                .lock()
-                .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)))?;
+            let state = self.lock_state();
             if state.config_scroll.selected_index >= state.config.options.len() {
                 return Err(error::general_error("Invalid configuration option index").into());
             }
@@ -2897,10 +2894,7 @@ impl App {
 
         // Update the configuration value
         {
-            let mut state = self
-                .state
-                .lock()
-                .map_err(|e| error::general_error(format!("Mutex poisoned: {}", e)))?;
+            let mut state = self.lock_state();
             if current_step < state.config.options.len() {
                 // Parse disk selection to extract only device path
                 let parsed_value = if option_name == "Disk" {
@@ -4642,6 +4636,7 @@ impl App {
         // Run lsblk synchronously
         let lsblk_output = Command::new("lsblk")
             .args(["-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS,PTTYPE", device])
+            .in_new_process_group()
             .output();
 
         let mut lines = vec![
@@ -4667,6 +4662,7 @@ impl App {
         let sgdisk_output = Command::new("sgdisk")
             .args(["-p", device])
             .stderr(Stdio::null())
+            .in_new_process_group()
             .output();
 
         match sgdisk_output {
@@ -4682,6 +4678,7 @@ impl App {
                 let fdisk_output = Command::new("fdisk")
                     .args(["-l", device])
                     .stderr(Stdio::null())
+                    .in_new_process_group()
                     .output();
                 if let Ok(output) = fdisk_output {
                     lines.push("  Partition table details:".to_string());

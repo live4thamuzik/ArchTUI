@@ -1157,5 +1157,6 @@ cleanup_partitioning() {
 # Call this at the start of each strategy
 setup_partitioning_trap() {
     trap 'cleanup_partitioning; exit 1' ERR
-    trap 'cleanup_partitioning; exit 130' INT TERM
+    trap 'cleanup_partitioning; exit 130' INT
+    trap 'cleanup_partitioning; exit 143' TERM
 }
