@@ -340,14 +340,14 @@ wipe_disk() {
 
     # Wipe filesystem signatures
     log_cmd "wipefs --all --force $disk"
-    wipefs --all --force "$disk"
+    wipefs --all --force "$disk" || { log_error "wipefs failed on $disk"; return 1; }
 
     # Zero out the beginning of the disk to kill MBR/GPT tables
     log_cmd "dd if=/dev/zero of=$disk bs=1M count=10 status=none"
     dd if=/dev/zero of="$disk" bs=1M count=10 status=none
 
     # Reload partition table
-    partprobe "$disk" || true
+    partprobe "$disk" || log_warn "partprobe failed on $disk"
 
     return 0
 }
@@ -365,7 +365,7 @@ create_partition_table() {
     log_cmd "sgdisk -o $disk"
     sgdisk -o "$disk" || { log_error "Failed to create new GPT on $disk"; return 1; }
     
-    partprobe "$disk" || true
+    partprobe "$disk" || log_warn "partprobe failed on $disk"
 }
 
 create_esp_partition() {
@@ -508,7 +508,7 @@ create_swapfile() {
             log_error "Failed to allocate swap file"
             return 1
         }
-        chmod 600 "$swapfile"
+        chmod 600 "$swapfile" || { log_error "Failed to chmod swap file"; return 1; }
         log_cmd "mkswap $swapfile"
         mkswap "$swapfile" || { log_error "Failed to format swap file"; return 1; }
     fi
@@ -614,6 +614,7 @@ setup_btrfs_subvolumes() {
     }
 
     # Create standard subvolume layout
+    log_cmd "btrfs subvolume create /mnt/@ @var @tmp @snapshots @cache @log"
     btrfs subvolume create /mnt/@ || { umount /mnt; log_error "Failed to create @ subvolume"; return 1; }
     btrfs subvolume create /mnt/@var || { umount /mnt; log_error "Failed to create @var subvolume"; return 1; }
     btrfs subvolume create /mnt/@tmp || { umount /mnt; log_error "Failed to create @tmp subvolume"; return 1; }
@@ -622,6 +623,7 @@ setup_btrfs_subvolumes() {
     btrfs subvolume create /mnt/@log || { umount /mnt; log_error "Failed to create @log subvolume"; return 1; }
 
     if [[ "$include_home" == "yes" ]]; then
+        log_cmd "btrfs subvolume create /mnt/@home"
         btrfs subvolume create /mnt/@home || { umount /mnt; log_error "Failed to create @home subvolume"; return 1; }
     fi
 
@@ -1024,7 +1026,7 @@ sync_partitions() {
     sync
 
     # Inform kernel of partition table changes
-    partprobe "$disk" 2>/dev/null || true
+    partprobe "$disk" 2>/dev/null || log_warn "partprobe failed on $disk"
 
     # Wait for udev to finish creating device nodes and populating attributes
     # Critical for NVMe/USB where device nodes appear asynchronously
