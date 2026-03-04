@@ -736,6 +736,11 @@ impl App {
 
                 // User confirmed input, update configuration
                 self.update_configuration_value(value)?;
+            } else if !self.input_handler.is_dialog_active() {
+                // Dialog was cancelled (Esc) — reset secure boot warning flag
+                let mut state = self.lock_state();
+                state.secure_boot_warning_shown = false;
+                state.config_edit = ConfigEditState::None;
             } else {
                 // Dialog still active — sync right-panel to reflect current state
                 self.sync_config_edit_from_input();
@@ -1988,35 +1993,28 @@ impl App {
         true
     }
 
-    /// Check if secure boot warning should be shown after setting value
-    fn check_secure_boot_warning(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Secure boot warning is now always shown in the dialog itself
-        Ok(())
-    }
-
     /// Check if UEFI is supported on this system
     fn is_uefi_supported(&self) -> bool {
         // Check for UEFI support by looking at /sys/firmware/efi
         std::path::Path::new("/sys/firmware/efi").exists()
     }
 
-    /// Show secure boot warning dialog
+    /// Show secure boot pre-selection warning dialog
     fn show_secure_boot_warning(&mut self) {
         let warning_message = vec![
-            "SECURE BOOT REQUIREMENTS NOT MET".to_string(),
+            "SECURE BOOT \u{2014} READ BEFORE ENABLING".to_string(),
             "".to_string(),
-            "Secure Boot requires UEFI firmware configuration:".to_string(),
+            "Not recommended unless dual-booting with Windows.".to_string(),
             "".to_string(),
-            "1. Boot into UEFI firmware settings".to_string(),
-            "2. Enable UEFI mode (disable Legacy/CSM)".to_string(),
-            "3. Enable Secure Boot in firmware".to_string(),
-            "4. Set Secure Boot to 'Windows UEFI' mode".to_string(),
-            "5. Save and exit firmware".to_string(),
+            "Enabling this option will:".to_string(),
+            "  - Install sbctl and generate self-signed keys".to_string(),
+            "  - Sign your kernel and bootloader EFI binaries".to_string(),
+            "  - Install a pacman hook for automatic re-signing".to_string(),
             "".to_string(),
-            "⚠️  WARNING: Secure Boot can prevent booting".to_string(),
-            "if not configured properly!".to_string(),
-            "".to_string(),
-            "See: https://wiki.archlinux.org/title/Unified_Extensible_Firmware_Interface#UEFI_variables".to_string(),
+            "After installation you MUST:".to_string(),
+            "  1. Boot into Arch with Secure Boot still OFF".to_string(),
+            "  2. Run: /root/enroll-secure-boot-keys.sh".to_string(),
+            "  3. Reboot to UEFI firmware and enable Secure Boot".to_string(),
         ];
 
         self.input_handler
@@ -2081,7 +2079,14 @@ impl App {
                 {
                     let boot_mode = boot_mode_option.value.to_lowercase();
                     if boot_mode != "uefi" && boot_mode != "auto" {
-                        self.show_secure_boot_warning();
+                        let msg = vec![
+                            "Secure Boot requires UEFI boot mode.".to_string(),
+                            "".to_string(),
+                            "Please set Boot Mode to UEFI or Auto,".to_string(),
+                            "or disable Secure Boot.".to_string(),
+                        ];
+                        self.input_handler
+                            .start_warning("Secure Boot Error".to_string(), msg);
                         return false;
                     }
                 }
@@ -2335,18 +2340,38 @@ impl App {
                 self.set_inline_selection(options, option.get_value());
             }
             "Secure Boot" => {
-                let mut options = InputHandler::get_predefined_options(&option.name);
                 let uefi_supported = self.is_uefi_supported();
 
                 if !uefi_supported {
-                    options = vec!["No".to_string()];
                     let mut state = self.lock_state();
                     state.status_message =
                         "Secure Boot requires UEFI firmware (not available on this system)."
                             .to_string();
+                    self.set_inline_selection(vec!["No".to_string()], option.get_value());
+                    return Ok(());
                 }
 
-                self.set_inline_selection(options, option.get_value());
+                let warning_shown = {
+                    let state = self.lock_state();
+                    state.secure_boot_warning_shown
+                };
+
+                if !warning_shown {
+                    // Show informational warning before opening selection
+                    {
+                        let mut state = self.lock_state();
+                        state.secure_boot_warning_shown = true;
+                    }
+                    self.show_secure_boot_warning();
+                } else {
+                    // Warning already shown — open the normal Yes/No selection
+                    {
+                        let mut state = self.lock_state();
+                        state.secure_boot_warning_shown = false;
+                    }
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.set_inline_selection(options, option.get_value());
+                }
             }
             "Encryption" => {
                 let partitioning_strategy = {
@@ -3159,14 +3184,10 @@ impl App {
             self.auto_set_de_dependencies(&value)?;
         }
 
-        // Handle warning dialog acknowledgment
-        if value == "acknowledged" {
-            // Warning was acknowledged, proceed to show normal selection dialog
-        }
-
-        // Check for secure boot warning after setting Secure Boot
-        if option_name == "Secure Boot" && value.to_lowercase() == "yes" {
-            self.check_secure_boot_warning()?;
+        // Handle warning dialog acknowledgment — re-enter Secure Boot editor
+        if value == "acknowledged" && option_name == "Secure Boot" {
+            self.open_inline_editor()?;
+            return Ok(());
         }
 
         // Handle dependent option updates
