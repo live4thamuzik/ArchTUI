@@ -5,8 +5,9 @@
 use crate::config::Package;
 use crate::process_guard::CommandProcessGroup;
 use crate::types::{
-    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
-    GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
+    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
+    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
+    SnapshotFrequency, Toggle,
 };
 use ratatui::widgets::ListState;
 use strum::IntoEnumIterator;
@@ -1342,6 +1343,7 @@ impl InputHandler {
             "Plymouth Theme" => PlymouthTheme::iter().map(|v| v.to_string()).collect(),
             "Numlock on Boot" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Git Repository" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Encryption Key Type" => EncryptionKeyType::iter().map(|v| v.to_string()).collect(),
 
             // Static lists for options with too many values to enumerate
             "Locale" => vec![

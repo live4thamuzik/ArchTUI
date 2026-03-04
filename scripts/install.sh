@@ -186,6 +186,7 @@ PARTITIONING_STRATEGY="${PARTITIONING_STRATEGY:-auto_simple}"
 # Also set PARTITION_SCHEME for disk_strategies.sh compatibility
 export PARTITION_SCHEME="$PARTITIONING_STRATEGY"
 ENCRYPTION="${ENCRYPTION:-No}"
+ENCRYPTION_KEY_TYPE="${ENCRYPTION_KEY_TYPE:-Password}"
 # ROE §8.1: Suppress set -x tracing for password variables
 { set +x; } 2>/dev/null
 ENCRYPTION_PASSWORD="${ENCRYPTION_PASSWORD:-}"
@@ -220,7 +221,7 @@ export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP S
 export ROOT_SIZE HOME_SIZE
 # ROE §8.1: Suppress set -x tracing for ENCRYPTION_PASSWORD export
 { set +x; } 2>/dev/null
-export ENCRYPTION ENCRYPTION_PASSWORD
+export ENCRYPTION ENCRYPTION_KEY_TYPE ENCRYPTION_PASSWORD
 [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
 # Btrfs options

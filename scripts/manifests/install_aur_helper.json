@@ -9,8 +9,8 @@
   "optional_env": [
     {
       "name": "AUR_HELPER",
-      "description": "AUR helper to install: paru or yay",
-      "default": "paru"
+      "description": "AUR helper to install: paru, yay, or pikaur",
+      "default": "none"
     }
   ]
 }

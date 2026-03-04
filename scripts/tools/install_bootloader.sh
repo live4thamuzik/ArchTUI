@@ -334,8 +334,9 @@ EOF
                 error_exit "Limine EFI binary not found at $limine_efi"
             fi
             esp_dir="$ROOT_PATH${EFI_PATH}/EFI/BOOT"
+            log_cmd "mkdir -p $esp_dir"
             mkdir -p "$esp_dir" || error_exit "Failed to create EFI boot directory"
-            log_cmd "cp BOOTX64.EFI to $esp_dir/"
+            log_cmd "cp $limine_efi $esp_dir/BOOTX64.EFI"
             cp "$limine_efi" "$esp_dir/BOOTX64.EFI" || error_exit "Failed to copy Limine EFI binary"
         else
             log_info "Installing Limine for BIOS mode..."

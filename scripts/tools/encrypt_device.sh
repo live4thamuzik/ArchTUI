@@ -149,9 +149,11 @@ case "$ACTION" in
                 log_cmd "systemd-cryptenroll --fido2-device=auto $DEVICE (password piped via key-file)"
                 { set +x; } 2>/dev/null
                 if ! printf '%s' "$(cat "$KEY_FILE")" | systemd-cryptenroll --fido2-device=auto --password-file=/dev/stdin "$DEVICE"; then
+                    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
                     log_error "FIDO2 enrollment failed"
                     return 1
                 fi
+                [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
                 log_success "FIDO2 key enrolled on $DEVICE"
             fi
         fi

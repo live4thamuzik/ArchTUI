@@ -1533,10 +1533,12 @@ install_display_manager() {
             ;;
         "greetd")
             install_packages "greetd" greetd greetd-tuigreet
-            log_info "Enabling greetd service..."
+            log_cmd "systemctl enable greetd.service"
             systemctl enable greetd.service || log_warn "Failed to enable greetd.service"
             # Configure tuigreet as default greeter
+            log_cmd "mkdir -p /etc/greetd"
             mkdir -p /etc/greetd || log_warn "Failed to create /etc/greetd"
+            log_cmd "Writing /etc/greetd/config.toml"
             cat > /etc/greetd/config.toml << 'GREETD_EOF'
 [terminal]
 vt = 1
@@ -1545,7 +1547,7 @@ vt = 1
 command = "tuigreet --time --cmd /bin/bash"
 user = "greeter"
 GREETD_EOF
-            log_info "greetd configured with tuigreet greeter"
+            log_success "greetd configured with tuigreet greeter"
             ;;
         "none"|"")
             log_info "No display manager selected - skipping"

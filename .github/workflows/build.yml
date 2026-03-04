@@ -26,6 +26,7 @@ jobs:
           {} +
 
   build:
+    needs: shellcheck
     runs-on: ubuntu-latest
 
     steps:

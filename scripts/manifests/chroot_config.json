@@ -54,7 +54,7 @@
     {
       "name": "AUR_HELPER",
       "description": "AUR helper",
-      "default": "paru"
+      "default": "none"
     },
     {
       "name": "GPU_DRIVERS",
