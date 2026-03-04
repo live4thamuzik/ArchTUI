@@ -117,8 +117,7 @@ pub fn now_hms() -> String {
 
 /// Write a line to the master log file (thread-safe, best-effort).
 fn write_master_log(log_file: &Arc<Mutex<Option<File>>>, line: &str) {
-    // SAFETY: unwrap — poisoned mutex means a writer thread panicked;
-    // silently skipping the write is acceptable for a log file
+    // SAFETY: poison recovery via into_inner — never panic on mutex
     if let Ok(mut guard) = log_file.lock() {
         if let Some(ref mut f) = *guard {
             let _ = writeln!(f, "[{}] {}", now_hms(), line);
@@ -152,9 +151,8 @@ impl Installer {
 
         // Update app state to installation mode
         {
-            // SAFETY: unwrap is acceptable here — if the mutex is poisoned, installation
-            // cannot proceed and panicking is the correct behavior
-            let mut state = self.app_state.lock().unwrap();
+            // SAFETY: poison recovery via into_inner — never panic on mutex
+            let mut state = self.app_state.lock().unwrap_or_else(|e| e.into_inner());
             state.mode = crate::app::AppMode::Installation;
             state.status_message = "Starting installation...".to_string();
             state.installation_progress = 10;
@@ -182,9 +180,8 @@ impl Installer {
 
         // Inject manual partition assignments (if set)
         {
-            // SAFETY: unwrap is acceptable — poisoned mutex means main thread panicked,
-            // so failing here is correct
-            let state = self.app_state.lock().unwrap();
+            // SAFETY: poison recovery via into_inner — never panic on mutex
+            let state = self.app_state.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(ref map) = state.manual_partition_map {
                 env_vars.insert("MANUAL_ROOT_PARTITION".to_string(), map.root.clone());
                 env_vars.insert("MANUAL_ROOT_FS".to_string(), map.root_fs.clone());
@@ -249,9 +246,8 @@ impl Installer {
         // Register child PID for Death Pact compliance and cancellation
         let child_pid = child.id();
         {
-            // SAFETY: unwrap is acceptable — poisoned mutex means main thread panicked,
-            // so failing here is correct
-            let mut state = self.app_state.lock().unwrap();
+            // SAFETY: poison recovery via into_inner — never panic on mutex
+            let mut state = self.app_state.lock().unwrap_or_else(|e| e.into_inner());
             state.installer_pid = Some(child_pid);
         }
         if let Ok(mut registry) = ChildRegistry::global().lock() {
@@ -274,9 +270,8 @@ impl Installer {
                     // Write to master log BEFORE the ringbuffer cap discards old lines
                     write_master_log(&log_file, &clean_line);
 
-                    // SAFETY: unwrap — if mutex is poisoned the thread exits, which is acceptable
-                    // for a background output reader; the wait thread handles final state transition
-                    let mut state = app_state.lock().unwrap();
+                    // SAFETY: poison recovery via into_inner — never panic on mutex
+                    let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
                     state.installer_output.push(clean_line);
 
                     // Keep only last 500 lines
@@ -379,8 +374,8 @@ impl Installer {
                     // Write stderr to master log with ERROR prefix
                     write_master_log(&log_file, &format!("STDERR: {}", clean_line));
 
-                    // SAFETY: unwrap — same rationale as stdout reader above
-                    let mut state = app_state.lock().unwrap();
+                    // SAFETY: poison recovery via into_inner — never panic on mutex
+                    let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
                     state.installer_output.push(format!("ERROR: {}", clean_line));
 
                     // Keep only last 500 lines
@@ -434,9 +429,8 @@ impl Installer {
 
             match result {
             Ok(status) => {
-                // SAFETY: unwrap — wait thread is the final handler; poisoned mutex
-                // means the TUI is already dead, panicking here is correct
-                let mut state = app_state.lock().unwrap();
+                // SAFETY: poison recovery via into_inner — never panic on mutex
+                let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
                 state.installer_pid = None;
 
                 if status.success() {
@@ -465,8 +459,8 @@ impl Installer {
                 }
             }
             Err(e) => {
-                // SAFETY: unwrap — same rationale as Ok branch above
-                let mut state = app_state.lock().unwrap();
+                // SAFETY: poison recovery via into_inner — never panic on mutex
+                let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
                 state.installer_pid = None;
 
                 state

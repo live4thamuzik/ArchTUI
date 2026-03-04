@@ -219,12 +219,14 @@ configure_localization() {
         tz_real="$(realpath -m "$tz_path" 2>/dev/null)" || tz_real=""
         if [[ -n "$tz_real" && "$tz_real" == /usr/share/zoneinfo/* && -f "$tz_path" ]]; then
             log_info "Setting timezone to: ${TIMEZONE_REGION}/${TIMEZONE}"
+            log_cmd "ln -sf $tz_path /etc/localtime"
             ln -sf "$tz_path" /etc/localtime || { log_error "Failed to set timezone symlink"; return 1; }
         else
             # Try without region
             tz_path="/usr/share/zoneinfo/${TIMEZONE}"
             tz_real="$(realpath -m "$tz_path" 2>/dev/null)" || tz_real=""
             if [[ -n "$tz_real" && "$tz_real" == /usr/share/zoneinfo/* && -f "$tz_path" ]]; then
+                log_cmd "ln -sf $tz_path /etc/localtime"
                 ln -sf "$tz_path" /etc/localtime || { log_error "Failed to set timezone symlink"; return 1; }
             else
                 log_warn "Timezone not found or invalid path: ${TIMEZONE_REGION}/${TIMEZONE}"
@@ -248,10 +250,12 @@ configure_hostname() {
     log_info "Configuring hostname: ${SYSTEM_HOSTNAME:-archlinux}"
 
     local hostname="${SYSTEM_HOSTNAME:-archlinux}"
-    echo "$hostname" > /etc/hostname
+    log_cmd "echo $hostname > /etc/hostname"
+    echo "$hostname" > /etc/hostname || { log_error "Failed to write /etc/hostname"; return 1; }
 
     # Configure hosts file
-    cat > /etc/hosts << EOF
+    log_cmd "cat > /etc/hosts (localhost + $hostname)"
+    cat > /etc/hosts << EOF || { log_error "Failed to write /etc/hosts"; return 1; }
 127.0.0.1   localhost
 ::1         localhost
 127.0.1.1   ${hostname}.localdomain ${hostname}
@@ -301,14 +305,15 @@ configure_sudoers() {
     # Enable wheel group for sudo (without password for installation, can be changed later)
     if [[ -f /etc/sudoers ]]; then
         # Use sed to uncomment the wheel line
-        sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers || log_warn "sed failed to modify sudoers"
+        log_cmd "sed -i sudoers wheel group uncomment"
+        sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers || { log_error "sed failed to modify sudoers"; return 1; }
 
         # Verify the change was made
         if grep -q "^%wheel ALL=(ALL:ALL) ALL" /etc/sudoers; then
             log_success "Sudoers configured - wheel group enabled"
         else
             # Fallback: add the line directly
-            echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers
+            echo "%wheel ALL=(ALL:ALL) ALL" >> /etc/sudoers || { log_error "Failed to append wheel to sudoers"; return 1; }
             log_info "Sudoers configured via append"
         fi
     fi

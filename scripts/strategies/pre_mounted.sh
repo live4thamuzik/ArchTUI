@@ -102,7 +102,7 @@ execute_pre_mounted_partitioning() {
 
     # Detect active swap
     local swap_device
-    swap_device=$(swapon --show=NAME --noheadings 2>/dev/null | head -1 || echo "")
+    swap_device=$(swapon --show=NAME --noheadings 2>/dev/null | head -1) || log_warn "swapon --show failed"
     if [[ -n "$swap_device" ]]; then
         log_info "Swap: $swap_device"
         local swap_uuid
