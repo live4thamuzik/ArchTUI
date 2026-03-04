@@ -60,6 +60,8 @@ pub enum PartitionScheme {
     AutoRaidLvmLuks,
     #[strum(serialize = "manual")]
     Manual,
+    #[strum(serialize = "pre_mounted")]
+    PreMounted,
 }
 
 #[allow(dead_code)] // API: Utility methods for partition strategy selection logic
@@ -115,12 +117,34 @@ pub enum DesktopEnvironment {
     Mate,
     #[strum(serialize = "budgie")]
     Budgie,
+    #[strum(serialize = "cosmic")]
+    Cosmic,
+    #[strum(serialize = "deepin")]
+    Deepin,
+    #[strum(serialize = "lxde")]
+    Lxde,
+    #[strum(serialize = "lxqt")]
+    Lxqt,
+    #[strum(serialize = "bspwm")]
+    Bspwm,
+    #[strum(serialize = "awesome")]
+    Awesome,
+    #[strum(serialize = "qtile")]
+    Qtile,
+    #[strum(serialize = "river")]
+    River,
+    #[strum(serialize = "niri")]
+    Niri,
+    #[strum(serialize = "labwc")]
+    Labwc,
+    #[strum(serialize = "xmonad")]
+    Xmonad,
 }
 
 impl DesktopEnvironment {
     /// Whether this DE/WM has packages that are only available in the AUR
     pub fn requires_aur(&self) -> bool {
-        matches!(self, Self::Hyprland)
+        matches!(self, Self::Hyprland | Self::Cosmic)
     }
 }
 
@@ -154,6 +178,12 @@ pub enum Bootloader {
     Grub,
     #[strum(serialize = "systemd-boot")]
     SystemdBoot,
+    #[strum(serialize = "refind")]
+    Refind,
+    #[strum(serialize = "limine")]
+    Limine,
+    #[strum(serialize = "efistub")]
+    Efistub,
 }
 
 /// AUR helper selection
@@ -248,6 +278,19 @@ pub enum AutoToggle {
     Yes,
     #[strum(serialize = "No")]
     No,
+}
+
+/// Encryption key type for LUKS
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Display, EnumString, EnumIter)]
+pub enum EncryptionKeyType {
+    #[default]
+    #[strum(serialize = "Password")]
+    Password,
+    #[strum(serialize = "FIDO2")]
+    Fido2,
+    #[strum(serialize = "Password+FIDO2")]
+    PasswordAndFido2,
 }
 
 /// Plymouth theme selection

@@ -111,6 +111,8 @@ load_config_from_json() {
     export BTRFS_FREQUENCY="$(jq -r '.btrfs_frequency // "weekly"' "$config_file")"
     export BTRFS_KEEP_COUNT="$(jq -r '.btrfs_keep_count // "3"' "$config_file")"
     export BTRFS_ASSISTANT="$(jq -r '.btrfs_assistant // "No"' "$config_file")"
+    export UNIFIED_KERNEL_IMAGE="$(jq -r '.unified_kernel_image // "No"' "$config_file")"
+    export ENCRYPTION_KEY_TYPE="$(jq -r '.encryption_key_type // "Password"' "$config_file")"
 
     # Convert TUI variables to internal Bash variables (as done in install.sh)
     export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
@@ -175,7 +177,7 @@ validate_configuration() {
     fi
     
     # Check partitioning strategy
-    local valid_strategies=("auto_simple" "auto_simple_luks" "auto_lvm" "auto_luks_lvm" "auto_raid" "auto_raid_luks" "auto_raid_lvm" "auto_raid_lvm_luks" "manual")
+    local valid_strategies=("auto_simple" "auto_simple_luks" "auto_lvm" "auto_luks_lvm" "auto_raid" "auto_raid_luks" "auto_raid_lvm" "auto_raid_lvm_luks" "manual" "pre_mounted")
     if [[ -n "$PARTITIONING_STRATEGY" ]]; then
         local is_valid=false
         for strategy in "${valid_strategies[@]}"; do

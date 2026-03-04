@@ -1,0 +1,7 @@
+{
+  "script": "scripts/strategies/pre_mounted.sh",
+  "description": "Detect and validate pre-mounted partitions",
+  "required_env": ["BOOT_MODE"],
+  "is_destructive": false,
+  "required_confirmation": null
+}

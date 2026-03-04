@@ -82,7 +82,12 @@ execute_lvm_luks_partitioning() {
     # Set up LUKS encryption using helper function (non-interactive)
     local encrypted_dev
     encrypted_dev=$(setup_luks_encryption "$luks_dev" "cryptlvm")
-    
+
+    # FIDO2 enrollment (if configured)
+    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        enroll_fido2 "$luks_dev" || log_warn "FIDO2 enrollment failed — password-only fallback"
+    fi
+
     # Create LVM setup on encrypted device
     log_info "Setting up LVM on encrypted device..."
     log_cmd "pvcreate /dev/mapper/cryptlvm"

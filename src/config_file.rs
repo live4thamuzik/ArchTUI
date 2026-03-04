@@ -9,8 +9,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::types::{
-    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
-    GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
+    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
+    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
+    SnapshotFrequency, Toggle,
 };
 
 /// Installation configuration that can be saved/loaded
@@ -86,6 +87,14 @@ pub struct InstallationConfig {
     pub numlock_on_boot: Toggle,
     pub git_repository: Toggle,
     pub git_repository_url: String, // User-defined URL
+
+    // Advanced boot
+    #[serde(default)]
+    pub unified_kernel_image: Toggle,
+
+    // Encryption key type
+    #[serde(default)]
+    pub encryption_key_type: EncryptionKeyType,
 }
 
 // ROE §8.1: Custom Debug impl redacts password fields to prevent accidental leaks
@@ -138,6 +147,8 @@ impl std::fmt::Debug for InstallationConfig {
             .field("numlock_on_boot", &self.numlock_on_boot)
             .field("git_repository", &self.git_repository)
             .field("git_repository_url", &self.git_repository_url)
+            .field("unified_kernel_image", &self.unified_kernel_image)
+            .field("encryption_key_type", &self.encryption_key_type)
             .finish()
     }
 }
@@ -206,8 +217,10 @@ impl InstallationConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<()> {
         tracing::info!("Validating configuration");
-        // Validate disk path
-        if self.install_disk.trim().is_empty() {
+        // Validate disk path (skip for pre-mounted — uses existing mounts)
+        if self.partitioning_strategy != PartitionScheme::PreMounted
+            && self.install_disk.trim().is_empty()
+        {
             anyhow::bail!("Install disk must be specified");
         }
 
@@ -427,6 +440,14 @@ impl InstallationConfig {
                 "GIT_REPOSITORY_URL".to_string(),
                 self.git_repository_url.clone(),
             ),
+            (
+                "UNIFIED_KERNEL_IMAGE".to_string(),
+                self.unified_kernel_image.to_string(),
+            ),
+            (
+                "ENCRYPTION_KEY_TYPE".to_string(),
+                sanitize(self.encryption_key_type.to_string()),
+            ),
         ]
     }
 }
@@ -480,6 +501,8 @@ impl Default for InstallationConfig {
             numlock_on_boot: Toggle::No,
             git_repository: Toggle::No,
             git_repository_url: String::new(),
+            unified_kernel_image: Toggle::No,
+            encryption_key_type: EncryptionKeyType::Password,
         }
     }
 }
@@ -557,6 +580,8 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             numlock_on_boot: parse_or_default(&get_value("Numlock on Boot")),
             git_repository: parse_or_default(&get_value("Git Repository")),
             git_repository_url: get_value("Git Repository URL"),
+            unified_kernel_image: parse_or_default(&get_value("Unified Kernel Image")),
+            encryption_key_type: parse_or_default(&get_value("Encryption Key Type")),
         }
     }
 }

@@ -3087,11 +3087,12 @@ impl App {
         desktop_env: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let display_manager = match desktop_env {
-            "kde" | "sway" => "sddm",
-            "gnome" | "budgie" => "gdm",
-            "hyprland" => "sddm",
-            "i3" | "xfce" | "cinnamon" | "mate" => "lightdm",
-            "none" => "none",
+            "gnome" => "gdm",
+            "kde" | "hyprland" | "sway" | "lxqt" | "river" | "niri" | "labwc" => "sddm",
+            "i3" | "xfce" | "cinnamon" | "mate" | "budgie" | "deepin"
+            | "bspwm" | "awesome" | "qtile" | "xmonad" => "lightdm",
+            "lxde" => "lxdm",
+            "cosmic" | "none" => "none",
             _ => "",
         };
 
@@ -3234,6 +3235,32 @@ impl App {
                 "Partitioning Strategy" => {
                     // Clear stale manual partition assignments on strategy change
                     state.manual_partition_map = None;
+
+                    // Pre-mounted: disable all disk/filesystem/encryption options
+                    if value == "pre_mounted" {
+                        for name in &[
+                            "Disk", "Root Filesystem", "Home Filesystem",
+                            "Root Size", "Home Size", "Encryption", "Encryption Password",
+                            "Encryption Key Type", "RAID Level",
+                        ] {
+                            if let Some(opt) = state
+                                .config
+                                .options
+                                .iter_mut()
+                                .find(|o| o.name == *name)
+                            {
+                                opt.value = "N/A".to_string();
+                            }
+                        }
+                        if let Some(opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|o| o.name == "Separate Home Partition")
+                        {
+                            opt.value = "No".to_string();
+                        }
+                    }
 
                     let is_plain_raid = (value == "auto_raid" || value == "auto_raid_luks")
                         && !value.contains("lvm");

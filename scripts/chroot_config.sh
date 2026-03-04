@@ -465,6 +465,45 @@ configure_mkinitcpio() {
             fi
         fi
 
+        # FIDO2 crypttab.initramfs entry (for sd-encrypt to use fido2-device=auto)
+        if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+            if [[ -n "${LUKS_UUID:-}" ]]; then
+                local mapper_name="cryptroot"
+                [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
+                echo "${mapper_name} UUID=${LUKS_UUID} - fido2-device=auto" >> /etc/crypttab.initramfs
+                log_info "Added FIDO2 entry to crypttab.initramfs (mapper: $mapper_name)"
+            else
+                log_warn "FIDO2 configured but LUKS_UUID not set — skipping crypttab.initramfs"
+            fi
+        fi
+
+        # UKI (Unified Kernel Image) support
+        if [[ "${UNIFIED_KERNEL_IMAGE:-No}" == "Yes" ]]; then
+            log_info "Configuring Unified Kernel Image (UKI)..."
+
+            local uki_options
+            uki_options=$(_build_kernel_options 2>/dev/null || true)
+            if [[ -n "$uki_options" ]]; then
+                mkdir -p /etc/kernel
+                echo "$uki_options" > /etc/kernel/cmdline
+                log_info "Wrote kernel cmdline to /etc/kernel/cmdline"
+            fi
+
+            # Configure mkinitcpio preset for UKI output
+            local preset="/etc/mkinitcpio.d/${KERNEL:-linux}.preset"
+            if [[ -f "$preset" ]]; then
+                local efi_dir="/efi/EFI/Linux"
+                [[ -d "/boot/EFI" ]] && efi_dir="/boot/EFI/Linux"
+                mkdir -p "$efi_dir"
+                # Add UKI output path to preset
+                if ! grep -q "default_uki" "$preset"; then
+                    echo "default_uki=\"${efi_dir}/arch-linux-${KERNEL:-linux}.efi\"" >> "$preset"
+                    echo "fallback_uki=\"${efi_dir}/arch-linux-${KERNEL:-linux}-fallback.efi\"" >> "$preset"
+                    log_info "Added UKI paths to mkinitcpio preset"
+                fi
+            fi
+        fi
+
         # Regenerate initramfs
         log_cmd "mkinitcpio -P"
         if ! mkinitcpio -P; then
@@ -487,6 +526,15 @@ install_bootloader() {
             ;;
         "systemd-boot")
             install_systemd_boot
+            ;;
+        "refind")
+            install_refind
+            ;;
+        "limine")
+            install_limine
+            ;;
+        "efistub")
+            install_efistub
             ;;
         *)
             log_warn "Unknown bootloader: ${BOOTLOADER}, defaulting to GRUB"
@@ -684,6 +732,220 @@ EOF
     fi
 
     log_success "systemd-boot installed at $esp_path"
+}
+
+# Build kernel command line options (shared by rEFInd, Limine, EFISTUB)
+_build_kernel_options() {
+    local options=""
+
+    # Handle encryption
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        if [[ -n "${LUKS_UUID:-}" ]]; then
+            local mapper_name="cryptroot"
+            [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
+            if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
+                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/archvg/root"
+            else
+                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/mapper/${mapper_name}"
+            fi
+        else
+            log_error "LUKS_UUID not set for encrypted system"
+            echo ""
+            return 1
+        fi
+    else
+        local root_uuid="${ROOT_UUID:-}"
+        if [[ -z "$root_uuid" ]]; then
+            root_uuid=$(findmnt -n -o UUID /) || true
+        fi
+        if [[ -z "$root_uuid" ]]; then
+            log_error "Cannot determine root partition UUID"
+            echo ""
+            return 1
+        fi
+        options="root=UUID=${root_uuid}"
+    fi
+
+    # Btrfs rootflags
+    if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" == "btrfs" ]]; then
+        options="$options rootflags=subvol=@"
+    fi
+
+    options="$options rw"
+
+    # Resume for hibernation
+    if [[ "${WANT_SWAP:-no}" == "yes" && -n "${SWAP_UUID:-}" ]]; then
+        options="$options resume=UUID=${SWAP_UUID}"
+    fi
+
+    options="$options quiet"
+
+    # Plymouth splash
+    if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
+        options="$options splash"
+    fi
+
+    echo "$options"
+}
+
+install_refind() {
+    log_info "Installing rEFInd..."
+
+    if [[ "${BOOT_MODE:-UEFI}" != "UEFI" ]]; then
+        log_error "rEFInd requires UEFI firmware"
+        return 1
+    fi
+
+    log_cmd "refind-install"
+    refind-install || {
+        log_error "refind-install failed"
+        return 1
+    }
+
+    local options
+    options=$(_build_kernel_options) || return 1
+
+    # Microcode
+    local microcode=""
+    if [[ -f /boot/intel-ucode.img ]]; then
+        microcode="initrd=intel-ucode.img"
+    elif [[ -f /boot/amd-ucode.img ]]; then
+        microcode="initrd=amd-ucode.img"
+    fi
+
+    # Generate refind_linux.conf
+    {
+        echo "\"Boot with defaults\" \"$options $microcode initrd=initramfs-${KERNEL:-linux}.img\""
+        echo "\"Boot fallback\"      \"$options $microcode initrd=initramfs-${KERNEL:-linux}-fallback.img\""
+    } > /boot/refind_linux.conf
+
+    log_success "rEFInd installed"
+}
+
+install_limine() {
+    log_info "Installing Limine..."
+
+    local options
+    options=$(_build_kernel_options) || return 1
+
+    # Microcode
+    local microcode_module=""
+    if [[ -f /boot/intel-ucode.img ]]; then
+        microcode_module="MODULE_PATH=boot:///intel-ucode.img"
+    elif [[ -f /boot/amd-ucode.img ]]; then
+        microcode_module="MODULE_PATH=boot:///amd-ucode.img"
+    fi
+
+    if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
+        # UEFI: copy EFI binary to ESP
+        local esp_path="/efi"
+        [[ -d "/boot/EFI" ]] && esp_path="/boot"
+        mkdir -p "${esp_path}/EFI/BOOT" || { log_error "Failed to create EFI directory"; return 1; }
+        log_cmd "cp /usr/share/limine/BOOTX64.EFI ${esp_path}/EFI/BOOT/"
+        cp /usr/share/limine/BOOTX64.EFI "${esp_path}/EFI/BOOT/" || {
+            log_error "Failed to copy Limine EFI binary"
+            return 1
+        }
+    else
+        # BIOS: install to disk MBR
+        local target_disk="${INSTALL_DISK%%,*}"  # First disk for RAID
+        log_cmd "limine bios-install $target_disk"
+        limine bios-install "$target_disk" || {
+            log_error "Limine BIOS install failed on $target_disk"
+            return 1
+        }
+    fi
+
+    # Generate limine.conf
+    {
+        echo "timeout: 5"
+        echo ""
+        echo "/Arch Linux"
+        echo "    protocol: linux"
+        echo "    kernel_path: boot:///vmlinuz-${KERNEL:-linux}"
+        [[ -n "$microcode_module" ]] && echo "    $microcode_module"
+        echo "    MODULE_PATH=boot:///initramfs-${KERNEL:-linux}.img"
+        echo "    KERNEL_CMDLINE=$options"
+        echo ""
+        echo "/Arch Linux (fallback)"
+        echo "    protocol: linux"
+        echo "    kernel_path: boot:///vmlinuz-${KERNEL:-linux}"
+        [[ -n "$microcode_module" ]] && echo "    $microcode_module"
+        echo "    MODULE_PATH=boot:///initramfs-${KERNEL:-linux}-fallback.img"
+        echo "    KERNEL_CMDLINE=$options"
+    } > /boot/limine.conf
+
+    log_success "Limine installed"
+}
+
+install_efistub() {
+    log_info "Installing EFISTUB..."
+
+    if [[ "${BOOT_MODE:-UEFI}" != "UEFI" ]]; then
+        log_error "EFISTUB requires UEFI firmware"
+        return 1
+    fi
+
+    local options
+    options=$(_build_kernel_options) || return 1
+
+    # Get ESP disk and partition number from findmnt
+    local esp_source
+    esp_source=$(findmnt -n -o SOURCE /efi 2>/dev/null || findmnt -n -o SOURCE /boot 2>/dev/null || echo "")
+    if [[ -z "$esp_source" ]]; then
+        log_error "Cannot determine ESP device for efibootmgr"
+        return 1
+    fi
+
+    # Extract disk and partition number (e.g., /dev/sda1 → /dev/sda + 1, /dev/nvme0n1p1 → /dev/nvme0n1 + 1)
+    local esp_disk esp_partnum
+    if [[ "$esp_source" =~ ^(/dev/nvme[0-9]+n[0-9]+)p([0-9]+)$ ]]; then
+        esp_disk="${BASH_REMATCH[1]}"
+        esp_partnum="${BASH_REMATCH[2]}"
+    elif [[ "$esp_source" =~ ^(/dev/[a-z]+)([0-9]+)$ ]]; then
+        esp_disk="${BASH_REMATCH[1]}"
+        esp_partnum="${BASH_REMATCH[2]}"
+    else
+        log_error "Cannot parse ESP device: $esp_source"
+        return 1
+    fi
+
+    # Build initrd args (microcode first, then initramfs)
+    local initrd_args=""
+    if [[ -f /boot/intel-ucode.img ]]; then
+        initrd_args="initrd=\\intel-ucode.img "
+    elif [[ -f /boot/amd-ucode.img ]]; then
+        initrd_args="initrd=\\amd-ucode.img "
+    fi
+    initrd_args="${initrd_args}initrd=\\initramfs-${KERNEL:-linux}.img"
+
+    log_cmd "efibootmgr --create --disk $esp_disk --part $esp_partnum --loader /vmlinuz-${KERNEL:-linux} --label 'Arch Linux'"
+    efibootmgr --create --disk "$esp_disk" --part "$esp_partnum" \
+        --loader "/vmlinuz-${KERNEL:-linux}" \
+        --label "Arch Linux" \
+        --unicode "$options $initrd_args" || {
+        log_error "efibootmgr failed to create boot entry"
+        return 1
+    }
+
+    # Install pacman hook for automatic EFI entry update on kernel upgrade
+    mkdir -p /etc/pacman.d/hooks
+    cat > /etc/pacman.d/hooks/efistub.hook << 'HOOKEOF'
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = linux
+Target = linux-lts
+Target = linux-zen
+Target = linux-hardened
+
+[Action]
+Description = Updating EFISTUB boot entry...
+When = PostTransaction
+Exec = /usr/bin/bash -c 'efibootmgr -v 2>/dev/null | grep -q "Arch Linux" && echo "EFISTUB entry exists" || echo "WARNING: EFISTUB entry missing — run efibootmgr manually"'
+HOOKEOF
+
+    log_success "EFISTUB installed (EFI entry created)"
 }
 
 configure_grub_settings() {
@@ -1117,6 +1379,39 @@ install_desktop_environment() {
         "budgie")
             install_packages "Budgie" budgie-desktop budgie-extras
             ;;
+        "cosmic")
+            install_packages "COSMIC (base)" networkmanager pipewire pipewire-pulse firefox
+            ;;
+        "deepin")
+            install_packages "Deepin" deepin deepin-extra
+            ;;
+        "lxde")
+            install_packages "LXDE" lxde
+            ;;
+        "lxqt")
+            install_packages "LXQt" lxqt breeze-icons
+            ;;
+        "bspwm")
+            install_packages "bspwm" bspwm sxhkd xorg-server xorg-xinit alacritty dmenu picom feh thunar
+            ;;
+        "awesome")
+            install_packages "Awesome WM" awesome xorg-server xorg-xinit alacritty picom thunar feh
+            ;;
+        "qtile")
+            install_packages "Qtile" qtile python-psutil xorg-server xorg-xinit alacritty picom thunar
+            ;;
+        "river")
+            install_packages "River" river xdg-desktop-portal-wlr waybar foot wofi mako grim slurp wl-clipboard thunar
+            ;;
+        "niri")
+            install_packages "Niri" niri xdg-desktop-portal-gnome waybar foot fuzzel mako grim slurp wl-clipboard nautilus
+            ;;
+        "labwc")
+            install_packages "Labwc" labwc xdg-desktop-portal-wlr waybar foot wofi mako grim slurp wl-clipboard thunar
+            ;;
+        "xmonad")
+            install_packages "XMonad" xmonad xmonad-contrib xmobar xorg-server xorg-xinit dmenu alacritty picom thunar
+            ;;
         "none"|"minimal"|"")
             log_info "No desktop environment selected - skipping"
             ;;
@@ -1137,6 +1432,12 @@ install_de_aur_packages() {
     case "$de" in
         "hyprland")
             aur_packages=(wlogout)
+            ;;
+        "cosmic")
+            aur_packages=(cosmic-session cosmic-comp cosmic-panel cosmic-settings
+                          cosmic-applets cosmic-bg cosmic-greeter cosmic-launcher
+                          cosmic-notifications cosmic-osd cosmic-screenshot
+                          cosmic-workspaces)
             ;;
         *)
             return 0

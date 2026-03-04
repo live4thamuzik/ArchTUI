@@ -573,6 +573,33 @@ setup_luks_encryption() {
     echo "/dev/mapper/$mapper_name"
 }
 
+enroll_fido2() {
+    local partition="$1"
+
+    log_info "Enrolling FIDO2 device on $partition..."
+
+    # ROE §8.1: Suppress tracing during password piping
+    { set +x; } 2>/dev/null
+    local password="${ENCRYPTION_PASSWORD:-}"
+
+    if [[ -z "$password" ]]; then
+        log_error "FIDO2 enrollment requires ENCRYPTION_PASSWORD"
+        [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
+        return 1
+    fi
+
+    log_cmd "systemd-cryptenroll --fido2-device=auto $partition (password redacted)"
+    printf '%s' "$password" | systemd-cryptenroll \
+        --fido2-device=auto "$partition" || {
+        log_error "FIDO2 enrollment failed on $partition"
+        [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
+        return 1
+    }
+
+    [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
+    log_success "FIDO2 device enrolled on $partition"
+}
+
 setup_btrfs_subvolumes() {
     local device="$1"
     local include_home="${2:-no}"
