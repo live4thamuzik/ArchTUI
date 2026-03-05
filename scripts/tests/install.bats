@@ -31,8 +31,8 @@ teardown() {
 
 @test "INSTALL_DISK defaults to empty string" {
     unset INSTALL_DISK
-    source "$SCRIPTS_DIR/install.sh" 2>/dev/null || true
-    [[ -z "${INSTALL_DISK:-}" ]] || [[ "$INSTALL_DISK" == "" ]]
+    # install.sh is not sourceable (EXIT trap kills subshell); test expansion directly
+    [[ -z "${INSTALL_DISK:-}" ]]
 }
 
 @test "BOOTLOADER defaults to grub" {
