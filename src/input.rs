@@ -77,6 +77,7 @@ pub struct ManualAssignState {
 
 /// Types of input dialogs
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)] // TextInput/PasswordInput unused — inline editing replaced popup dialogs
 pub enum InputType {
     /// Text input for values like hostname, username, passwords
     TextInput {
@@ -1144,6 +1145,7 @@ impl InputHandler {
     }
 
     /// Start a password input dialog
+    #[allow(dead_code)] // Inline editing replaced popup dialogs
     pub fn start_password_input(
         &mut self,
         field_name: String,
@@ -1164,6 +1166,7 @@ impl InputHandler {
     }
 
     /// Start a text input dialog
+    #[allow(dead_code)] // Inline editing replaced popup dialogs
     pub fn start_text_input(
         &mut self,
         field_name: String,

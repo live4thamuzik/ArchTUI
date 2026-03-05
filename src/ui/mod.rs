@@ -1,12 +1,16 @@
-//! User interface rendering module
+//! User interface rendering module (redesigned)
 //!
-//! This module is organized into submodules for better maintainability:
-//! - `header` - Header, title, and common widget rendering
-//! - `menus` - Menu rendering (main, tools, categories)
-//! - `installer` - Installation and configuration UI
-//! - `dialogs` - Input and confirmation dialog rendering
-//! - `descriptions` - Tool description text generation
+//! Simplified renderer — no more separate header/title bars.
+//! Identity embedded in borders, breadcrumb navigation.
+//!
+//! Submodules:
+//! - `header` - Progress bar, installer output, utility renderers
+//! - `menus` - Split-pane menu rendering with scrollbars
+//! - `installer` - Configuration UI, installation, completion screens
+//! - `dialogs` - Tool dialog, floating output, file browser, confirm dialog
+//! - `descriptions` - Tool description text
 //! - `screens` - Guided installer wizard screens (Sprint 7)
+//! - `loading` - Loading/progress UI
 
 #![allow(dead_code)]
 
@@ -14,7 +18,7 @@ mod descriptions;
 mod dialogs;
 mod header;
 mod installer;
-mod menus;
+pub(crate) mod menus;
 pub mod screens;
 
 use std::path::PathBuf;
@@ -24,46 +28,19 @@ use std::path::PathBuf;
 // ============================================================================
 
 /// Wizard state for the guided installer workflow.
-///
-/// The installer progresses through these states linearly. Users cannot
-/// skip steps or proceed without completing required fields.
-///
-/// # State Transitions
-///
-/// ```text
-/// Welcome -> DiskSelect -> Partitioner -> PackageSelect -> UserConfig -> InstallProgress -> Done
-/// ```
-///
-/// # Invariants
-///
-/// - Cannot transition to `InstallProgress` without a valid disk selection
-/// - Cannot transition to `InstallProgress` without a valid username
-/// - Cannot go backwards from `InstallProgress` or `Done`
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum WizardState {
-    /// Welcome screen with safety warnings and introduction.
     #[default]
     Welcome,
-    /// Disk selection screen - lists available disks with size/model.
-    /// **SAFETY**: User must explicitly select a disk before proceeding.
     DiskSelect,
-    /// Partition configuration - auto or manual partitioning.
     Partitioner,
-    /// Package selection - base packages and optional extras.
     PackageSelect,
-    /// User configuration - hostname, username, password.
-    /// **SECURITY**: Passwords are masked and zeroed after use.
     UserConfig,
-    /// Installation in progress - no user interaction, shows progress.
     InstallProgress,
-    /// Installation complete - success or failure summary.
     Done,
 }
 
 impl WizardState {
-    /// Get the next state in the wizard sequence.
-    ///
-    /// Returns `None` if at the final state.
     pub fn next(&self) -> Option<Self> {
         match self {
             Self::Welcome => Some(Self::DiskSelect),
@@ -76,9 +53,6 @@ impl WizardState {
         }
     }
 
-    /// Get the previous state in the wizard sequence.
-    ///
-    /// Returns `None` if at the first state or if going back is not allowed.
     pub fn previous(&self) -> Option<Self> {
         match self {
             Self::Welcome => None,
@@ -86,18 +60,15 @@ impl WizardState {
             Self::Partitioner => Some(Self::DiskSelect),
             Self::PackageSelect => Some(Self::Partitioner),
             Self::UserConfig => Some(Self::PackageSelect),
-            // Cannot go back during or after installation
             Self::InstallProgress => None,
             Self::Done => None,
         }
     }
 
-    /// Check if the current state allows going back.
     pub fn can_go_back(&self) -> bool {
         self.previous().is_some()
     }
 
-    /// Get the display title for this state.
     pub fn title(&self) -> &'static str {
         match self {
             Self::Welcome => "Welcome to Arch Linux Installer",
@@ -110,7 +81,6 @@ impl WizardState {
         }
     }
 
-    /// Get the step number (1-indexed for display).
     pub fn step_number(&self) -> usize {
         match self {
             Self::Welcome => 1,
@@ -123,75 +93,48 @@ impl WizardState {
         }
     }
 
-    /// Total number of steps.
     pub const TOTAL_STEPS: usize = 7;
 }
 
 /// Wizard data collected during the guided installer flow.
-///
-/// This struct accumulates user choices as they progress through the wizard.
-/// All fields start as `None` and are validated before installation begins.
 #[derive(Debug, Clone, Default)]
 pub struct WizardData {
-    /// Selected disk device path (e.g., `/dev/sda`).
     pub selected_disk: Option<PathBuf>,
-    /// Selected disk model for display confirmation.
     pub disk_model: Option<String>,
-    /// Selected disk size in bytes.
     pub disk_size: Option<u64>,
-    /// Whether to use automatic partitioning.
     pub auto_partition: bool,
-    /// Filesystem type for root partition.
     pub filesystem: Option<String>,
-    /// System hostname.
     pub hostname: Option<String>,
-    /// Primary username.
     pub username: Option<String>,
-    /// User password (zeroed after use).
     pub password: Option<String>,
-    /// Whether user has sudo access.
     pub user_sudo: bool,
-    /// Root password (optional, zeroed after use).
     pub root_password: Option<String>,
-    /// Selected extra packages.
     pub extra_packages: Vec<String>,
-    /// Dry run mode - don't execute destructive operations.
-    /// Used when wizard is fully integrated with script execution.
-    #[allow(dead_code)] // WIP: Wizard dry-run integration
+    #[allow(dead_code)]
     pub dry_run: bool,
 }
 
 impl WizardData {
-    /// Check if disk selection is valid.
     pub fn has_valid_disk(&self) -> bool {
         self.selected_disk.is_some()
     }
 
-    /// Check if user configuration is valid.
     pub fn has_valid_user(&self) -> bool {
         self.hostname.as_ref().is_some_and(|h| !h.is_empty())
             && self.username.as_ref().is_some_and(|u| !u.is_empty())
             && self.password.as_ref().is_some_and(|p| !p.is_empty())
     }
 
-    /// Check if ready to start installation.
     pub fn is_ready_for_install(&self) -> bool {
         self.has_valid_disk() && self.has_valid_user()
     }
 
-    /// Zero out sensitive data (passwords).
-    ///
-    /// Called after installation completes or on error to minimize
-    /// password exposure time in memory.
     pub fn zero_sensitive_data(&mut self) {
         if let Some(ref mut pwd) = self.password {
-            // Overwrite with zeros before dropping
-            // Note: This is MVP security - production should use secrecy crate
             pwd.clear();
             pwd.shrink_to_fit();
         }
         self.password = None;
-
         if let Some(ref mut pwd) = self.root_password {
             pwd.clear();
             pwd.shrink_to_fit();
@@ -202,10 +145,13 @@ impl WizardData {
 
 impl Drop for WizardData {
     fn drop(&mut self) {
-        // Ensure passwords are zeroed when WizardData is dropped
         self.zero_sensitive_data();
     }
 }
+
+// ============================================================================
+// Imports and re-exports
+// ============================================================================
 
 use crate::app::{AppMode, AppState};
 use crate::components::keybindings::KeybindingContext;
@@ -216,18 +162,22 @@ use ratatui::{
     Frame,
 };
 
-// Re-export for external use
+// Re-export HeaderRenderer for compatibility with code that references it
 pub use header::HeaderRenderer;
-// Sprint 7 wizard screen exports - will be used when wizard is fully integrated
 #[allow(unused_imports)]
 pub use screens::{DiskInfo, render_disk_select_screen, render_user_config_screen};
 
-/// UI renderer for the application
+use crate::components::help_overlay::HelpOverlay;
+use crate::components::nav_bar::NavBar;
+
+/// UI renderer for the application (redesigned)
 ///
-/// This is the main entry point for UI rendering. It delegates to specialized
-/// submodules for different parts of the UI.
+/// Stateless renderer — no header instance needed.
+/// The `HeaderRenderer` field is kept for API compatibility with app/mod.rs
+/// but is not used by the redesigned rendering logic.
 pub struct UiRenderer {
-    /// Header renderer instance
+    /// Kept for API compatibility (app/mod.rs calls UiRenderer::new() which sets this)
+    #[allow(dead_code)]
     header: HeaderRenderer,
 }
 
@@ -238,176 +188,145 @@ impl Default for UiRenderer {
 }
 
 impl UiRenderer {
-    /// Create a new UI renderer
     pub fn new() -> Self {
         Self {
             header: HeaderRenderer::new(),
         }
     }
 
-    /// Render the complete UI based on application state (legacy method for compatibility)
+    /// Legacy render method for compatibility
     pub fn render(&self, f: &mut Frame, state: &AppState, input_handler: &mut InputHandler) {
         let keybinding_ctx = KeybindingContext::new();
         self.render_with_context(f, state, input_handler, &keybinding_ctx, None);
     }
 
-    /// Render the complete UI with keybinding context and PTY terminal
+    /// Full render method with all context — the main entry point.
+    ///
+    /// Uses redesigned rendering: breadcrumbs, split-pane layouts, rounded borders.
+    /// The `input_handler`, `keybinding_ctx`, and `pty_terminal` params are accepted
+    /// for API compatibility with the real app's event loop.
     pub fn render_with_context(
         &self,
         f: &mut Frame,
         state: &AppState,
         input_handler: &mut InputHandler,
-        keybinding_ctx: &KeybindingContext,
+        _keybinding_ctx: &KeybindingContext,
         pty_terminal: Option<&mut PtyTerminal>,
     ) {
-        // If dialog is active, render ONLY the dialog - don't render main UI behind it
+        // If dialog is active, render ONLY the dialog
         if input_handler.is_dialog_active() {
             dialogs::render_input_dialog(f, input_handler);
             return;
         }
 
-        // Create main layout with nav bar at bottom
+        let keybinding_ctx = KeybindingContext::new();
+
+        // Main layout: content + nav bar
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(1),    // Main content area
-                Constraint::Length(1), // Navigation bar
+                Constraint::Min(1),    // Content area
+                Constraint::Length(1), // Nav bar
             ])
             .split(f.area());
 
         let content_area = main_chunks[0];
         let nav_bar_area = main_chunks[1];
 
-        // Render main content based on mode
+        // Render main content based on mode (redesigned — no header param)
         match state.mode {
             AppMode::MainMenu => {
-                menus::render_main_menu_in_area(f, state, content_area, &self.header);
+                menus::render_main_menu(f, state, content_area);
             }
             AppMode::GuidedInstaller => {
-                installer::render_configuration_ui_in_area(f, state, content_area, &self.header);
+                installer::render_configuration_ui(f, state, content_area);
             }
             AppMode::AutomatedInstall => {
-                installer::render_automated_install_ui_in_area(f, state, content_area, &self.header);
+                installer::render_automated_install_ui(f, state, content_area);
             }
             AppMode::ToolsMenu => {
-                menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                menus::render_tools_menu(f, state, content_area);
             }
             AppMode::DiskTools => {
-                menus::render_disk_tools_menu_in_area(f, state, content_area, &self.header);
+                menus::render_disk_tools_menu(f, state, content_area);
             }
             AppMode::SystemTools => {
-                menus::render_system_tools_menu_in_area(f, state, content_area, &self.header);
+                menus::render_system_tools_menu(f, state, content_area);
             }
             AppMode::UserTools => {
-                menus::render_user_tools_menu_in_area(f, state, content_area, &self.header);
+                menus::render_user_tools_menu(f, state, content_area);
             }
             AppMode::NetworkTools => {
-                menus::render_network_tools_menu_in_area(f, state, content_area, &self.header);
+                menus::render_network_tools_menu(f, state, content_area);
             }
             AppMode::ToolDialog => {
-                // Render background menu, then tool dialog as overlay
                 if let Some(ref pre_mode) = state.pre_dialog_mode {
-                    match pre_mode {
-                        AppMode::DiskTools => {
-                            menus::render_disk_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::SystemTools => {
-                            menus::render_system_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::UserTools => {
-                            menus::render_user_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::NetworkTools => {
-                            menus::render_network_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::GuidedInstaller => {
-                            installer::render_configuration_ui_in_area(f, state, content_area, &self.header)
-                        }
-                        _ => menus::render_tools_menu_in_area(f, state, content_area, &self.header),
-                    }
+                    self.render_background(f, state, content_area, pre_mode);
                 } else {
-                    menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                    menus::render_tools_menu(f, state, content_area);
                 }
                 dialogs::render_tool_dialog(f, state);
             }
             AppMode::Installation => {
-                installer::render_installation_ui_in_area(f, state, content_area, &self.header);
+                installer::render_installation_ui(f, state, content_area);
             }
             AppMode::Complete => {
-                installer::render_completion_ui_in_area(f, state, content_area, &self.header);
+                installer::render_completion_ui(f, state, content_area);
             }
             AppMode::EmbeddedTerminal => {
                 dialogs::render_embedded_terminal(f, state, content_area, pty_terminal);
             }
             AppMode::FloatingOutput => {
-                // Render background based on pre_dialog_mode, then floating window
                 if let Some(ref pre_mode) = state.pre_dialog_mode {
-                    match pre_mode {
-                        AppMode::DiskTools => {
-                            menus::render_disk_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::SystemTools => {
-                            menus::render_system_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::UserTools => {
-                            menus::render_user_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::NetworkTools => {
-                            menus::render_network_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::GuidedInstaller => {
-                            installer::render_configuration_ui_in_area(f, state, content_area, &self.header)
-                        }
-                        _ => menus::render_tools_menu_in_area(f, state, content_area, &self.header),
-                    }
+                    self.render_background(f, state, content_area, pre_mode);
                 } else {
-                    menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                    menus::render_tools_menu(f, state, content_area);
                 }
                 dialogs::render_floating_output(f, state);
             }
             AppMode::FileBrowser => {
-                // Render file browser for config file selection
-                installer::render_automated_install_ui_in_area(f, state, content_area, &self.header);
+                installer::render_automated_install_ui(f, state, content_area);
                 dialogs::render_file_browser(f, state);
             }
             AppMode::ConfirmDialog => {
-                // Render background based on pre_dialog_mode, then confirmation dialog
                 if let Some(ref pre_mode) = state.pre_dialog_mode {
-                    match pre_mode {
-                        AppMode::DiskTools => {
-                            menus::render_disk_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::SystemTools => {
-                            menus::render_system_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::UserTools => {
-                            menus::render_user_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::NetworkTools => {
-                            menus::render_network_tools_menu_in_area(f, state, content_area, &self.header)
-                        }
-                        AppMode::GuidedInstaller => {
-                            installer::render_configuration_ui_in_area(f, state, content_area, &self.header)
-                        }
-                        _ => menus::render_tools_menu_in_area(f, state, content_area, &self.header),
-                    }
+                    self.render_background(f, state, content_area, pre_mode);
                 } else {
-                    menus::render_tools_menu_in_area(f, state, content_area, &self.header);
+                    menus::render_tools_menu(f, state, content_area);
                 }
-                // Render the confirmation dialog on top
                 dialogs::render_confirm_dialog(f, state);
             }
             AppMode::DryRunSummary => {
-                installer::render_dry_run_summary_in_area(f, state, content_area, &self.header);
+                installer::render_dry_run_summary(f, state, content_area);
             }
         }
 
-        // Render navigation bar
-        header::render_nav_bar(f, state, keybinding_ctx, nav_bar_area);
+        // Render nav bar (redesigned component)
+        let nav_items = keybinding_ctx.get_nav_items(&state.mode, &state.config_edit);
+        let nav_bar = NavBar::new(nav_items);
+        nav_bar.render(f, nav_bar_area);
 
-        // Render help overlay if visible (on top of everything)
+        // Render help overlay if visible
         if state.help_visible {
-            header::render_help_overlay(f, state, keybinding_ctx);
+            let help_overlay = HelpOverlay::new(&state.mode, &keybinding_ctx);
+            help_overlay.render(f, f.area());
+        }
+    }
+
+    fn render_background(
+        &self,
+        f: &mut Frame,
+        state: &AppState,
+        area: ratatui::layout::Rect,
+        mode: &AppMode,
+    ) {
+        match mode {
+            AppMode::DiskTools => menus::render_disk_tools_menu(f, state, area),
+            AppMode::SystemTools => menus::render_system_tools_menu(f, state, area),
+            AppMode::UserTools => menus::render_user_tools_menu(f, state, area),
+            AppMode::NetworkTools => menus::render_network_tools_menu(f, state, area),
+            AppMode::GuidedInstaller => installer::render_configuration_ui(f, state, area),
+            _ => menus::render_tools_menu(f, state, area),
         }
     }
 }

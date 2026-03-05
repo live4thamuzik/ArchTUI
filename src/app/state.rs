@@ -43,6 +43,57 @@ pub struct ToolDialogState {
     pub is_executing: bool,
 }
 
+/// A package search result (for inline config editor)
+#[derive(Debug, Clone)]
+pub struct PackageResult {
+    pub repo: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+}
+
+/// Config editing state — right panel interaction
+#[derive(Debug, Clone)]
+pub enum ConfigEditState {
+    /// Right panel shows static details (default)
+    None,
+    /// Picking from a list of choices
+    Selection {
+        choices: Vec<String>,
+        selected: usize,
+    },
+    /// Text input with cursor
+    TextInput {
+        value: String,
+        cursor: usize,
+    },
+    /// Password input (masked)
+    PasswordInput {
+        value: String,
+        cursor: usize,
+    },
+    /// Interactive package selection (search/add/remove/list/done)
+    PackageInput {
+        packages: Vec<String>,
+        current_input: String,
+        output_lines: Vec<String>,
+        is_pacman: bool,
+        /// Search results from pacman -Ss / AUR RPC
+        search_results: Vec<PackageResult>,
+        /// Index of highlighted result in search results view
+        results_selected: usize,
+        /// Whether we're browsing search results (true) or in command mode (false)
+        show_search_results: bool,
+    },
+}
+
+impl ConfigEditState {
+    /// Returns true when the right panel is in an active editing mode
+    pub fn is_active(&self) -> bool {
+        !matches!(self, ConfigEditState::None)
+    }
+}
+
 /// Partition assignments for manual partitioning strategy
 ///
 /// Stores user-selected partition→role mappings collected via TUI dialogs
@@ -124,6 +175,12 @@ pub struct AppState {
     /// Device path stored across the disk layout → action → layout loop.
     /// Set after DiskSelection, consumed when returning from FloatingOutput.
     pub pending_tool_device: Option<String>,
+    /// Current inline config editing state (redesigned right-panel editor)
+    pub config_edit: ConfigEditState,
+    /// Cached disk layout lines for the currently selected device
+    pub disk_layout: Vec<String>,
+    /// Whether the Secure Boot pre-selection warning has been shown this cycle
+    pub secure_boot_warning_shown: bool,
 }
 
 /// Application operating modes
@@ -195,6 +252,9 @@ impl Default for AppState {
             log_level: std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string()),
             manual_partition_map: None,
             pending_tool_device: None,
+            config_edit: ConfigEditState::None,
+            disk_layout: Vec::new(),
+            secure_boot_warning_shown: false,
         }
     }
 }

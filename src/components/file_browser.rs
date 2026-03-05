@@ -225,10 +225,12 @@ impl FileBrowserState {
 }
 
 /// File browser widget
+#[allow(dead_code)] // Render moved to dialogs.rs inline rendering
 pub struct FileBrowser;
 
 impl FileBrowser {
     /// Render the file browser
+    #[allow(dead_code)]
     pub fn render(f: &mut Frame, state: &FileBrowserState) {
         let area = f.area();
 
@@ -345,6 +347,7 @@ impl FileBrowser {
 }
 
 /// Format file size in human-readable format
+#[allow(dead_code)] // Used by FileBrowser::render
 fn format_size(size: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
