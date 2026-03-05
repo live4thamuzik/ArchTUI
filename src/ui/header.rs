@@ -1,125 +1,40 @@
-//! Header and common widget rendering
+//! Utility renderers for installation screens.
+//! The big ASCII header and separate title bar are GONE.
+//! Screen identity is now embedded in border titles.
 //!
-//! This module contains the ASCII art header, title rendering,
-//! progress bars, and other common UI elements.
+//! `HeaderRenderer` is kept as a no-op struct for API compatibility.
 
-use crate::app::AppState;
-use crate::components::help_overlay::HelpOverlay;
-use crate::components::keybindings::KeybindingContext;
-use crate::components::nav_bar::NavBar;
+#![allow(dead_code)]
+
 use crate::theme::Colors;
 use ratatui::{
     layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph},
+    widgets::{
+        Block, BorderType, Borders, Clear, Gauge, List, ListItem, Scrollbar,
+        ScrollbarOrientation, ScrollbarState,
+    },
     Frame,
 };
 
-/// Header renderer containing the ASCII art header
-pub struct HeaderRenderer {
-    /// ASCII art header lines
-    header_lines: Vec<Line<'static>>,
-}
-
-impl Default for HeaderRenderer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl HeaderRenderer {
-    /// Create a new header renderer
-    pub fn new() -> Self {
-        Self {
-            header_lines: Self::create_header(),
-        }
-    }
-
-    /// Render the ASCII art header
-    pub fn render_header(&self, f: &mut Frame, area: Rect) {
-        if area.width == 0 || area.height == 0 {
-            return;
-        }
-
-        let header = Paragraph::new(self.header_lines.clone())
-            .block(Block::default().borders(Borders::NONE))
-            .alignment(Alignment::Center);
-        f.render_widget(header, area);
-    }
-
-    /// Render a title section
-    pub fn render_title(&self, f: &mut Frame, area: Rect, title: &str) {
-        let title_widget = Paragraph::new(title)
-            .block(Block::default().borders(Borders::ALL))
-            .alignment(Alignment::Center)
-            .style(Style::default().fg(Colors::PRIMARY));
-        f.render_widget(title_widget, area);
-    }
-
-    /// Create the ASCII art header
-    fn create_header() -> Vec<Line<'static>> {
-        vec![
-            Line::from(vec![Span::styled(
-                "   █████████                      █████      ███████████ █████  █████ █████",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                "  ███▒▒▒▒▒███                    ▒▒███      ▒█▒▒▒███▒▒▒█▒▒███  ▒▒███ ▒▒███ ",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                " ▒███    ▒███  ████████   ██████  ▒███████  ▒   ▒███  ▒  ▒███   ▒███  ▒███ ",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                " ▒███████████ ▒▒███▒▒███ ███▒▒███ ▒███▒▒███     ▒███     ▒███   ▒███  ▒███ ",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                " ▒███▒▒▒▒▒███  ▒███ ▒▒▒ ▒███ ▒▒▒  ▒███ ▒███     ▒███     ▒███   ▒███  ▒███ ",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                " ▒███    ▒███  ▒███     ▒███  ███ ▒███ ▒███     ▒███     ▒███   ▒███  ▒███ ",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                " █████   █████ █████    ▒▒██████  ████ █████    █████    ▒▒████████   █████",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-            Line::from(vec![Span::styled(
-                "▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒      ▒▒▒▒▒▒  ▒▒▒▒ ▒▒▒▒▒    ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒ ",
-                Style::default().fg(Colors::PRIMARY),
-            )]),
-        ]
-    }
-}
-
-/// Render instructions text
-pub fn render_instructions(f: &mut Frame, area: Rect, text: &str) {
-    let instructions = Paragraph::new(text)
-        .block(Block::default().borders(Borders::NONE))
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Colors::SECONDARY));
-    f.render_widget(instructions, area);
-}
-
-/// Render progress bar
+/// Render progress bar with rounded border
 pub fn render_progress_bar(f: &mut Frame, area: Rect, progress: u16) {
     let gauge = Gauge::default()
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title("Installation Progress"),
+                .border_type(BorderType::Rounded)
+                .title(" Progress ")
+                .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                .border_style(Style::default().fg(Colors::BORDER_ACTIVE)),
         )
-        .gauge_style(Style::default().fg(Colors::INFO))
+        .gauge_style(Style::default().fg(Colors::SUCCESS).bg(Colors::BG_GAUGE))
         .percent(progress);
     f.render_widget(gauge, area);
 }
 
-/// Render installer output with auto-scroll and manual scroll support.
-/// Uses Clear + block-first-then-content pattern to prevent ghosting artifacts.
+/// Render installer output with colored log lines, scrollbar, and position indicator
 pub fn render_installer_output(
     f: &mut Frame,
     area: Rect,
@@ -127,19 +42,27 @@ pub fn render_installer_output(
     scroll_offset: usize,
     auto_scroll: bool,
 ) {
-    // Clear the entire area first to prevent ghosting from previous frames
     f.render_widget(Clear, area);
 
-    // Render block with background fill — covers entire area including empty rows
+    let total = output.len();
+
     let content_block = Block::default()
         .borders(Borders::ALL)
-        .title("Installer Output (↑↓ scroll)")
-        .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
-        .border_style(Style::default().fg(Colors::PRIMARY))
+        .border_type(BorderType::Rounded)
+        .title(Line::from(vec![
+            Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_ACTIVE)),
+            Span::styled(
+                " Installer Output ",
+                Style::default()
+                    .fg(Colors::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_ACTIVE)),
+        ]))
+        .border_style(Style::default().fg(Colors::BORDER_ACTIVE))
         .style(Style::default().bg(Colors::BG_PRIMARY));
-    let inner_area = content_block.inner(area);
-    f.render_widget(content_block, area);
 
+    let inner_area = content_block.inner(area);
     let visible_height = inner_area.height as usize;
 
     let start = if auto_scroll {
@@ -149,6 +72,28 @@ pub fn render_installer_output(
     };
     let end = (start + visible_height).min(output.len());
 
+    // Position indicator in bottom-right
+    let pos_text = if total > visible_height {
+        format!(
+            " {}-{}/{} ",
+            start + 1,
+            end.min(total),
+            total
+        )
+    } else {
+        format!(" {}/{} ", total, total)
+    };
+    let content_block = content_block.title_bottom(
+        Line::from(vec![Span::styled(
+            pos_text,
+            Style::default().fg(Colors::FG_MUTED),
+        )])
+        .alignment(Alignment::Right),
+    );
+
+    f.render_widget(content_block, area);
+
+    let pad_width = inner_area.width as usize;
     let visible_content: Vec<ListItem> = output[start..end]
         .iter()
         .map(|line| {
@@ -156,40 +101,81 @@ pub fn render_installer_output(
                 Style::default().fg(Colors::ERROR).bg(Colors::BG_PRIMARY)
             } else if line.contains("WARNING") || line.contains("WARN:") {
                 Style::default().fg(Colors::WARNING).bg(Colors::BG_PRIMARY)
-            } else if line.contains("SUCCESS:") {
+            } else if line.contains("SUCCESS") {
                 Style::default().fg(Colors::SUCCESS).bg(Colors::BG_PRIMARY)
-            } else if line.starts_with("==>") || line.starts_with("::") || line.contains("Phase ") {
+            } else if line.starts_with("==>")
+                || line.starts_with("::")
+                || line.contains("Phase ")
+            {
                 Style::default()
                     .fg(Colors::INFO)
                     .bg(Colors::BG_PRIMARY)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Colors::FG_PRIMARY).bg(Colors::BG_PRIMARY)
+                Style::default()
+                    .fg(Colors::FG_PRIMARY)
+                    .bg(Colors::BG_PRIMARY)
             };
-            ListItem::new(line.as_str()).style(style)
+            let padded = format!("{:<pad_width$}", line);
+            ListItem::new(padded).style(style)
         })
         .collect();
 
-    // Render list content into inner area (block already rendered above)
-    let list = List::new(visible_content)
-        .style(Style::default().bg(Colors::BG_PRIMARY));
+    let list = List::new(visible_content).style(Style::default().bg(Colors::BG_PRIMARY));
     f.render_widget(list, inner_area);
+
+    // Scrollbar
+    if total > visible_height {
+        let mut scrollbar_state = ScrollbarState::new(total).position(start);
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None)
+            .track_symbol(Some("\u{2502}"))
+            .thumb_symbol("\u{2588}")
+            .track_style(Style::default().fg(Colors::SCROLLBAR_TRACK))
+            .thumb_style(Style::default().fg(Colors::SCROLLBAR_THUMB));
+        f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
+    }
 }
 
-/// Render the navigation bar
+/// No-op header renderer kept for API compatibility.
+///
+/// The redesigned UI embeds identity in border titles instead of a
+/// separate header bar. This struct exists so that `UiRenderer::new()`
+/// and any code that constructs a `HeaderRenderer` still compiles.
+pub struct HeaderRenderer;
+
+impl HeaderRenderer {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for HeaderRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Legacy nav bar render — now delegates to the redesigned NavBar component.
+/// Kept so that code calling `header::render_nav_bar` still compiles.
 pub fn render_nav_bar(
     f: &mut Frame,
-    state: &AppState,
-    keybinding_ctx: &KeybindingContext,
+    state: &crate::app::AppState,
+    keybinding_ctx: &crate::components::keybindings::KeybindingContext,
     area: Rect,
 ) {
-    let nav_items = keybinding_ctx.get_nav_items(&state.mode);
-    let nav_bar = NavBar::new(nav_items);
+    let nav_items = keybinding_ctx.get_nav_items(&state.mode, &state.config_edit);
+    let nav_bar = crate::components::nav_bar::NavBar::new(nav_items);
     nav_bar.render(f, area);
 }
 
-/// Render the help overlay
-pub fn render_help_overlay(f: &mut Frame, state: &AppState, keybinding_ctx: &KeybindingContext) {
-    let help_overlay = HelpOverlay::new(&state.mode, keybinding_ctx);
-    help_overlay.render(f, f.area());
+/// Legacy help overlay render — now delegates to the redesigned HelpOverlay component.
+pub fn render_help_overlay(
+    f: &mut Frame,
+    state: &crate::app::AppState,
+    keybinding_ctx: &crate::components::keybindings::KeybindingContext,
+) {
+    let help = crate::components::help_overlay::HelpOverlay::new(&state.mode, keybinding_ctx);
+    help.render(f, f.area());
 }

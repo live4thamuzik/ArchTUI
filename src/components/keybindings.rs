@@ -4,7 +4,7 @@
 
 #![allow(dead_code)]
 
-use crate::app::AppMode;
+use crate::app::{AppMode, ConfigEditState};
 use crossterm::event::{KeyCode, KeyModifiers};
 use std::collections::HashMap;
 
@@ -258,7 +258,7 @@ impl KeybindingContext {
     }
 
     /// Get navigation bar items for display
-    pub fn get_nav_items(&self, mode: &AppMode) -> Vec<NavBarItem> {
+    pub fn get_nav_items(&self, mode: &AppMode, _config_edit: &ConfigEditState) -> Vec<NavBarItem> {
         let bindings = self.get_bindings(mode);
 
         // Select key bindings to show in nav bar (most important ones)
