@@ -89,7 +89,9 @@ if [[ -z "${USER_PASSWORD:-}" ]]; then
 fi
 
 log_cmd "printf '***:***' | chpasswd (password redacted)"
+{ set +x; } 2>/dev/null
 printf '%s:%s\n' "$TARGET_USER" "$USER_PASSWORD" | chpasswd || error_exit "Failed to reset password for user: $TARGET_USER"
 USER_PASSWORD=""
+[[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
 log_success "Password reset successfully for user: $TARGET_USER"

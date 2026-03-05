@@ -1195,9 +1195,12 @@ impl App {
             AppMode::AutomatedInstall => {
                 self.handle_automated_install_enter()?;
             }
-            AppMode::ToolDialog => {
-                self.handle_tool_dialog_enter()?;
-            }
+            // These modes have dedicated early-return handlers above and never reach here
+            AppMode::ToolDialog
+            | AppMode::EmbeddedTerminal
+            | AppMode::FloatingOutput
+            | AppMode::FileBrowser
+            | AppMode::ConfirmDialog => {}
             AppMode::Installation => {
                 // Installation is running, no action needed
             }
@@ -1206,23 +1209,6 @@ impl App {
                 state.mode = AppMode::MainMenu;
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
-            }
-            AppMode::EmbeddedTerminal => {
-                // Embedded terminal handles its own input
-            }
-            AppMode::FloatingOutput => {
-                // Dismiss floating output on Enter
-                let mut state = self.lock_state();
-                if let Some(_output) = state.floating_output.take() {
-                    state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
-                }
-            }
-            AppMode::FileBrowser => {
-                // File browser handles its own Enter key
-            }
-            AppMode::ConfirmDialog => {
-                // Handle confirmation dialog selection
-                self.handle_confirm_dialog_enter()?;
             }
             AppMode::DryRunSummary => {
                 // Dismiss dry-run summary and return to guided installer
@@ -1246,41 +1232,6 @@ impl App {
     // - pre_dialog_mode: Mode to return to after dialog closes
     //
     // =========================================================================
-
-    /// Handle confirmation dialog Enter key
-    fn handle_confirm_dialog_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (confirmed, action, action_data, pre_mode) = {
-            let state = self.lock_state();
-            if let Some(ref dialog) = state.confirm_dialog {
-                (
-                    dialog.is_confirmed(),
-                    dialog.confirm_action.clone(),
-                    dialog.action_data.clone(),
-                    state.pre_dialog_mode,
-                )
-            } else {
-                return Ok(());
-            }
-        };
-
-        // Clear the dialog
-        {
-            let mut state = self.lock_state();
-            state.confirm_dialog = None;
-            // Return to previous mode
-            if let Some(mode) = pre_mode {
-                state.mode = mode;
-            }
-            state.pre_dialog_mode = None;
-        }
-
-        if confirmed {
-            // Delegate to execute_confirmed_action which handles all action types
-            self.execute_confirmed_action(&action, action_data)?;
-        }
-
-        Ok(())
-    }
 
     /// Execute action after confirmation dialog
     fn execute_confirmed_action(
@@ -1859,40 +1810,11 @@ impl App {
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
-            AppMode::EmbeddedTerminal => {
-                // Embedded terminal uses Ctrl+Q to exit, but we can also handle 'b'
-                // Return to previous mode - will be handled by exit_embedded_terminal
-                drop(state);
-                self.exit_embedded_terminal()?;
-                return Ok(());
-            }
-            AppMode::FloatingOutput => {
-                // Dismiss floating output and return to previous mode
-                if let Some(_output) = state.floating_output.take() {
-                    state.pending_tool_device = None;
-                    state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
-                    state.tools_menu_selection = 0;
-                    state.current_tool = None;
-                    state.status_message =
-                        "Arch Linux Tools - System repair and administration".to_string();
-                }
-            }
-            AppMode::FileBrowser => {
-                // Cancel file browser and return to automated install
-                state.file_browser = None;
-                state.mode = AppMode::AutomatedInstall;
-                state.status_message = "File selection cancelled".to_string();
-            }
-            AppMode::ConfirmDialog => {
-                // Cancel confirmation dialog and return to previous mode
-                state.confirm_dialog = None;
-                if let Some(mode) = state.pre_dialog_mode.take() {
-                    state.mode = mode;
-                } else {
-                    state.mode = AppMode::ToolsMenu;
-                }
-                state.status_message = "Operation cancelled".to_string();
-            }
+            // These modes have dedicated early-return handlers and never reach here
+            AppMode::EmbeddedTerminal
+            | AppMode::FloatingOutput
+            | AppMode::FileBrowser
+            | AppMode::ConfirmDialog => {}
             AppMode::DryRunSummary => {
                 // Return to guided installer from dry-run summary
                 state.mode = AppMode::GuidedInstaller;

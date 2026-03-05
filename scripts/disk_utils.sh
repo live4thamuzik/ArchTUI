@@ -344,7 +344,7 @@ wipe_disk() {
 
     # Zero out the beginning of the disk to kill MBR/GPT tables
     log_cmd "dd if=/dev/zero of=$disk bs=1M count=10 status=none"
-    dd if=/dev/zero of="$disk" bs=1M count=10 status=none
+    dd if=/dev/zero of="$disk" bs=1M count=10 status=none || { log_error "dd zero failed on $disk"; return 1; }
 
     # Reload partition table
     partprobe "$disk" || log_warn "partprobe failed on $disk"

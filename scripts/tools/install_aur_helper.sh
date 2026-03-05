@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# install_aur_helper.sh — Install an AUR helper (paru/yay) as a non-root user
+# install_aur_helper.sh — Install an AUR helper (paru/yay/pikaur) as a non-root user
 #
-# Usage: install_aur_helper.sh --helper <paru|yay> --user <user> --root <chroot_path>
+# Usage: install_aur_helper.sh --helper <paru|yay|pikaur> --user <user> --root <chroot_path>
 #
 # CONSTRAINT: makepkg forbids running as root.
 # This script drops privileges via `runuser -u <user>` inside arch-chroot.
@@ -61,7 +61,7 @@ done
 
 # --- Validation ---
 if [[ -z "$HELPER" ]]; then
-    log_error "--helper is required (paru or yay)"
+    log_error "--helper is required (paru, yay, or pikaur)"
     exit 1
 fi
 
@@ -75,8 +75,8 @@ if [[ -z "$ROOT" ]]; then
     exit 1
 fi
 
-if [[ "$HELPER" != "paru" && "$HELPER" != "yay" ]]; then
-    log_error "Invalid AUR helper: $HELPER (must be 'paru' or 'yay')"
+if [[ "$HELPER" != "paru" && "$HELPER" != "yay" && "$HELPER" != "pikaur" ]]; then
+    log_error "Invalid AUR helper: $HELPER (must be 'paru', 'yay', or 'pikaur')"
     exit 1
 fi
 
@@ -99,8 +99,9 @@ fi
 
 # --- AUR helper URLs ---
 case "$HELPER" in
-    paru) AUR_URL="https://aur.archlinux.org/paru.git" ;;
-    yay)  AUR_URL="https://aur.archlinux.org/yay.git"  ;;
+    paru)   AUR_URL="https://aur.archlinux.org/paru.git"   ;;
+    yay)    AUR_URL="https://aur.archlinux.org/yay.git"    ;;
+    pikaur) AUR_URL="https://aur.archlinux.org/pikaur.git" ;;
 esac
 
 BUILD_DIR="/home/$USER/$HELPER"

@@ -599,8 +599,9 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 let aur_helper: AurHelper = match helper.to_lowercase().as_str() {
                     "paru" => AurHelper::Paru,
                     "yay" => AurHelper::Yay,
+                    "pikaur" => AurHelper::Pikaur,
                     _ => {
-                        eprintln!("❌ Invalid AUR helper: {}. Valid: paru, yay", helper);
+                        eprintln!("Invalid AUR helper: {}. Valid: paru, yay, pikaur", helper);
                         std::process::exit(1);
                     }
                 };
