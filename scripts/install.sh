@@ -433,11 +433,11 @@ validate_configuration() {
         fi
     fi
 
-    # systemd-boot requires kernels on FAT32 (ESP at /boot)
+    # systemd-boot and efistub require kernels on FAT32 (ESP at /boot)
     # Our auto_* strategies create ESP at /efi + ext4 /boot — incompatible
-    if [[ "$BOOTLOADER" == "systemd-boot" && "$PARTITIONING_STRATEGY" == auto_* ]]; then
-        log_warn "systemd-boot is incompatible with auto partitioning (ESP at /efi, ext4 /boot)"
-        log_warn "systemd-boot requires kernels on FAT32 — switching to GRUB"
+    if [[ ("$BOOTLOADER" == "systemd-boot" || "$BOOTLOADER" == "efistub") && "$PARTITIONING_STRATEGY" == auto_* ]]; then
+        log_warn "$BOOTLOADER is incompatible with auto partitioning (ESP at /efi, ext4 /boot)"
+        log_warn "$BOOTLOADER requires kernels on FAT32 — switching to GRUB"
         BOOTLOADER="grub"
         export BOOTLOADER
     fi
@@ -705,6 +705,18 @@ install_base_system() {
             if [[ "$BOOT_MODE" == "UEFI" ]]; then
                 bootloader_packages+=("efibootmgr")
             fi
+            ;;
+        "refind")
+            bootloader_packages+=("refind")
+            if [[ "$BOOT_MODE" == "UEFI" ]]; then
+                bootloader_packages+=("efibootmgr")
+            fi
+            ;;
+        "limine")
+            bootloader_packages+=("limine")
+            ;;
+        "efistub")
+            bootloader_packages+=("efibootmgr")
             ;;
     esac
 

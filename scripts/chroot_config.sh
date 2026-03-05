@@ -803,8 +803,13 @@ install_refind() {
         return 1
     fi
 
-    log_cmd "refind-install"
-    refind-install || {
+    # Determine ESP path for refind-install
+    local esp_path="/efi"
+    [[ ! -d "$esp_path" ]] && esp_path="/boot/efi"
+    [[ ! -d "$esp_path" ]] && esp_path="/boot"
+
+    log_cmd "refind-install --esp-path=$esp_path"
+    refind-install --esp-path="$esp_path" || {
         log_error "refind-install failed"
         return 1
     }
@@ -838,9 +843,9 @@ install_limine() {
     # Microcode
     local microcode_module=""
     if [[ -f /boot/intel-ucode.img ]]; then
-        microcode_module="MODULE_PATH=boot:///intel-ucode.img"
+        microcode_module="module_path: boot:///intel-ucode.img"
     elif [[ -f /boot/amd-ucode.img ]]; then
-        microcode_module="MODULE_PATH=boot:///amd-ucode.img"
+        microcode_module="module_path: boot:///amd-ucode.img"
     fi
 
     if [[ "${BOOT_MODE:-UEFI}" == "UEFI" ]]; then
@@ -871,15 +876,15 @@ install_limine() {
         echo "    protocol: linux"
         echo "    kernel_path: boot:///vmlinuz-${KERNEL:-linux}"
         [[ -n "$microcode_module" ]] && echo "    $microcode_module"
-        echo "    MODULE_PATH=boot:///initramfs-${KERNEL:-linux}.img"
-        echo "    KERNEL_CMDLINE=$options"
+        echo "    module_path: boot:///initramfs-${KERNEL:-linux}.img"
+        echo "    cmdline: $options"
         echo ""
         echo "/Arch Linux (fallback)"
         echo "    protocol: linux"
         echo "    kernel_path: boot:///vmlinuz-${KERNEL:-linux}"
         [[ -n "$microcode_module" ]] && echo "    $microcode_module"
-        echo "    MODULE_PATH=boot:///initramfs-${KERNEL:-linux}-fallback.img"
-        echo "    KERNEL_CMDLINE=$options"
+        echo "    module_path: boot:///initramfs-${KERNEL:-linux}-fallback.img"
+        echo "    cmdline: $options"
     } > /boot/limine.conf
 
     log_success "Limine installed"

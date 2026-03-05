@@ -785,8 +785,8 @@ pub const BASE_PACKAGES: &[&str] = &[
 
 /// Bootloader packages.
 pub mod bootloader_packages {
-    /// GRUB bootloader packages.
-    pub const GRUB: &[&str] = &["grub", "efibootmgr", "os-prober"];
+    /// GRUB bootloader packages (os-prober added conditionally by resolver).
+    pub const GRUB: &[&str] = &["grub", "efibootmgr"];
 
     /// systemd-boot (included in systemd, no extra packages needed).
     pub const SYSTEMD_BOOT: &[&str] = &[];

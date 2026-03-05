@@ -330,6 +330,19 @@ impl InstallationConfig {
             }
         }
 
+        // Validate UEFI-only bootloaders are not selected with BIOS boot mode
+        match self.bootloader {
+            Bootloader::SystemdBoot | Bootloader::Refind | Bootloader::Efistub => {
+                if self.boot_mode == BootMode::Bios {
+                    anyhow::bail!(
+                        "{} requires UEFI firmware (BIOS is not supported)",
+                        self.bootloader
+                    );
+                }
+            }
+            _ => {}
+        }
+
         tracing::info!("Configuration validation passed");
         Ok(())
     }
@@ -967,6 +980,32 @@ mod tests {
                 config.validate().is_err(),
                 "Should reject RAID level: '{}'",
                 level
+            );
+        }
+    }
+
+    #[test]
+    fn test_validation_uefi_only_bootloaders_on_bios() {
+        let mut config = create_test_config();
+        config.boot_mode = BootMode::Bios;
+
+        // UEFI-only bootloaders must be rejected on BIOS
+        for bl in &[Bootloader::SystemdBoot, Bootloader::Refind, Bootloader::Efistub] {
+            config.bootloader = *bl;
+            assert!(
+                config.validate().is_err(),
+                "{} should be rejected on BIOS",
+                bl
+            );
+        }
+
+        // GRUB and Limine support BIOS
+        for bl in &[Bootloader::Grub, Bootloader::Limine] {
+            config.bootloader = *bl;
+            assert!(
+                config.validate().is_ok(),
+                "{} should be accepted on BIOS",
+                bl
             );
         }
     }
