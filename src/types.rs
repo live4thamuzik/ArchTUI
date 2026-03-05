@@ -141,6 +141,8 @@ pub enum DesktopEnvironment {
     Labwc,
     #[strum(serialize = "xmonad")]
     Xmonad,
+    #[strum(serialize = "dwm")]
+    Dwm,
 }
 
 impl DesktopEnvironment {

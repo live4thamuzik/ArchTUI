@@ -3040,7 +3040,7 @@ impl App {
             "gnome" => "gdm",
             "kde" | "hyprland" | "sway" | "lxqt" | "river" | "niri" | "labwc" => "sddm",
             "i3" | "xfce" | "cinnamon" | "mate" | "budgie" | "deepin"
-            | "bspwm" | "awesome" | "qtile" | "xmonad" => "lightdm",
+            | "bspwm" | "awesome" | "qtile" | "xmonad" | "dwm" => "lightdm",
             "lxde" => "lxdm",
             "cosmic" => "cosmic-greeter",
             "none" => "none",
