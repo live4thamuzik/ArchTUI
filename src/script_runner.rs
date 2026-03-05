@@ -6,14 +6,14 @@
 //! - Process group isolation (death pact compliance)
 //! - Proper PID registration for cleanup
 //! - Type-safe argument passing via `ScriptArgs` trait
-//! - Dry-run mode support (Sprint 8)
+//! - Dry-run mode support
 //!
 //! # Architecture Rule
 //!
 //! `run_script_safe` is the execution gatekeeper. Any attempt to use
 //! `Command::new("bash")` directly for tool scripts violates the architecture.
 //!
-//! # Dry-Run Mode (Sprint 8)
+//! # Dry-Run Mode
 //!
 //! When `is_dry_run()` returns `true` AND the script is destructive:
 //! - The script is NOT executed
@@ -30,8 +30,35 @@ use tracing::{info, warn};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+/// Resolve the log directory.
+/// Priority: ARCHTUI_LOG_DIR env > /var/log/archtui (if writable) > $XDG_STATE_HOME/archtui > ~/.local/state/archtui
+pub fn log_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("ARCHTUI_LOG_DIR") {
+        return PathBuf::from(dir);
+    }
+    // Prefer /var/log/archtui during installation (running as root)
+    let var_log = PathBuf::from("/var/log/archtui");
+    if std::fs::create_dir_all(&var_log).is_ok() {
+        // Verify we can actually write there
+        let test_path = var_log.join(".write_test");
+        if std::fs::write(&test_path, b"").is_ok() {
+            let _ = std::fs::remove_file(&test_path);
+            return var_log;
+        }
+    }
+    // Non-root fallback: XDG state directory
+    if let Ok(xdg) = std::env::var("XDG_STATE_HOME") {
+        return PathBuf::from(xdg).join("archtui");
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".local/state/archtui");
+    }
+    // Last resort
+    PathBuf::from("/tmp/archtui-logs")
+}
+
 /// Resolve the scripts base directory.
-/// Priority: ARCHTUI_SCRIPTS_DIR env > exe-adjacent scripts/ > cwd-relative scripts/
+/// Priority: ARCHTUI_SCRIPTS_DIR env > exe-adjacent scripts/ > FHS /usr/share/archtui/scripts > cwd-relative scripts/
 pub fn scripts_base_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("ARCHTUI_SCRIPTS_DIR") {
         return PathBuf::from(dir);
@@ -43,6 +70,11 @@ pub fn scripts_base_dir() -> PathBuf {
                 return candidate;
             }
         }
+    }
+    // FHS fallback for system-wide installation (e.g. /usr/bin/archtui + /usr/share/archtui/scripts)
+    let fhs = PathBuf::from("/usr/share/archtui/scripts");
+    if fhs.is_dir() {
+        return fhs;
     }
     PathBuf::from("./scripts")
 }
@@ -121,7 +153,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     );
 
     // ========================================================================
-    // DRY-RUN CHECK (Sprint 8)
+    // DRY-RUN CHECK
     // Skip destructive operations when dry-run is enabled
     // ========================================================================
     if is_dry_run() && args.is_destructive() {
@@ -330,5 +362,19 @@ mod tests {
         let dir = scripts_base_dir();
         // Should return a path (may not exist in test env but should not panic)
         assert!(!dir.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_log_dir_returns_path() {
+        let dir = log_dir();
+        assert!(!dir.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_log_dir_respects_env_var() {
+        std::env::set_var("ARCHTUI_LOG_DIR", "/tmp/archtui-test-logs");
+        let dir = log_dir();
+        assert_eq!(dir, PathBuf::from("/tmp/archtui-test-logs"));
+        std::env::remove_var("ARCHTUI_LOG_DIR");
     }
 }

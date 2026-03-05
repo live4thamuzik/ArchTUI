@@ -1,4 +1,4 @@
-//! Post-install orchestration (Sprint 18)
+//! Post-install orchestration
 //!
 //! Handles operations that run AFTER the base system is installed:
 //! - AUR helper installation (paru/yay)

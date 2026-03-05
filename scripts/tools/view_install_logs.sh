@@ -30,7 +30,7 @@ source_or_die() {
 }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
-LOG_DIR="/var/log/archtui"
+LOG_DIR="${ARCHTUI_LOG_DIR:-/var/log/archtui}"
 TMP_LOG="/tmp/archtui.log"
 ACTION="latest"
 

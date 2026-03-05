@@ -1,4 +1,4 @@
-//! Package & Service Resolver (Sprint 16)
+//! Package & Service Resolver
 //!
 //! Translates high-level configuration choices into concrete package names
 //! and systemd service names.

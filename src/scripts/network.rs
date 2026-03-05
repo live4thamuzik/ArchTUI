@@ -5,7 +5,7 @@
 //! - `TestNetworkArgs` for `test_network.sh`
 //! - `FirewallArgs` for `configure_firewall.sh`
 //! - `NetworkDiagnosticsArgs` for `network_diagnostics.sh`
-//! - `UpdateMirrorsArgs` for `update_mirrors.sh` (Sprint 13)
+//! - `UpdateMirrorsArgs` for `update_mirrors.sh`
 
 use crate::script_traits::ScriptArgs;
 
@@ -182,7 +182,7 @@ impl ScriptArgs for NetworkDiagnosticsArgs {
 }
 
 // ============================================================================
-// Update Mirrors (Sprint 13)
+// Update Mirrors
 // ============================================================================
 
 /// Mirror sort method for reflector.

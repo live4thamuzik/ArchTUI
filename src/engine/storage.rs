@@ -1,4 +1,4 @@
-//! Storage Stack Engine (Sprint 15)
+//! Storage Stack Engine
 //!
 //! Translates a high-level `PartitionScheme` + `Filesystem` configuration into
 //! an ordered sequence of atomic `StorageOp` operations that the script runner

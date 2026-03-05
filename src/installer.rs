@@ -11,7 +11,7 @@
 //!
 //! All operations go through `run_script_safe` which enforces process group isolation.
 //!
-//! # Base System Installation (Sprint 5)
+//! # Base System Installation
 //!
 //! The `install_base_system` function uses the ALPM bindings to install packages
 //! directly, replacing shell-based pacstrap calls. This provides full transparency
@@ -203,8 +203,9 @@ impl Installer {
         // Create a persistent log that captures everything the TUI sees (and more),
         // surviving the 500-line ringbuffer cap. ANSI-stripped, timestamped.
         let master_log: Arc<Mutex<Option<File>>> = {
-            let log_dir = "/var/log/archtui";
-            let _ = fs::create_dir_all(log_dir);
+            let log_dir = crate::script_runner::log_dir();
+            let log_dir = log_dir.to_string_lossy().to_string();
+            let _ = fs::create_dir_all(&log_dir);
             let timestamp = now_hms().replace(':', "");
             let log_path = format!("{}/install-{}-master.log", log_dir, timestamp);
             match OpenOptions::new().create(true).append(true).open(&log_path) {
@@ -451,9 +452,10 @@ impl Installer {
                         "Installation failed with exit code: {}",
                         exit_code
                     ));
-                    state.installer_output.push(
-                        "Check /var/log/archtui/ for full details (master log + verbose trace)".to_string()
-                    );
+                    state.installer_output.push(format!(
+                        "Check {}/ for full details (master log + verbose trace)",
+                        crate::script_runner::log_dir().display()
+                    ));
                     state.mode = crate::app::AppMode::Complete;
                     write_master_log(&wait_log, &format!("[RUST] Installation FAILED (exit code {})", exit_code));
                 }
@@ -478,7 +480,7 @@ impl Installer {
 }
 
 // ============================================================================
-// Type-Safe Disk Operations (Sprint 4)
+// Type-Safe Disk Operations
 // ============================================================================
 
 /// Disk layout configuration for installation.
@@ -638,7 +640,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
 }
 
 // ============================================================================
-// Base System Installation (Sprint 5)
+// Base System Installation
 // Requires `alpm` feature - only available on Arch Linux
 // ============================================================================
 
@@ -792,7 +794,7 @@ pub fn install_base_system_with_extras(
 }
 
 // ============================================================================
-// System Configuration (Sprint 6)
+// System Configuration
 // ============================================================================
 
 /// System configuration parameters for post-install setup.
@@ -863,7 +865,7 @@ impl Default for SystemConfig {
 /// 1. **Generate Fstab** - CRITICAL: Must be done after mount, before chroot
 /// 2. **Set Hostname/Locale** - Configure system identity
 /// 3. **Create Users** - Set up root and main user accounts
-/// 4. Install Bootloader (TODO: Sprint 7)
+/// 4. Install Bootloader (TODO)
 ///
 /// # Security: Password Handling
 ///
@@ -1001,17 +1003,17 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     }
 
     // ========================================================================
-    // Step 4: Install Bootloader (TODO: Sprint 7)
+    // Step 4: Install Bootloader (TODO)
     // This will configure GRUB/systemd-boot based on boot mode (UEFI/BIOS)
     // ========================================================================
-    tracing::info!("Bootloader installation: TODO in Sprint 7");
+    tracing::info!("Bootloader installation: TODO");
 
     tracing::info!("System configuration complete");
     Ok(())
 }
 
 // ============================================================================
-// LUKS Encryption (Sprint 11)
+// LUKS Encryption
 // ============================================================================
 
 /// Encryption configuration for a partition.
@@ -1156,7 +1158,7 @@ pub fn encrypt_partition(
 }
 
 // ============================================================================
-// Desktop Profile Installation (Sprint 12)
+// Desktop Profile Installation
 // ============================================================================
 
 /// Install a desktop profile (DE/WM).
@@ -1262,7 +1264,7 @@ pub fn install_dotfiles(config: &DotfilesConfig) -> Result<()> {
 }
 
 // ============================================================================
-// Mirror Ranking (Sprint 13)
+// Mirror Ranking
 // ============================================================================
 
 /// Update pacman mirrorlist using reflector.

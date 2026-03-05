@@ -20,7 +20,7 @@
 //! This module requires the `alpm` feature flag because libalpm is only
 //! available on Arch Linux systems. Enable with `--features alpm`.
 
-// Library API - will be used for Sprint 5 base system installation
+// Library API - used for base system installation via ALPM
 #![allow(dead_code)]
 
 use alpm::{Alpm, LogLevel, SigLevel, TransFlag};

@@ -285,8 +285,9 @@ fn run_installer_with_config(
     }
 
     // Create master log for headless mode (best-effort)
-    let log_dir = "/var/log/archtui";
-    let _ = fs::create_dir_all(log_dir);
+    let log_dir = crate::script_runner::log_dir();
+    let log_dir = log_dir.to_string_lossy();
+    let _ = fs::create_dir_all(log_dir.as_ref());
     let master_log_path = format!(
         "{}/install-{}-master.log",
         log_dir,

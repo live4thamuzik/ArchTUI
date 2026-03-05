@@ -1,4 +1,4 @@
-//! Desktop profile management (Sprint 12).
+//! Desktop profile management.
 //!
 //! This module provides type-safe profile selection for desktop environments
 //! and window managers. Package lists are maintained in Rust enums for easy

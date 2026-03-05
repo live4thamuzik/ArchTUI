@@ -192,7 +192,7 @@ check_package_available() {
 # Sets LOG_FILE and creates the log directory
 # Falls back to /dev/null if directory creation fails
 setup_logging() {
-    local log_dir="/var/log/archtui"
+    local log_dir="${ARCHTUI_LOG_DIR:-/var/log/archtui}"
     if ! mkdir -p "$log_dir" 2>/dev/null; then
         log_dir="/tmp"
     fi
