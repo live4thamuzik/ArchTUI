@@ -1433,7 +1433,7 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "river")
-            install_packages "River" river xdg-desktop-portal-wlr waybar foot wofi mako grim slurp wl-clipboard thunar \
+            install_packages "River" river xdg-desktop-portal-wlr waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
                 networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
@@ -1443,7 +1443,7 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "labwc")
-            install_packages "Labwc" labwc xdg-desktop-portal-wlr waybar foot wofi mako grim slurp wl-clipboard thunar \
+            install_packages "Labwc" labwc xdg-desktop-portal-wlr waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
                 networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;

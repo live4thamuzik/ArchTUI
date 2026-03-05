@@ -235,8 +235,8 @@ impl FileBrowser {
         // Calculate centered area (80% width, 80% height)
         let width = (area.width as f32 * 0.8) as u16;
         let height = (area.height as f32 * 0.8) as u16;
-        let x = (area.width - width) / 2;
-        let y = (area.height - height) / 2;
+        let x = area.width.saturating_sub(width) / 2;
+        let y = area.height.saturating_sub(height) / 2;
 
         let browser_area = Rect::new(x, y, width, height);
 

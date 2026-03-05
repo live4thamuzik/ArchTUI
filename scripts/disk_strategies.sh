@@ -7,7 +7,7 @@ set -euo pipefail
 cleanup_disk_strategies() {
     local sig="$1"
     echo "DISK_STRATEGIES: Received $sig, aborting disk operations..." >&2
-    exit 130
+    [[ "$sig" == "SIGTERM" ]] && exit 143 || exit 130
 }
 trap 'cleanup_disk_strategies SIGTERM' SIGTERM
 trap 'cleanup_disk_strategies SIGINT' SIGINT

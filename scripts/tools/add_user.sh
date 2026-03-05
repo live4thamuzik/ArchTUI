@@ -289,6 +289,7 @@ if [[ "$NO_LOGIN" == false ]]; then
         log_info "Setting password for '$USERNAME'..."
         # Use chpasswd to set password securely
         log_cmd "printf '***:***' | chpasswd (password redacted)"
+        { set +x; } 2>/dev/null
         if printf '%s:%s\n' "$USERNAME" "$PASSWORD" | chpasswd 2>/dev/null; then
             log_success "Password set for '$USERNAME'"
             PASSWORD_WAS_SET="yes"
@@ -297,6 +298,7 @@ if [[ "$NO_LOGIN" == false ]]; then
         fi
         # Clear password from memory
         PASSWORD=""
+        [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
     else
         log_info "No password provided (USER_PASSWORD not set)"
         log_info "Run: passwd $USERNAME"

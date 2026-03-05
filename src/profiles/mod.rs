@@ -780,6 +780,7 @@ pub const BASE_PACKAGES: &[&str] = &[
     "vim",
     "sudo",
     "git",
+    "pciutils", // lspci — required for GPU auto-detection in chroot
 ];
 
 /// Bootloader packages.

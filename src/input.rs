@@ -1536,12 +1536,8 @@ impl InputHandler {
                         continue;
                     }
 
-                    // Safety check: Skip removable media (USB, CD-ROM)
-                    if transport == "usb"
-                        || transport == "sata"
-                            && disk_size.parse::<u64>().unwrap_or(0) < 1_073_741_824
-                    {
-                        // Skip disks smaller than 1GB (likely live ISO)
+                    // Safety check: Skip USB disks (likely live ISO media)
+                    if transport == "usb" {
                         continue;
                     }
 

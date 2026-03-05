@@ -70,13 +70,13 @@ if ! validate_username "$TARGET_USER"; then
     error_exit "Invalid username: $TARGET_USER"
 fi
 
-# Validate repo URL scheme (must be https:// or git://)
+# Validate repo URL scheme (https:// only — git:// is unencrypted/MITM-vulnerable)
 case "$REPO_URL" in
-    https://*|git://*)
-        # Valid schemes
+    https://*)
+        # Valid scheme
         ;;
     *)
-        error_exit "Invalid repository URL scheme: $REPO_URL (must be https:// or git://)"
+        error_exit "Invalid repository URL scheme: $REPO_URL (must be https://)"
         ;;
 esac
 

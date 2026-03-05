@@ -232,13 +232,17 @@ case "$BOOTLOADER_TYPE" in
         # Configure GRUB
         log_info "⚙️  Generating GRUB configuration..."
         
-        # Check if os-prober is available and install it if needed
+        # Check if os-prober is available and set GRUB config (idempotent)
         if arch-chroot "$ROOT_PATH" pacman -Qi os-prober >/dev/null 2>&1; then
             log_info "OS prober detected - enabling multi-boot support"
-            log_cmd "echo GRUB_DISABLE_OS_PROBER=false >> /etc/default/grub"
-            echo "GRUB_DISABLE_OS_PROBER=false" >> "$ROOT_PATH/etc/default/grub" || log_warn "Failed to write GRUB os-prober config"
+            if ! grep -q "^GRUB_DISABLE_OS_PROBER=" "$ROOT_PATH/etc/default/grub" 2>/dev/null; then
+                log_cmd "echo GRUB_DISABLE_OS_PROBER=false >> /etc/default/grub"
+                echo "GRUB_DISABLE_OS_PROBER=false" >> "$ROOT_PATH/etc/default/grub" || log_warn "Failed to write GRUB os-prober config"
+            fi
         else
-            echo "GRUB_DISABLE_OS_PROBER=true" >> "$ROOT_PATH/etc/default/grub" || log_warn "Failed to write GRUB os-prober config"
+            if ! grep -q "^GRUB_DISABLE_OS_PROBER=" "$ROOT_PATH/etc/default/grub" 2>/dev/null; then
+                echo "GRUB_DISABLE_OS_PROBER=true" >> "$ROOT_PATH/etc/default/grub" || log_warn "Failed to write GRUB os-prober config"
+            fi
         fi
         
         # Generate GRUB config
