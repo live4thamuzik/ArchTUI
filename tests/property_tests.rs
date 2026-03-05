@@ -22,6 +22,8 @@ fn filesystem_strategy() -> impl Strategy<Value = Filesystem> {
         Just(Filesystem::Btrfs),
         Just(Filesystem::Xfs),
         Just(Filesystem::Fat32),
+        Just(Filesystem::F2fs),
+        Just(Filesystem::Swap),
     ]
 }
 

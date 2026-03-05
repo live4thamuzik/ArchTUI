@@ -564,7 +564,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
 
     // Step 1: Optionally wipe the disk
     if wipe {
-        tracing::info!("Wiping disk: {:?}", layout.disk);
+        tracing::info!(disk = ?layout.disk, "Wiping disk");
         let wipe_args = WipeDiskArgs {
             device: layout.disk.clone(),
             method: WipeMethod::Quick,
@@ -577,7 +577,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     }
 
     // Step 2: Format EFI/boot partition as FAT32
-    tracing::info!("Formatting boot partition: {:?} as FAT32", layout.boot_partition);
+    tracing::info!(partition = ?layout.boot_partition, fs = "FAT32", "Formatting boot partition");
     let format_boot = FormatPartitionArgs {
         device: layout.boot_partition.clone(),
         filesystem: Filesystem::Fat32,
@@ -590,11 +590,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
     tracing::info!("Boot partition formatted");
 
     // Step 3: Format root partition
-    tracing::info!(
-        "Formatting root partition: {:?} as {:?}",
-        layout.root_partition,
-        layout.root_filesystem
-    );
+    tracing::info!(partition = ?layout.root_partition, fs = ?layout.root_filesystem, "Formatting root partition");
     let format_root = FormatPartitionArgs {
         device: layout.root_partition.clone(),
         filesystem: layout.root_filesystem,
@@ -608,11 +604,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
 
     // Step 4: Mount root partition FIRST
     // CRITICAL: Root must be mounted before boot so /mnt/boot exists
-    tracing::info!(
-        "Mounting root partition: {:?} -> {:?}",
-        layout.root_partition,
-        layout.target_root
-    );
+    tracing::info!(partition = ?layout.root_partition, mountpoint = ?layout.target_root, "Mounting root partition");
     let mount_root = MountPartitionArgs {
         device: layout.root_partition.clone(),
         mountpoint: layout.target_root.clone(),
@@ -625,11 +617,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
 
     // Step 5: Create boot mount point and mount boot partition
     let boot_mountpoint = layout.target_root.join("boot");
-    tracing::info!(
-        "Mounting boot partition: {:?} -> {:?}",
-        layout.boot_partition,
-        boot_mountpoint
-    );
+    tracing::info!(partition = ?layout.boot_partition, mountpoint = ?boot_mountpoint, "Mounting boot partition");
 
     // Ensure boot directory exists
     std::fs::create_dir_all(&boot_mountpoint)
@@ -697,7 +685,7 @@ const BASE_PACKAGES: &[&str] = &["base", "linux", "linux-firmware", "base-devel"
 /// ```
 #[allow(dead_code)] // Library API - will be called from main installer flow
 pub fn install_base_system(target_root: &Path) -> Result<()> {
-    tracing::info!("Installing base system to {:?}", target_root);
+    tracing::info!(target = ?target_root, "Installing base system");
 
     // Verify target root exists and is mounted
     if !target_root.exists() {
@@ -773,7 +761,7 @@ pub fn install_base_system_with_extras(
     target_root: &Path,
     extra_packages: &[&str],
 ) -> Result<()> {
-    tracing::info!("Installing base system with {} extra packages", extra_packages.len());
+    tracing::info!(extra_count = extra_packages.len(), "Installing base system with extra packages");
 
     // Combine base packages with extras
     let mut all_packages: Vec<&str> = BASE_PACKAGES.to_vec();
@@ -915,7 +903,7 @@ impl Default for SystemConfig {
 /// ```
 #[allow(dead_code)] // Library API - will be called from main installer flow
 pub fn configure_system(config: &SystemConfig) -> Result<()> {
-    tracing::info!("Starting system configuration for {:?}", config.target_root);
+    tracing::info!(target = ?config.target_root, "Starting system configuration");
 
     // ========================================================================
     // Step 1: Generate Fstab
@@ -981,7 +969,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     let output = run_script_safe(&user_args)
         .context("Failed to create user")?;
     output.ensure_success("User creation")?;
-    tracing::info!("User {} created successfully", config.username);
+    tracing::info!(user = %config.username, "User created successfully");
 
     // Set root password if provided
     if let Some(ref root_pw) = config.root_password {

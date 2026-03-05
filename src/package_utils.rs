@@ -83,17 +83,13 @@ pub fn search_pacman_packages(search_term: &str) -> Result<Vec<Package>, String>
 
 /// Search for AUR packages using curl and AUR RPC API
 pub fn search_aur_packages(search_term: &str) -> Result<Vec<Package>, String> {
-    // Validate search term to prevent URL injection
-    if search_term.contains(";")
-        || search_term.contains("|")
-        || search_term.contains("&")
-        || search_term.contains("$")
-        || search_term.contains("`")
-        || search_term.contains("\"")
-        || search_term.contains("'")
-        || search_term.contains(" ")
+    // Validate search term: only allow package-name-safe characters
+    // This prevents URL parameter injection (& ? #) and shell injection (; | $ `)
+    if !search_term
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
-        return Err("Invalid characters in search term".to_string());
+        return Err("Search term may only contain alphanumeric characters, hyphens, underscores, and dots".to_string());
     }
 
     let url = format!(

@@ -97,7 +97,7 @@ impl WizardState {
 }
 
 /// Wizard data collected during the guided installer flow.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct WizardData {
     pub selected_disk: Option<PathBuf>,
     pub disk_model: Option<String>,
@@ -112,6 +112,26 @@ pub struct WizardData {
     pub extra_packages: Vec<String>,
     #[allow(dead_code)]
     pub dry_run: bool,
+}
+
+// ROE §8.1: Custom Debug impl redacts password fields
+impl std::fmt::Debug for WizardData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WizardData")
+            .field("selected_disk", &self.selected_disk)
+            .field("disk_model", &self.disk_model)
+            .field("disk_size", &self.disk_size)
+            .field("auto_partition", &self.auto_partition)
+            .field("filesystem", &self.filesystem)
+            .field("hostname", &self.hostname)
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "********"))
+            .field("user_sudo", &self.user_sudo)
+            .field("root_password", &self.root_password.as_ref().map(|_| "********"))
+            .field("extra_packages", &self.extra_packages)
+            .field("dry_run", &self.dry_run)
+            .finish()
+    }
 }
 
 impl WizardData {

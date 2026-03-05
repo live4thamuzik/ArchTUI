@@ -3,6 +3,7 @@
 //! Handles different types of user input including popups, text input, and selection dialogs.
 
 use crate::config::Package;
+use tracing::{debug, info};
 use crate::process_guard::CommandProcessGroup;
 use crate::types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
@@ -1131,6 +1132,7 @@ impl InputHandler {
 
     /// Start a warning dialog
     pub fn start_warning(&mut self, title: String, message: Vec<String>) {
+        info!(title = %title, "Opening warning dialog");
         let input_type = InputType::Warning {
             title: title.clone(),
             message,
@@ -1152,6 +1154,7 @@ impl InputHandler {
         current_value: String,
         placeholder: String,
     ) {
+        debug!(field = %field_name, "Opening password input dialog (value redacted)");
         let input_type = InputType::PasswordInput {
             field_name: field_name.clone(),
             current_value,
@@ -1173,6 +1176,7 @@ impl InputHandler {
         current_value: String,
         placeholder: String,
     ) {
+        debug!(field = %field_name, "Opening text input dialog");
         let input_type = InputType::TextInput {
             field_name: field_name.clone(),
             current_value,
@@ -1193,6 +1197,7 @@ impl InputHandler {
         options: Vec<String>,
         current_value: String,
     ) {
+        debug!(field = %field_name, option_count = options.len(), "Opening selection dialog");
         let selected_index = options
             .iter()
             .position(|opt| opt == &current_value)
@@ -1227,6 +1232,7 @@ impl InputHandler {
 
     /// Start a disk selection dialog
     pub fn start_disk_selection(&mut self, current_value: String) {
+        info!("Opening disk selection dialog");
         let available_disks = Self::detect_available_disks();
         let selected_index = available_disks
             .iter()
@@ -1251,6 +1257,7 @@ impl InputHandler {
 
     /// Start a package selection dialog
     pub fn start_package_selection(&mut self, field_name: String, current_packages: String) {
+        debug!(field = %field_name, "Opening package selection dialog");
         let is_pacman = field_name.contains("Pacman");
         let output_lines = Vec::new();
 
@@ -1282,10 +1289,17 @@ impl InputHandler {
         if let Some(ref mut dialog) = self.current_dialog {
             match dialog.handle_input(key_event) {
                 InputResult::Confirm(value) => {
+                    // ROE §8.1: redact password dialog values
+                    if matches!(&dialog.input_type, InputType::PasswordInput { .. }) {
+                        info!("Dialog confirmed (password value redacted)");
+                    } else {
+                        info!(value = %value, "Dialog confirmed");
+                    }
                     self.current_dialog = None;
                     Some(value)
                 }
                 InputResult::Cancel => {
+                    debug!("Dialog cancelled");
                     self.current_dialog = None;
                     None
                 }
@@ -1579,6 +1593,7 @@ impl InputHandler {
 
     /// Start multi-disk selection for RAID or manual partitioning
     pub fn start_multi_disk_selection(&mut self, partitioning_strategy: &str) {
+        info!(strategy = %partitioning_strategy, "Opening multi-disk selection dialog");
         let available_disks = Self::detect_available_disks();
 
         // Determine disk requirements based on partitioning strategy
@@ -1710,6 +1725,7 @@ impl InputHandler {
         partitions: Vec<(String, String)>,
         is_uefi: bool,
     ) {
+        info!(partition_count = partitions.len(), is_uefi, "Starting manual partition assignment");
         let assign_state = ManualAssignState {
             partitions: partitions.clone(),
             step: ManualAssignStep::Root,
@@ -2172,5 +2188,204 @@ impl InputHandler {
         } else {
             info_parts.join(", ")
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    #[test]
+    fn test_get_predefined_options_bootloader() {
+        let opts = InputHandler::get_predefined_options("Bootloader");
+        assert!(opts.contains(&"grub".to_string()));
+        assert!(opts.contains(&"systemd-boot".to_string()));
+        assert!(opts.contains(&"refind".to_string()));
+        assert!(opts.contains(&"limine".to_string()));
+        assert!(opts.contains(&"efistub".to_string()));
+    }
+
+    #[test]
+    fn test_get_predefined_options_kernel() {
+        let opts = InputHandler::get_predefined_options("Kernel");
+        assert!(opts.contains(&"linux".to_string()));
+        assert!(opts.contains(&"linux-lts".to_string()));
+        assert!(opts.contains(&"linux-zen".to_string()));
+        assert!(opts.contains(&"linux-hardened".to_string()));
+    }
+
+    #[test]
+    fn test_get_predefined_options_filesystem_excludes_internal() {
+        let opts = InputHandler::get_predefined_options("Root Filesystem");
+        assert!(opts.contains(&"ext4".to_string()));
+        assert!(opts.contains(&"btrfs".to_string()));
+        assert!(opts.contains(&"xfs".to_string()));
+        assert!(opts.contains(&"f2fs".to_string()));
+        // Fat32 and Swap are internal-only, not user-selectable
+        assert!(!opts.contains(&"fat32".to_string()));
+        assert!(!opts.contains(&"swap".to_string()));
+    }
+
+    #[test]
+    fn test_get_predefined_options_desktop_environment() {
+        let opts = InputHandler::get_predefined_options("Desktop Environment");
+        assert!(opts.contains(&"none".to_string()));
+        // strum serializes as lowercase
+        assert!(opts.contains(&"gnome".to_string()));
+        assert!(opts.contains(&"kde".to_string()));
+    }
+
+    #[test]
+    fn test_get_predefined_options_unknown_field_has_toggle_defaults() {
+        // Unknown fields fall through to Toggle::iter() (Yes/No)
+        let opts = InputHandler::get_predefined_options("NonExistentField");
+        assert!(!opts.is_empty());
+        assert!(opts.contains(&"Yes".to_string()));
+        assert!(opts.contains(&"No".to_string()));
+    }
+
+    #[test]
+    fn test_input_dialog_text_confirm() {
+        let mut dialog = InputDialog::new(
+            InputType::TextInput {
+                field_name: "Test".to_string(),
+                current_value: "hello".to_string(),
+                placeholder: String::new(),
+            },
+            "Test".to_string(),
+            "Enter value".to_string(),
+        );
+        let result = dialog.handle_input(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(matches!(result, InputResult::Confirm(v) if v == "hello"));
+    }
+
+    #[test]
+    fn test_input_dialog_text_cancel() {
+        let mut dialog = InputDialog::new(
+            InputType::TextInput {
+                field_name: "Test".to_string(),
+                current_value: "hello".to_string(),
+                placeholder: String::new(),
+            },
+            "Test".to_string(),
+            "Enter value".to_string(),
+        );
+        let result = dialog.handle_input(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(result, InputResult::Cancel));
+    }
+
+    #[test]
+    fn test_input_dialog_text_backspace() {
+        let mut dialog = InputDialog::new(
+            InputType::TextInput {
+                field_name: "Test".to_string(),
+                current_value: "hello".to_string(),
+                placeholder: String::new(),
+            },
+            "Test".to_string(),
+            "Enter value".to_string(),
+        );
+        dialog.handle_input(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        if let InputType::TextInput { current_value, .. } = &dialog.input_type {
+            assert_eq!(current_value, "hell");
+        } else {
+            panic!("Expected TextInput");
+        }
+    }
+
+    #[test]
+    fn test_input_dialog_text_char_input() {
+        let mut dialog = InputDialog::new(
+            InputType::TextInput {
+                field_name: "Test".to_string(),
+                current_value: String::new(),
+                placeholder: String::new(),
+            },
+            "Test".to_string(),
+            "Enter value".to_string(),
+        );
+        dialog.handle_input(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        dialog.handle_input(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE));
+        if let InputType::TextInput { current_value, .. } = &dialog.input_type {
+            assert_eq!(current_value, "ab");
+        } else {
+            panic!("Expected TextInput");
+        }
+    }
+
+    #[test]
+    fn test_input_dialog_password_redacted_display() {
+        let dialog = InputDialog::new(
+            InputType::PasswordInput {
+                field_name: "User Password".to_string(),
+                current_value: "secret123".to_string(),
+                placeholder: String::new(),
+            },
+            "Password".to_string(),
+            "Enter password".to_string(),
+        );
+        let display = dialog.get_display_value();
+        // Password should be displayed as asterisks, not plaintext
+        assert!(!display.contains("secret123"));
+        assert!(display.contains('*'));
+    }
+
+    #[test]
+    fn test_input_handler_initial_state() {
+        let ih = InputHandler::new();
+        assert!(!ih.is_dialog_active());
+    }
+
+    #[test]
+    fn test_input_handler_warning() {
+        let mut ih = InputHandler::new();
+        ih.start_warning("Test Warning".to_string(), vec!["Line 1".to_string()]);
+        assert!(ih.is_dialog_active());
+    }
+
+    #[test]
+    fn test_input_handler_text_input() {
+        let mut ih = InputHandler::new();
+        ih.start_text_input("Hostname".to_string(), String::new(), "Enter hostname".to_string());
+        assert!(ih.is_dialog_active());
+    }
+
+    #[test]
+    fn test_input_handler_password_input() {
+        let mut ih = InputHandler::new();
+        ih.start_password_input(
+            "User Password".to_string(),
+            String::new(),
+            "Enter password".to_string(),
+        );
+        assert!(ih.is_dialog_active());
+    }
+
+    #[test]
+    fn test_input_handler_selection() {
+        let mut ih = InputHandler::new();
+        ih.start_selection(
+            "Bootloader".to_string(),
+            vec!["grub".to_string(), "systemd-boot".to_string()],
+            "grub".to_string(),
+        );
+        assert!(ih.is_dialog_active());
+    }
+
+    #[test]
+    fn test_get_timezones_america() {
+        let zones = InputHandler::get_timezones_for_region("America");
+        assert!(zones.contains(&"New_York".to_string()));
+        assert!(zones.contains(&"Chicago".to_string()));
+        assert!(zones.contains(&"Los_Angeles".to_string()));
+    }
+
+    #[test]
+    fn test_get_timezones_unknown_region_returns_invalid() {
+        let zones = InputHandler::get_timezones_for_region("Nonexistent");
+        // Unknown regions return ["Invalid region"]
+        assert_eq!(zones.len(), 1);
+        assert_eq!(zones[0], "Invalid region");
     }
 }

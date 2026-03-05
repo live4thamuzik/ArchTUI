@@ -112,6 +112,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => true,
     };
 
+    // Set RUST_LOG before logger init so EnvFilter picks it up
+    if cli.verbose {
+        // SAFETY: set_var is safe here — called once at startup before any threads are spawned
+        unsafe { std::env::set_var("RUST_LOG", "debug") };
+    }
+
     if is_tui_mode {
         init_logger_tui();
     } else {
@@ -144,11 +150,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Running in DRY-RUN mode: destructive operations will be skipped");
     }
 
-    // Enable verbose logging if requested
+    // Enable verbose logging for bash scripts (RUST_LOG already set above before logger init)
     if cli.verbose {
         // SAFETY: set_var is safe here — called once at startup before any threads are spawned
         unsafe { std::env::set_var("ARCHTUI_LOG_LEVEL", "VERBOSE") };
-        info!("Verbose logging enabled — full command trace will be written to /var/log/archtui/");
+        info!("Verbose logging enabled — RUST_LOG=debug, bash LOG_LEVEL=VERBOSE");
     }
 
     match cli.command {

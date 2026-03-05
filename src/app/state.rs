@@ -220,6 +220,16 @@ pub enum AppMode {
     DryRunSummary,
 }
 
+impl AppState {
+    /// Set the application mode with transition logging
+    pub fn set_mode(&mut self, new_mode: AppMode) {
+        if self.mode != new_mode {
+            tracing::info!(from = ?self.mode, to = ?new_mode, "Mode transition");
+        }
+        self.mode = new_mode;
+    }
+}
+
 impl Default for AppState {
     fn default() -> Self {
         let config = Configuration::default();
@@ -256,5 +266,39 @@ impl Default for AppState {
             disk_layout: Vec::new(),
             secure_boot_warning_shown: false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_set_mode_changes_mode() {
+        let mut state = AppState::default();
+        assert_eq!(state.mode, AppMode::MainMenu);
+
+        state.set_mode(AppMode::GuidedInstaller);
+        assert_eq!(state.mode, AppMode::GuidedInstaller);
+
+        state.set_mode(AppMode::ToolsMenu);
+        assert_eq!(state.mode, AppMode::ToolsMenu);
+    }
+
+    #[test]
+    fn test_set_mode_noop_same_mode() {
+        let mut state = AppState::default();
+        // Setting the same mode should not panic or change anything
+        state.set_mode(AppMode::MainMenu);
+        assert_eq!(state.mode, AppMode::MainMenu);
+    }
+
+    #[test]
+    fn test_default_state() {
+        let state = AppState::default();
+        assert_eq!(state.mode, AppMode::MainMenu);
+        assert!(!state.config.options.is_empty());
+        assert!(state.installer_output.is_empty());
+        assert_eq!(state.installation_progress, 0);
     }
 }

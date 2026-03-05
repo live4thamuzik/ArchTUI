@@ -221,39 +221,53 @@ impl InstallationConfig {
         if self.partitioning_strategy != PartitionScheme::PreMounted
             && self.install_disk.trim().is_empty()
         {
+            tracing::error!(field = "install_disk", "Install disk must be specified");
             anyhow::bail!("Install disk must be specified");
         }
 
         // Validate hostname (RFC 1123: 1-63 chars, lowercase + digits + hyphens + underscores)
         let hostname = self.hostname.trim();
         if hostname.is_empty() {
+            tracing::error!(field = "hostname", "Hostname must be specified");
             anyhow::bail!("Hostname must be specified");
         }
         if hostname.len() > 63 {
+            tracing::error!(field = "hostname", len = hostname.len(), "Hostname exceeds 63 chars");
             anyhow::bail!("Hostname must be at most 63 characters long (RFC 1123)");
         }
         if let Some(first_char) = hostname.chars().next() {
-            if !first_char.is_ascii_lowercase() && first_char != '_' {
-                anyhow::bail!("Hostname must start with a lowercase letter or underscore");
+            if !first_char.is_ascii_lowercase() && !first_char.is_ascii_digit() {
+                tracing::error!(field = "hostname", "Hostname must start with lowercase letter or digit (RFC 1123)");
+                anyhow::bail!("Hostname must start with a lowercase letter or digit (RFC 1123)");
+            }
+        }
+        if let Some(last_char) = hostname.chars().last() {
+            if !last_char.is_ascii_lowercase() && !last_char.is_ascii_digit() {
+                tracing::error!(field = "hostname", "Hostname must end with lowercase letter or digit (RFC 1123)");
+                anyhow::bail!("Hostname must end with a lowercase letter or digit (RFC 1123)");
             }
         }
         if !hostname
             .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         {
-            anyhow::bail!("Hostname can only contain lowercase letters, numbers, hyphens, and underscores");
+            tracing::error!(field = "hostname", "Hostname contains invalid characters");
+            anyhow::bail!("Hostname can only contain lowercase letters, numbers, and hyphens (RFC 1123)");
         }
 
         // Validate username (3-32 chars, start with lowercase letter, lowercase + digits + underscore)
         let username = self.username.trim();
         if username.is_empty() {
+            tracing::error!(field = "username", "Username must be specified");
             anyhow::bail!("Username must be specified");
         }
         if username.len() < 3 || username.len() > 32 {
+            tracing::error!(field = "username", len = username.len(), "Username length out of range");
             anyhow::bail!("Username must be 3-32 characters long");
         }
         if let Some(first_char) = username.chars().next() {
             if !first_char.is_ascii_lowercase() {
+                tracing::error!(field = "username", "Username must start with lowercase letter");
                 anyhow::bail!("Username must start with a lowercase letter");
             }
         }
@@ -261,21 +275,26 @@ impl InstallationConfig {
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
         {
+            tracing::error!(field = "username", "Username contains invalid characters");
             anyhow::bail!("Username can only contain lowercase letters, numbers, and underscores");
         }
 
-        // Validate passwords (non-empty, no whitespace)
+        // Validate passwords (non-empty, no whitespace) — ROE §8.1: never log password values
         if self.user_password.trim().is_empty() {
+            tracing::error!(field = "user_password", "User password is empty (value redacted)");
             anyhow::bail!("User password must be specified");
         }
         if self.user_password.contains(char::is_whitespace) {
+            tracing::error!(field = "user_password", "User password contains whitespace (value redacted)");
             anyhow::bail!("User password cannot contain whitespace");
         }
 
         if self.root_password.trim().is_empty() {
+            tracing::error!(field = "root_password", "Root password is empty (value redacted)");
             anyhow::bail!("Root password must be specified");
         }
         if self.root_password.contains(char::is_whitespace) {
+            tracing::error!(field = "root_password", "Root password contains whitespace (value redacted)");
             anyhow::bail!("Root password cannot contain whitespace");
         }
 
@@ -283,6 +302,7 @@ impl InstallationConfig {
         let needs_encryption =
             self.encryption == AutoToggle::Yes || self.partitioning_strategy.uses_encryption();
         if needs_encryption && self.encryption_password.trim().is_empty() {
+            tracing::error!(field = "encryption_password", "Encryption password required but empty (value redacted)");
             anyhow::bail!("Encryption password must be specified when encryption is enabled");
         }
 
@@ -290,9 +310,11 @@ impl InstallationConfig {
         if self.git_repository == Toggle::Yes {
             let url = self.git_repository_url.trim();
             if url.is_empty() {
+                tracing::error!(field = "git_repository_url", "Git repository URL required but empty");
                 anyhow::bail!("Git repository URL must be specified when Git Repository is enabled");
             }
             if !url.starts_with("http://") && !url.starts_with("https://") {
+                tracing::error!(field = "git_repository_url", "URL must start with http:// or https://");
                 anyhow::bail!(
                     "Git repository URL must start with http:// or https://"
                 );
@@ -301,6 +323,7 @@ impl InstallationConfig {
 
         // Validate AUR helper is selected when DE requires AUR packages
         if self.desktop_environment.requires_aur() && self.aur_helper == AurHelper::None {
+            tracing::error!(de = %self.desktop_environment, "DE requires AUR helper but none selected");
             anyhow::bail!(
                 "{} requires an AUR helper (packages like wlogout are AUR-only)",
                 self.desktop_environment
@@ -311,10 +334,12 @@ impl InstallationConfig {
         if self.partitioning_strategy.requires_raid() {
             let disk = self.install_disk.trim();
             if disk.is_empty() {
+                tracing::error!(field = "install_disk", "Install disk required for RAID");
                 anyhow::bail!("Install disk must be specified for RAID strategies");
             }
             let disk_count = disk.split(',').filter(|s| !s.trim().is_empty()).count();
             if disk_count < 2 {
+                tracing::error!(disk_count, "RAID requires at least 2 disks");
                 anyhow::bail!(
                     "RAID strategies require at least 2 disks (found {}). Select multiple disks.",
                     disk_count
@@ -322,6 +347,7 @@ impl InstallationConfig {
             }
             let valid_levels = ["raid0", "raid1", "raid5", "raid6", "raid10"];
             if !valid_levels.contains(&self.raid_level.as_str()) {
+                tracing::error!(raid_level = %self.raid_level, "Invalid RAID level");
                 anyhow::bail!(
                     "Invalid RAID level: '{}'. Must be one of: {}",
                     self.raid_level,
@@ -334,6 +360,7 @@ impl InstallationConfig {
         match self.bootloader {
             Bootloader::SystemdBoot | Bootloader::Refind | Bootloader::Efistub => {
                 if self.boot_mode == BootMode::Bios {
+                    tracing::error!(bootloader = %self.bootloader, "UEFI-only bootloader with BIOS mode");
                     anyhow::bail!(
                         "{} requires UEFI firmware (BIOS is not supported)",
                         self.bootloader
@@ -843,19 +870,19 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_hostname_trailing_hyphen_allowed() {
+    fn test_validation_hostname_trailing_hyphen_rejected() {
         let mut config = create_test_config();
-        config.hostname = "hostname-".to_string(); // Trailing hyphen is valid in our rules
+        config.hostname = "hostname-".to_string(); // RFC 1123: no trailing hyphens
         let result = config.validate();
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_validation_hostname_underscore_allowed() {
+    fn test_validation_hostname_underscore_rejected() {
         let mut config = create_test_config();
-        config.hostname = "host_name".to_string(); // Underscores allowed
+        config.hostname = "host_name".to_string(); // RFC 1123: no underscores
         let result = config.validate();
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]

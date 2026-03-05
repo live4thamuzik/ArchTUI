@@ -289,6 +289,7 @@ impl ScriptManifest {
     pub fn from_json(json: &str) -> Result<Self, ManifestError> {
         let manifest: Self = serde_json::from_str(json)?;
         manifest.validate_structure()?;
+        tracing::debug!(script = %manifest.script, "Manifest parsed from JSON");
         Ok(manifest)
     }
 
@@ -296,6 +297,7 @@ impl ScriptManifest {
     fn validate_structure(&self) -> Result<(), ManifestError> {
         // Destructive scripts must have a confirmation requirement
         if self.destructive && self.required_confirmation.is_none() {
+            tracing::error!(script = %self.script, "Destructive script missing required_confirmation");
             return Err(ManifestError::InvalidFormat {
                 reason: format!(
                     "Destructive script '{}' must specify required_confirmation",
@@ -308,6 +310,7 @@ impl ScriptManifest {
         let mut seen = std::collections::HashSet::new();
         for req in &self.required_env {
             if !seen.insert(&req.name) {
+                tracing::error!(script = %self.script, var = %req.name, "Duplicate required_env");
                 return Err(ManifestError::InvalidFormat {
                     reason: format!("Duplicate required_env: {}", req.name),
                 });
@@ -315,6 +318,7 @@ impl ScriptManifest {
         }
         for opt in &self.optional_env {
             if !seen.insert(&opt.name) {
+                tracing::error!(script = %self.script, var = %opt.name, "Duplicate optional_env");
                 return Err(ManifestError::InvalidFormat {
                     reason: format!("Duplicate optional_env: {}", opt.name),
                 });
@@ -338,10 +342,13 @@ impl ScriptManifest {
         env: &HashMap<String, String>,
         scripts_dir: Option<&Path>,
     ) -> Result<ValidatedExecution, ManifestError> {
+        tracing::debug!(script = %self.script, "Validating execution requirements");
+
         // Check script file exists
         if let Some(base_dir) = scripts_dir {
             let script_path = base_dir.join(&self.script);
             if !script_path.exists() {
+                tracing::error!(script = %self.script, path = %script_path.display(), "Script file not found");
                 return Err(ManifestError::ScriptNotFound {
                     path: script_path.display().to_string(),
                 });
@@ -353,6 +360,7 @@ impl ScriptManifest {
             if let Some(ref confirmation_var) = self.required_confirmation {
                 let confirmation_value = env.get(confirmation_var).map(|s| s.as_str()).unwrap_or("");
                 if confirmation_value != "yes" {
+                    tracing::error!(script = %self.script, var = %confirmation_var, "Missing destructive confirmation");
                     return Err(ManifestError::MissingConfirmation {
                         script: self.script.clone(),
                         confirmation: confirmation_var.clone(),
@@ -365,6 +373,7 @@ impl ScriptManifest {
         for req in &self.required_env {
             match env.get(&req.name) {
                 None => {
+                    tracing::error!(script = %self.script, var = %req.name, "Missing required env var");
                     return Err(ManifestError::MissingEnvVar {
                         script: self.script.clone(),
                         name: req.name.clone(),
@@ -384,6 +393,7 @@ impl ScriptManifest {
             }
         }
 
+        tracing::info!(script = %self.script, "Execution requirements validated successfully");
         Ok(ValidatedExecution {
             script_path: PathBuf::from(&self.script),
             environment: final_env,
@@ -563,6 +573,7 @@ impl ManifestRegistry {
 
     /// Register a manifest
     pub fn register(&mut self, manifest: ScriptManifest) {
+        tracing::debug!(script = %manifest.script, "Registering manifest");
         self.manifests.insert(manifest.script.clone(), manifest);
     }
 
@@ -605,8 +616,11 @@ impl ManifestRegistry {
         env: &HashMap<String, String>,
         scripts_dir: Option<&Path>,
     ) -> Result<ValidatedExecution, ManifestError> {
-        let manifest = self.get(script).ok_or_else(|| ManifestError::NotFound {
-            script: script.to_string(),
+        let manifest = self.get(script).ok_or_else(|| {
+            tracing::error!(script = %script, "Script not found in manifest registry");
+            ManifestError::NotFound {
+                script: script.to_string(),
+            }
         })?;
 
         manifest.validate_execution(env, scripts_dir)
