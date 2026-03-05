@@ -1,4 +1,4 @@
-//! Type-safe arguments for profile/dotfiles scripts (Sprint 12).
+//! Type-safe arguments for profile/dotfiles scripts.
 //!
 //! This module provides typed argument structs for profile-related scripts:
 //! - `InstallDotfilesArgs` for `install_dotfiles.sh`

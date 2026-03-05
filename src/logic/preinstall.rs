@@ -1,11 +1,11 @@
-//! Pre-install orchestration (Sprint 17)
+//! Pre-install orchestration
 //!
 //! Handles steps that must complete *before* disk preparation:
 //! - Mirror ranking via reflector (network-dependent, skippable)
 //!
 //! # Design
 //!
-//! - Uses `detect_internet()` from Sprint 14 (pure Rust, no shelling out)
+//! - Uses `detect_internet()` (pure Rust, no shelling out)
 //! - Skips automatically when offline — never blocks the installation
 //! - Timeout-aware: reflector gets 30 seconds max
 //! - Skippable by user (some users maintain custom mirrorlists)
@@ -125,7 +125,7 @@ pub fn rank_mirrors(config: &PreinstallConfig) -> MirrorRankResult {
         return MirrorRankResult::Skipped(SkipReason::UserSkipped);
     }
 
-    // 2. Network connectivity check (pure Rust — Sprint 14)
+    // 2. Network connectivity check (pure Rust)
     let network = hardware::detect_internet();
     if network != NetworkState::Online {
         tracing::warn!("Mirror ranking skipped: no network connectivity");

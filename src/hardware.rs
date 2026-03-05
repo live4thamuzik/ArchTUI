@@ -1,4 +1,4 @@
-//! Hardware environment detection (Sprint 14)
+//! Hardware environment detection
 //!
 //! Detects firmware mode (UEFI vs BIOS) and network connectivity using pure Rust.
 //! No shelling out — all detection uses std library primitives.

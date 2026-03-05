@@ -1,4 +1,4 @@
-//! Sprint 4: Death Pact Forced Crash Tests
+//! Death Pact Forced Crash Tests
 //!
 //! These tests PROVE that no child process survives when the Rust parent crashes.
 //!
@@ -14,6 +14,12 @@
 //! ACCEPTANCE CRITERIA:
 //! - No running child processes after forced crash
 //! - Tests fail if any process survives
+//!
+//! Requires the `__test_helper` feature to build the helper binary:
+//!   cargo test --features __test_helper
+
+// Only compile these tests when the helper binary feature is enabled
+#![cfg(feature = "__test_helper")]
 
 use std::fs;
 use std::io::{BufRead, BufReader};

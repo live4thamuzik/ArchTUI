@@ -12,7 +12,7 @@
 //! 3. **Environment Contracts**: Confirmation flags are passed via env vars,
 //!    matching the bash script expectations.
 //!
-//! # Dry-Run Mode (Sprint 8)
+//! # Dry-Run Mode
 //!
 //! Scripts can declare themselves as destructive via `is_destructive()`. When
 //! the global `DRY_RUN` flag is set, destructive scripts are NOT executed.

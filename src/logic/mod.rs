@@ -5,9 +5,9 @@
 //!
 //! # Modules
 //!
-//! - `resolver` — Package and service name resolution (Sprint 16)
-//! - `preinstall` — Pre-install orchestration: mirror ranking (Sprint 17)
-//! - `postinstall` — Post-install orchestration: AUR, dotfiles (Sprint 18)
+//! - `resolver` — Package and service name resolution
+//! - `preinstall` — Pre-install orchestration: mirror ranking
+//! - `postinstall` — Post-install orchestration: AUR, dotfiles
 
 pub mod postinstall;
 pub mod preinstall;

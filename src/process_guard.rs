@@ -381,7 +381,7 @@ mod tests {
     }
 
     // =========================================================================
-    // Sprint 1.2: Death Pact Integration Tests
+    // Death Pact Integration Tests
     // =========================================================================
 
     /// Helper to wait for a process to terminate (reap zombie)

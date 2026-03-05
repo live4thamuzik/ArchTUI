@@ -1100,7 +1100,7 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
         Span::styled("Q", Style::default().fg(Colors::SECONDARY)),
         Span::styled(" Quit  ", Style::default().fg(Colors::FG_MUTED)),
         Span::styled("Log: ", Style::default().fg(Colors::FG_MUTED)),
-        Span::styled("/var/log/archtui/", Style::default().fg(Colors::FG_SECONDARY)),
+        Span::styled(format!("{}/", crate::script_runner::log_dir().display()), Style::default().fg(Colors::FG_SECONDARY)),
     ]);
     let hint_para = Paragraph::new(hint)
         .style(Style::default().bg(Colors::BG_SECONDARY))

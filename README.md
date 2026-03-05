@@ -243,7 +243,7 @@ ArchTUI/
 
 ## Building and development
 
-Requires the Rust toolchain. On Arch: `sudo pacman -S rust`
+Requires the Rust toolchain (1.74+). On Arch: `sudo pacman -S rust`
 
 ```
 make build          # Release build, copies binary to ./archtui
@@ -251,6 +251,8 @@ make test           # Run Rust and Bash test suites
 make lint           # Clippy + shellcheck on all scripts (must pass before every commit)
 make format         # rustfmt
 make dev            # format + lint + test + build
+make generate       # Generate man page and shell completions (output in dist/)
+make install        # Install binary, scripts, man page, and completions
 make clean          # Remove build artifacts
 ```
 
@@ -259,6 +261,16 @@ The `alpm` feature enables native pacman database queries via libalpm. It is opt
 ```
 cargo build --release --features alpm
 ```
+
+### Packaging
+
+`make install` installs to a standard FHS layout with `DESTDIR` and `PREFIX` support:
+
+```
+make install PREFIX=/usr DESTDIR=/tmp/pkg
+```
+
+This installs the binary to `$PREFIX/bin/`, scripts to `$PREFIX/share/archtui/scripts/`, man page to `$PREFIX/share/man/man1/`, and shell completions for bash/zsh/fish. The `ARCHTUI_SCRIPTS_DIR` environment variable overrides script discovery at runtime. Log output defaults to `/var/log/archtui/` (root) or `~/.local/state/archtui/` (non-root), overridable with `ARCHTUI_LOG_DIR`.
 
 ### Runtime dependencies
 
@@ -282,7 +294,7 @@ What exists and works:
 - Pre-install orchestration (mirror ranking with network awareness)
 - Post-install orchestration (AUR helper, dotfiles — non-fatal)
 - Comprehensive logging (master log, per-script verbose trace, config dump, `log_cmd` before all destructive ops)
-- 329 unit tests passing
+- 331 unit tests passing
 - CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit)
 
 What is incomplete or untested:

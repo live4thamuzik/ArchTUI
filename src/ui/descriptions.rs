@@ -1304,7 +1304,7 @@ fn view_install_logs_description() -> Vec<Line<'static>> {
                 .add_modifier(Modifier::BOLD),
         )]),
         Line::from(vec![Span::styled(
-            "  • Master log    - /var/log/archtui/install-*-master.log",
+            "  • Master log    - <log_dir>/install-*-master.log",
             Styles::text_secondary(),
         )]),
         Line::from(vec![Span::styled(

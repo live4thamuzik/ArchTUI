@@ -1,12 +1,14 @@
 # Makefile for archtui development and testing
 # NOTE: This Makefile is for DEVELOPMENT ONLY, not for use in Arch ISO
 
-.PHONY: help build test test-rust test-bash clean install dev-setup format lint lint-rust lint-bash deps dev quick ci iso-ready
+PREFIX ?= /usr/local
+DESTDIR ?=
+
+.PHONY: help build test test-rust test-bash clean install dev-setup format lint lint-rust lint-bash deps dev quick ci iso-ready generate
 
 # Default target
 help:
 	@echo "ArchTUI - Development Makefile"
-	@echo "⚠️  DEVELOPMENT ONLY - Not for use in Arch ISO"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build        - Build the release binary"
@@ -15,7 +17,8 @@ help:
 	@echo "  test-rust    - Run Rust tests only"
 	@echo "  test-bash    - Run Bash script tests only"
 	@echo "  clean        - Clean build artifacts"
-	@echo "  install      - Install the binary to /usr/local/bin"
+	@echo "  install      - Install binary, scripts, man page, and completions"
+	@echo "  generate     - Generate man page and shell completions"
 	@echo "  iso-ready    - Check if installer is ready for ISO"
 	@echo "  dev-setup    - Set up development environment"
 	@echo "  format       - Format Rust code"
@@ -41,7 +44,7 @@ test-bash:
 	@if command -v bats >/dev/null 2>&1; then \
 		./scripts/tests/run_tests.sh; \
 	else \
-		echo "⚠️  bats not installed, skipping bash tests"; \
+		echo "bats not installed, skipping bash tests"; \
 		echo "   Install with: sudo pacman -S bash-bats"; \
 	fi
 
@@ -49,11 +52,24 @@ test-bash:
 clean:
 	cargo clean
 	rm -f ./archtui
+	rm -rf dist/
 
-# Installation
-install: build
-	sudo cp ./archtui /usr/local/bin/
-	sudo chmod +x /usr/local/bin/archtui
+# Generate man page and shell completions into dist/
+generate:
+	ARCHTUI_GEN_DIR=dist cargo build --release --no-default-features
+	cp target/release/archtui ./
+
+# Installation with FHS layout
+install: build generate
+	install -Dm755 ./archtui $(DESTDIR)$(PREFIX)/bin/archtui
+	install -d $(DESTDIR)$(PREFIX)/share/archtui/scripts
+	cp -r scripts/*.sh $(DESTDIR)$(PREFIX)/share/archtui/scripts/
+	cp -r scripts/strategies $(DESTDIR)$(PREFIX)/share/archtui/scripts/
+	cp -r scripts/tools $(DESTDIR)$(PREFIX)/share/archtui/scripts/
+	install -Dm644 dist/man/archtui.1 $(DESTDIR)$(PREFIX)/share/man/man1/archtui.1
+	install -Dm644 dist/completions/archtui.bash $(DESTDIR)$(PREFIX)/share/bash-completion/completions/archtui
+	install -Dm644 dist/completions/_archtui $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_archtui
+	install -Dm644 dist/completions/archtui.fish $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/archtui.fish
 
 # Development setup
 dev-setup:
@@ -101,17 +117,16 @@ ci: format lint test build
 iso-ready:
 	@echo "Checking ArchInstall readiness for ISO deployment..."
 	@if [ -f "./archtui" ]; then \
-		echo "✅ Binary exists: ./archtui"; \
+		echo "Binary exists: ./archtui"; \
 		if [ -x "./archtui" ]; then \
-			echo "✅ Binary is executable"; \
+			echo "Binary is executable"; \
 		else \
-			echo "❌ Binary is not executable"; \
+			echo "Binary is not executable"; \
 			exit 1; \
 		fi; \
 	else \
-		echo "❌ Binary missing: ./archtui"; \
+		echo "Binary missing: ./archtui"; \
 		echo "   Run 'make build' to create the binary"; \
 		exit 1; \
 	fi
-	@echo "✅ All scripts are executable"
-	@echo "✅ ArchInstall is ready for ISO deployment!"
+	@echo "ArchInstall is ready for ISO deployment!"

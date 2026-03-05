@@ -2,6 +2,13 @@
 name = "archtui"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.74"
+license = "MIT"
+description = "A terminal-based interface for installing and administering Arch Linux"
+repository = "https://github.com/live4thamuzik/ArchTUI"
+authors = ["Live4ThaMuzik"]
+keywords = ["arch-linux", "installer", "tui", "terminal"]
+categories = ["command-line-utilities"]
 
 [lib]
 name = "archtui"
@@ -9,11 +16,14 @@ name = "archtui"
 [[bin]]
 name = "death_pact_test_helper"
 path = "src/bin/death_pact_test_helper.rs"
+required-features = ["__test_helper"]
 
 [features]
 default = []
 # Enable ALPM integration (requires libalpm - Arch Linux only)
 alpm = ["dep:alpm", "dep:pacmanconf"]
+# Internal: builds the death_pact_test_helper binary (not for end users)
+__test_helper = []
 
 [dependencies]
 ratatui = "0.29"
@@ -28,15 +38,20 @@ vt100 = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 strum = { version = "0.26", features = ["derive"] }
-# Process lifecycle management (Sprint 6)
+# Process lifecycle management
 nix = { version = "0.29", features = ["signal", "process"] }
 ctrlc = "3.4"
 # Comprehensive signal handling for SIGINT, SIGTERM, SIGHUP
 signal-hook = "0.3"
-# ALPM (Arch Linux Package Management) - Sprint 3
+# ALPM (Arch Linux Package Management)
 # Optional: only available on Arch Linux where libalpm is installed
 alpm = { version = "5", optional = true }
 pacmanconf = { version = "3", optional = true }
+
+[build-dependencies]
+clap = { version = "4.0", features = ["derive"] }
+clap_mangen = "0.2"
+clap_complete = "4.5"
 
 [dev-dependencies]
 tempfile = "3"
@@ -57,7 +72,7 @@ lto = true
 codegen-units = 1
 # Strip debug symbols from binary
 strip = true
-# Optimize for size with good performance
-opt-level = "z"
+# Optimize for size with good performance (s = size-optimized, better runtime perf than z)
+opt-level = "s"
 # Abort on panic (smaller binary, no unwinding)
 panic = "abort"

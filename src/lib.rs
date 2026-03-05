@@ -28,7 +28,7 @@ pub mod theme;
 pub mod types;
 pub mod ui;
 
-// Re-export UI wizard types (Sprint 7)
+// Re-export UI wizard types
 pub use ui::{WizardData, WizardState};
 
 // Re-export main types for convenience
@@ -61,19 +61,19 @@ pub use types::{
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
 };
 
-// Hardware detection (Sprint 14)
+// Hardware detection
 pub use hardware::{FirmwareMode, HardwareInfo, NetworkState};
 
-// Storage engine (Sprint 15)
+// Storage engine
 pub use engine::storage::{StorageOp, StoragePlan, calculate_storage_plan};
 
-// Package/service resolver (Sprint 16)
+// Package/service resolver
 pub use logic::resolver::{resolve_packages, resolve_services};
 
-// Pre-install orchestration (Sprint 17)
+// Pre-install orchestration
 pub use logic::preinstall::{rank_mirrors, MirrorRankResult, PreinstallConfig, SkipReason};
 
-// Post-install orchestration (Sprint 18)
+// Post-install orchestration
 pub use logic::postinstall::{
     clone_dotfiles_safe, install_aur_helper_safe, run_postinstall,
     PostInstallConfig, PostInstallResult,

@@ -9,7 +9,7 @@
 //! - `installer` - Configuration UI, installation, completion screens
 //! - `dialogs` - Tool dialog, floating output, file browser, confirm dialog
 //! - `descriptions` - Tool description text
-//! - `screens` - Guided installer wizard screens (Sprint 7)
+//! - `screens` - Guided installer wizard screens
 //! - `loading` - Loading/progress UI
 
 #![allow(dead_code)]
@@ -24,7 +24,7 @@ pub mod screens;
 use std::path::PathBuf;
 
 // ============================================================================
-// Wizard State Machine (Sprint 7)
+// Wizard State Machine
 // ============================================================================
 
 /// Wizard state for the guided installer workflow.

@@ -1,4 +1,4 @@
-//! Type-safe arguments for LUKS encryption scripts (Sprint 11).
+//! Type-safe arguments for LUKS encryption scripts.
 //!
 //! This module provides typed argument structs for encryption-related scripts:
 //! - `LuksFormatArgs` for `encrypt_device.sh --action format`

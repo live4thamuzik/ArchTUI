@@ -8,9 +8,9 @@
 //!
 //! - `config`: Post-install configuration (fstab, users, locale)
 //! - `disk`: Disk operations (wipe, format, mount, health)
-//! - `encryption`: LUKS encryption (format, open, close) - Sprint 11
+//! - `encryption`: LUKS encryption (format, open, close)
 //! - `network`: Network configuration (configure, test, firewall, mirrors)
-//! - `profiles`: Desktop profiles and dotfiles - Sprint 12
+//! - `profiles`: Desktop profiles and dotfiles
 //! - `system`: System configuration (bootloader, chroot, services)
 //! - `user`: User management (password, groups, ssh, security)
 //!

@@ -19,7 +19,8 @@ pub struct Cli {
     ///
     /// When enabled, bash scripts run with set -x tracing to a separate
     /// verbose log file, and the Rust master log captures all stdout/stderr.
-    /// Log files are written to /var/log/archtui/.
+    /// Log files are written to /var/log/archtui/ (root) or ~/.local/state/archtui/ (non-root).
+    /// Override with ARCHTUI_LOG_DIR environment variable.
     #[arg(long, short = 'v', global = true)]
     pub verbose: bool,
 

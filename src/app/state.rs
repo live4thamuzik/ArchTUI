@@ -160,7 +160,7 @@ pub struct AppState {
     pub confirm_dialog: Option<ConfirmDialogState>,
     /// Previous mode to return to after dialog
     pub pre_dialog_mode: Option<AppMode>,
-    /// Dry-run summary output (Sprint 8)
+    /// Dry-run summary output
     pub dry_run_summary: Option<Vec<String>>,
     /// Scroll offset for dry-run summary display
     pub dry_run_scroll_offset: usize,
@@ -216,7 +216,7 @@ pub enum AppMode {
     FileBrowser,
     /// Confirmation dialog for destructive operations
     ConfirmDialog,
-    /// Dry-run summary display (Sprint 8)
+    /// Dry-run summary display
     DryRunSummary,
 }
 

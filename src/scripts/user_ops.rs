@@ -1,4 +1,4 @@
-//! Type-safe arguments for user-space operations (Sprint 18).
+//! Type-safe arguments for user-space operations.
 //!
 //! Operations that CANNOT run as root:
 //! - AUR helper installation (`makepkg` forbids root)
@@ -103,7 +103,7 @@ impl ScriptArgs for UserRunArgs {
 ///
 /// - `makepkg` forbids running as root — uses `sudo -u <user>`
 /// - Runs inside `arch-chroot` to use the installed system's toolchain
-/// - Failure is NON-FATAL (see Sprint 18 failure policy)
+/// - Failure is NON-FATAL (post-install failures are non-blocking)
 ///
 /// # Field to Flag Mapping
 ///

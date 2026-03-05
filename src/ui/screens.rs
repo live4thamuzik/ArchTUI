@@ -1,4 +1,4 @@
-//! Guided installer wizard screens (Sprint 7).
+//! Guided installer wizard screens.
 //!
 //! This module provides the individual screens for the guided installer workflow:
 //! - `DiskSelect` - Select installation target disk
