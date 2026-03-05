@@ -3042,7 +3042,8 @@ impl App {
             "i3" | "xfce" | "cinnamon" | "mate" | "budgie" | "deepin"
             | "bspwm" | "awesome" | "qtile" | "xmonad" => "lightdm",
             "lxde" => "lxdm",
-            "cosmic" | "none" => "none",
+            "cosmic" => "cosmic-greeter",
+            "none" => "none",
             _ => "",
         };
 
