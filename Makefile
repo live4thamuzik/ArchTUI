@@ -66,6 +66,8 @@ install: build generate
 	cp -r scripts/*.sh $(DESTDIR)$(PREFIX)/share/archtui/scripts/
 	cp -r scripts/strategies $(DESTDIR)$(PREFIX)/share/archtui/scripts/
 	cp -r scripts/tools $(DESTDIR)$(PREFIX)/share/archtui/scripts/
+	cp -r scripts/manifests $(DESTDIR)$(PREFIX)/share/archtui/scripts/
+	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/archtui/LICENSE
 	install -Dm644 dist/man/archtui.1 $(DESTDIR)$(PREFIX)/share/man/man1/archtui.1
 	install -Dm644 dist/completions/archtui.bash $(DESTDIR)$(PREFIX)/share/bash-completion/completions/archtui
 	install -Dm644 dist/completions/_archtui $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_archtui

@@ -151,8 +151,9 @@ impl App {
 
         // Load script manifests for runtime validation
         let mut manifest_registry = ManifestRegistry::with_core_manifests();
-        if let Err(e) = manifest_registry.load_from_directory("scripts/manifests") {
-            tracing::warn!("Failed to load manifests from scripts/manifests: {}", e);
+        let manifest_dir = crate::script_runner::scripts_base_dir().join("manifests");
+        if let Err(e) = manifest_registry.load_from_directory(&manifest_dir) {
+            tracing::warn!("Failed to load manifests from {}: {}", manifest_dir.display(), e);
         } else {
             info!("Script manifests loaded successfully");
         }
