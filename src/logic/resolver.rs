@@ -585,4 +585,224 @@ mod tests {
         assert_eq!(desktop_to_profile(DesktopEnvironment::Labwc), Profile::Labwc);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Xmonad), Profile::Xmonad);
     }
+
+    // =========================================================================
+    // DD#45: Comprehensive enum variant coverage
+    // =========================================================================
+
+    #[test]
+    fn test_resolve_packages_all_desktop_environments() {
+        // Every DE variant must produce a non-empty package list without panicking
+        let des = [
+            DesktopEnvironment::None, DesktopEnvironment::Gnome, DesktopEnvironment::Kde,
+            DesktopEnvironment::Hyprland, DesktopEnvironment::Sway, DesktopEnvironment::I3,
+            DesktopEnvironment::Xfce, DesktopEnvironment::Cinnamon, DesktopEnvironment::Mate,
+            DesktopEnvironment::Budgie, DesktopEnvironment::Cosmic, DesktopEnvironment::Deepin,
+            DesktopEnvironment::Lxde, DesktopEnvironment::Lxqt, DesktopEnvironment::Bspwm,
+            DesktopEnvironment::Awesome, DesktopEnvironment::Qtile, DesktopEnvironment::River,
+            DesktopEnvironment::Niri, DesktopEnvironment::Labwc, DesktopEnvironment::Xmonad,
+        ];
+        for de in &des {
+            let mut config = test_config();
+            config.desktop_environment = *de;
+            let packages = resolve_packages(&config);
+            assert!(
+                packages.contains(&"base".to_string()),
+                "{:?} must include base",
+                de
+            );
+            // Non-None DEs must include DE-specific packages beyond base (~15 base + DE pkgs)
+            if *de != DesktopEnvironment::None {
+                let base_count = resolve_packages(&test_config()).len();
+                assert!(
+                    packages.len() > base_count,
+                    "{:?} should have more packages than base ({} base), got {}",
+                    de,
+                    base_count,
+                    packages.len()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolve_services_all_desktop_environments() {
+        let des = [
+            DesktopEnvironment::None, DesktopEnvironment::Gnome, DesktopEnvironment::Kde,
+            DesktopEnvironment::Hyprland, DesktopEnvironment::Sway, DesktopEnvironment::I3,
+            DesktopEnvironment::Xfce, DesktopEnvironment::Cinnamon, DesktopEnvironment::Mate,
+            DesktopEnvironment::Budgie, DesktopEnvironment::Cosmic, DesktopEnvironment::Deepin,
+            DesktopEnvironment::Lxde, DesktopEnvironment::Lxqt, DesktopEnvironment::Bspwm,
+            DesktopEnvironment::Awesome, DesktopEnvironment::Qtile, DesktopEnvironment::River,
+            DesktopEnvironment::Niri, DesktopEnvironment::Labwc, DesktopEnvironment::Xmonad,
+        ];
+        for de in &des {
+            let mut config = test_config();
+            config.desktop_environment = *de;
+            let services = resolve_services(&config);
+            assert!(
+                services.contains(&"NetworkManager".to_string()),
+                "{:?} must enable NetworkManager",
+                de
+            );
+            // Non-None DEs must have bluetooth
+            if *de != DesktopEnvironment::None {
+                assert!(
+                    services.contains(&"bluetooth".to_string()),
+                    "{:?} must enable bluetooth",
+                    de
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolve_packages_all_bootloaders() {
+        let bootloaders = [
+            (Bootloader::Grub, Some("grub")),
+            (Bootloader::SystemdBoot, None), // built into systemd, no extra package
+            (Bootloader::Refind, Some("refind")),
+            (Bootloader::Limine, Some("limine")),
+            (Bootloader::Efistub, Some("efibootmgr")),
+        ];
+        for (bl, expected_pkg) in &bootloaders {
+            let mut config = test_config();
+            config.bootloader = *bl;
+            let packages = resolve_packages(&config);
+            if let Some(pkg) = expected_pkg {
+                assert!(
+                    packages.contains(&pkg.to_string()),
+                    "{:?} must include {}",
+                    bl,
+                    pkg
+                );
+            }
+            // All bootloaders must still have base packages
+            assert!(packages.contains(&"base".to_string()), "{:?} must include base", bl);
+        }
+    }
+
+    #[test]
+    fn test_resolve_packages_all_gpu_drivers() {
+        let gpus = [
+            (GpuDriver::Nvidia, Some("nvidia")),
+            (GpuDriver::NvidiaOpen, Some("nvidia-open")),
+            (GpuDriver::Amd, Some("mesa")),
+            (GpuDriver::Intel, Some("mesa")),
+            (GpuDriver::Nouveau, Some("mesa")),
+            (GpuDriver::None, None),  // no GPU packages
+            (GpuDriver::Auto, None),  // auto-detected at runtime
+        ];
+        for (gpu, expected_pkg) in &gpus {
+            let mut config = test_config();
+            config.gpu_drivers = *gpu;
+            let packages = resolve_packages(&config);
+            if let Some(pkg) = expected_pkg {
+                assert!(
+                    packages.contains(&pkg.to_string()),
+                    "{:?} must include {}",
+                    gpu,
+                    pkg
+                );
+            }
+            // All GPU configs must still have base packages
+            assert!(packages.contains(&"base".to_string()), "{:?} must include base", gpu);
+        }
+    }
+
+    #[test]
+    fn test_resolve_packages_all_partition_strategies() {
+        let strategies = [
+            (PartitionScheme::AutoSimple, vec![]),
+            (PartitionScheme::AutoSimpleLuks, vec!["cryptsetup"]),
+            (PartitionScheme::AutoLvm, vec!["lvm2"]),
+            (PartitionScheme::AutoLuksLvm, vec!["cryptsetup", "lvm2"]),
+            (PartitionScheme::AutoRaid, vec!["mdadm"]),
+            (PartitionScheme::AutoRaidLuks, vec!["cryptsetup", "mdadm"]),
+            (PartitionScheme::AutoRaidLvm, vec!["lvm2", "mdadm"]),
+            (PartitionScheme::AutoRaidLvmLuks, vec!["cryptsetup", "lvm2", "mdadm"]),
+            (PartitionScheme::Manual, vec![]),
+            (PartitionScheme::PreMounted, vec![]),
+        ];
+        for (strategy, expected_pkgs) in &strategies {
+            let mut config = test_config();
+            config.partitioning_strategy = *strategy;
+            let packages = resolve_packages(&config);
+            for pkg in expected_pkgs {
+                assert!(
+                    packages.contains(&pkg.to_string()),
+                    "{:?} must include {}",
+                    strategy,
+                    pkg
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolve_services_all_display_managers() {
+        let dms = [
+            (DisplayManager::Gdm, "gdm"),
+            (DisplayManager::Sddm, "sddm"),
+            (DisplayManager::Lightdm, "lightdm"),
+            (DisplayManager::Lxdm, "lxdm"),
+            (DisplayManager::Ly, "ly"),
+            (DisplayManager::Greetd, "greetd"),
+        ];
+        for (dm, expected_service) in &dms {
+            let mut config = test_config();
+            config.display_manager = *dm;
+            let services = resolve_services(&config);
+            assert!(
+                services.contains(&expected_service.to_string()),
+                "{:?} must enable {} service",
+                dm,
+                expected_service
+            );
+        }
+    }
+
+    #[test]
+    fn test_resolve_packages_all_filesystems() {
+        let fss = [
+            (Filesystem::Ext4, None),
+            (Filesystem::Btrfs, Some("btrfs-progs")),
+            (Filesystem::Xfs, Some("xfsprogs")),
+            (Filesystem::F2fs, Some("f2fs-tools")),
+        ];
+        for (fs, expected_pkg) in &fss {
+            let mut config = test_config();
+            config.root_filesystem = *fs;
+            let packages = resolve_packages(&config);
+            if let Some(pkg) = expected_pkg {
+                assert!(
+                    packages.contains(&pkg.to_string()),
+                    "{:?} must include {}",
+                    fs,
+                    pkg
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolve_packages_all_kernels() {
+        let kernels = [
+            (Kernel::Linux, "linux"),
+            (Kernel::LinuxLts, "linux-lts"),
+            (Kernel::LinuxZen, "linux-zen"),
+            (Kernel::LinuxHardened, "linux-hardened"),
+        ];
+        for (kernel, expected_pkg) in &kernels {
+            let mut config = test_config();
+            config.kernel = *kernel;
+            let packages = resolve_packages(&config);
+            assert!(
+                packages.contains(&expected_pkg.to_string()),
+                "{:?} must include {}",
+                kernel,
+                expected_pkg
+            );
+        }
+    }
 }

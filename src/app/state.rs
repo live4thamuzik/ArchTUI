@@ -127,7 +127,7 @@ pub struct AppState {
 }
 
 /// Application operating modes
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AppMode {
     /// Main menu - entry point for all functionality
     MainMenu,

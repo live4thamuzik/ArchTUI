@@ -602,7 +602,7 @@ impl App {
         // Get current mode and help visibility
         let (current_mode, help_visible) = {
             let state = self.lock_state();
-            (state.mode.clone(), state.help_visible)
+            (state.mode, state.help_visible)
         };
 
         // Handle embedded terminal mode - forward all keys except Ctrl+Q
@@ -1171,7 +1171,7 @@ impl App {
     fn handle_enter(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let current_mode = {
             let state = self.lock_state();
-            state.mode.clone()
+            state.mode
         };
 
         match current_mode {
@@ -1256,7 +1256,7 @@ impl App {
                     dialog.is_confirmed(),
                     dialog.confirm_action.clone(),
                     dialog.action_data.clone(),
-                    state.pre_dialog_mode.clone(),
+                    state.pre_dialog_mode,
                 )
             } else {
                 return Ok(());
@@ -1359,7 +1359,7 @@ impl App {
                                     status: "Running...".to_string(),
                                 });
                                 if state.pre_dialog_mode.is_none() {
-                                    state.pre_dialog_mode = Some(state.mode.clone());
+                                    state.pre_dialog_mode = Some(state.mode);
                                 }
                                 state.mode = AppMode::FloatingOutput;
                                 state.current_tool = Some(display_name);
@@ -1488,7 +1488,7 @@ impl App {
     fn handle_tool_selection(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let (current_mode, selection) = {
             let state = self.lock_state();
-            (state.mode.clone(), state.tools_menu_selection)
+            (state.mode, state.tools_menu_selection)
         };
 
         // Check if user selected "Back" option (last item in each menu)
@@ -1747,7 +1747,7 @@ impl App {
     fn handle_back_key(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let current_mode = {
             let state = self.lock_state();
-            state.mode.clone()
+            state.mode
         };
 
         let mut state = self.lock_state();
@@ -4478,7 +4478,7 @@ impl App {
         let mut state = self.lock_state();
         // Save current mode so the UI can render it behind the dialog
         if state.pre_dialog_mode.is_none() {
-            state.pre_dialog_mode = Some(state.mode.clone());
+            state.pre_dialog_mode = Some(state.mode);
         }
         state.current_tool = Some(tool_name.to_string());
         state.tool_dialog = Some(ToolDialogState {
@@ -4883,7 +4883,7 @@ impl App {
                 progress: None,
                 status: "Dry run complete".to_string(),
             });
-            state.pre_dialog_mode = Some(state.mode.clone());
+            state.pre_dialog_mode = Some(state.mode);
             state.mode = AppMode::FloatingOutput;
             return Ok(());
         }
@@ -4913,7 +4913,7 @@ impl App {
             // Use the ToolDialog's parent menu as the return target, not ToolDialog itself
             // (tool_dialog is cleared below, so returning to ToolDialog mode leaves a ghost state)
             let return_mode = state.pre_dialog_mode.take()
-                .unwrap_or_else(|| state.mode.clone());
+                .unwrap_or_else(|| state.mode);
             state.pre_dialog_mode = Some(return_mode);
             state.tool_dialog = None;
             state.current_tool = None;
@@ -4963,7 +4963,7 @@ impl App {
                 status: "Running...".to_string(),
             });
             if state.pre_dialog_mode.is_none() {
-                state.pre_dialog_mode = Some(state.mode.clone());
+                state.pre_dialog_mode = Some(state.mode);
             }
             state.mode = AppMode::FloatingOutput;
             state.current_tool = Some(display_name.to_string());
