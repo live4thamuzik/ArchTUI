@@ -221,6 +221,7 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
         DisplayManager::Lxdm => services.push("lxdm"),
         DisplayManager::Ly => services.push("ly"),
         DisplayManager::Greetd => services.push("greetd"),
+        DisplayManager::CosmicGreeter => services.push("cosmic-greeter"),
     }
 
     // Profile-specific services
@@ -748,6 +749,7 @@ mod tests {
             (DisplayManager::Lxdm, "lxdm"),
             (DisplayManager::Ly, "ly"),
             (DisplayManager::Greetd, "greetd"),
+            (DisplayManager::CosmicGreeter, "cosmic-greeter"),
         ];
         for (dm, expected_service) in &dms {
             let mut config = test_config();

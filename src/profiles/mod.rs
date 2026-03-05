@@ -20,7 +20,7 @@
 //! | Cinnamon  | Cinnamon desktop | LightDM |
 //! | Mate      | MATE desktop | LightDM |
 //! | Budgie    | Budgie desktop | LightDM |
-//! | Cosmic    | COSMIC desktop (AUR) | None |
+//! | Cosmic    | COSMIC desktop | cosmic-greeter |
 //! | Deepin    | Deepin desktop | LightDM |
 //! | Lxde      | LXDE desktop | LXDM |
 //! | Lxqt      | LXQt desktop | SDDM |
@@ -92,7 +92,7 @@ pub enum Profile {
     Budgie,
 
     /// COSMIC desktop environment.
-    /// Modern Rust-based DE by System76 (AUR packages).
+    /// Modern Rust-based DE by System76 (official repos).
     Cosmic,
 
     /// Deepin desktop environment.
@@ -165,6 +165,10 @@ impl Profile {
                 "gdm",
                 // Network
                 "networkmanager",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "wireplumber",
                 // Utilities
                 "firefox",
                 "file-roller",
@@ -180,6 +184,10 @@ impl Profile {
                 "sddm",
                 // Network
                 "networkmanager",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "wireplumber",
                 // Utilities
                 "firefox",
                 "ark",
@@ -189,6 +197,9 @@ impl Profile {
                 // Hyprland compositor
                 "hyprland",
                 "xdg-desktop-portal-hyprland",
+                // Lock/idle (Hyprland-native)
+                "hyprlock",
+                "hypridle",
                 // Status bar
                 "waybar",
                 // Terminal
@@ -212,6 +223,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-jetbrains-mono-nerd",
@@ -251,6 +263,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -282,6 +295,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // X11 essentials
                 "xorg-server",
@@ -298,6 +312,9 @@ impl Profile {
                 // XFCE desktop
                 "xfce4",
                 "xfce4-goodies",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
@@ -307,6 +324,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Utilities
                 "firefox",
@@ -317,6 +335,9 @@ impl Profile {
                 // Cinnamon desktop
                 "cinnamon",
                 "nemo-fileroller",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
@@ -326,6 +347,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Utilities
                 "firefox",
@@ -335,6 +357,9 @@ impl Profile {
                 // MATE desktop
                 "mate",
                 "mate-extra",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
@@ -344,6 +369,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Utilities
                 "firefox",
@@ -353,6 +379,9 @@ impl Profile {
                 // Budgie desktop
                 "budgie-desktop",
                 "budgie-extras",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
@@ -362,16 +391,25 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Utilities
                 "firefox",
             ],
 
             Profile::Cosmic => &[
-                // COSMIC (minimal — most packages come from AUR)
+                // COSMIC desktop (official Arch repos since 2025)
+                "cosmic-session",
+                // Display manager
+                "cosmic-greeter",
+                // Network
                 "networkmanager",
+                // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
+                "pavucontrol",
+                // Utilities
                 "firefox",
             ],
 
@@ -379,11 +417,19 @@ impl Profile {
                 // Deepin desktop
                 "deepin",
                 "deepin-extra",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
                 "networkmanager",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "wireplumber",
+                "pavucontrol",
                 // Utilities
                 "firefox",
             ],
@@ -395,6 +441,11 @@ impl Profile {
                 "lxdm",
                 // Network
                 "networkmanager",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "wireplumber",
+                "pavucontrol",
                 // Utilities
                 "firefox",
             ],
@@ -407,6 +458,11 @@ impl Profile {
                 "sddm",
                 // Network
                 "networkmanager",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "wireplumber",
+                "pavucontrol",
                 // Utilities
                 "firefox",
             ],
@@ -437,6 +493,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -453,6 +510,8 @@ impl Profile {
                 "xorg-xinit",
                 // Terminal
                 "alacritty",
+                // Launcher
+                "dmenu",
                 // Compositor
                 "picom",
                 // File manager
@@ -468,6 +527,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -485,10 +545,14 @@ impl Profile {
                 "xorg-xinit",
                 // Terminal
                 "alacritty",
+                // Launcher
+                "dmenu",
                 // Compositor
                 "picom",
                 // File manager
                 "thunar",
+                // Wallpaper
+                "feh",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
@@ -498,6 +562,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -510,6 +575,9 @@ impl Profile {
                 // River Wayland compositor
                 "river",
                 "xdg-desktop-portal-wlr",
+                // Lock/idle
+                "swaylock",
+                "swayidle",
                 // Status bar
                 "waybar",
                 // Terminal
@@ -533,6 +601,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -545,6 +614,9 @@ impl Profile {
                 // Niri Wayland compositor
                 "niri",
                 "xdg-desktop-portal-gnome",
+                // Lock/idle
+                "swaylock",
+                "swayidle",
                 // Status bar
                 "waybar",
                 // Terminal
@@ -568,6 +640,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -580,6 +653,9 @@ impl Profile {
                 // Labwc Wayland compositor
                 "labwc",
                 "xdg-desktop-portal-wlr",
+                // Lock/idle
+                "swaylock",
+                "swayidle",
                 // Status bar
                 "waybar",
                 // Terminal
@@ -603,6 +679,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -627,6 +704,8 @@ impl Profile {
                 "picom",
                 // File manager
                 "thunar",
+                // Wallpaper
+                "feh",
                 // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
@@ -636,6 +715,7 @@ impl Profile {
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
+                "wireplumber",
                 "pavucontrol",
                 // Fonts
                 "ttf-dejavu",
@@ -652,7 +732,8 @@ impl Profile {
     /// Returns `None` for profiles without a GUI.
     pub fn get_display_manager(&self) -> Option<&'static str> {
         match self {
-            Profile::Minimal | Profile::Cosmic => None,
+            Profile::Minimal => None,
+            Profile::Cosmic => Some("cosmic-greeter"),
             Profile::Gnome => Some("gdm"),
             Profile::Kde | Profile::Hyprland | Profile::Sway
             | Profile::Lxqt | Profile::River | Profile::Niri | Profile::Labwc => Some("sddm"),
@@ -713,7 +794,7 @@ impl Profile {
             Profile::Cinnamon => "Cinnamon desktop environment (traditional)",
             Profile::Mate => "MATE desktop environment (GNOME 2 fork)",
             Profile::Budgie => "Budgie desktop environment (modern, simple)",
-            Profile::Cosmic => "COSMIC desktop environment (Rust-based, AUR)",
+            Profile::Cosmic => "COSMIC desktop environment (Rust-based)",
             Profile::Deepin => "Deepin desktop environment (elegant)",
             Profile::Lxde => "LXDE desktop environment (ultra-lightweight)",
             Profile::Lxqt => "LXQt desktop environment (lightweight Qt)",

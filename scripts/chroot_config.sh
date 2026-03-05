@@ -1364,97 +1364,98 @@ install_desktop_environment() {
     case "$de" in
         "kde"|"plasma")
             install_packages "KDE Plasma" plasma-meta kde-applications-meta konsole dolphin \
-                networkmanager firefox ark
+                networkmanager pipewire pipewire-pulse wireplumber firefox ark
             ;;
         "gnome")
             install_packages "GNOME" gnome gnome-tweaks gnome-terminal \
-                networkmanager firefox file-roller
+                networkmanager pipewire pipewire-pulse wireplumber firefox file-roller
             ;;
         "xfce")
-            install_packages "XFCE" xfce4 xfce4-goodies \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "XFCE" xfce4 xfce4-goodies xorg-server xorg-xinit \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 firefox thunar-archive-plugin
             ;;
         "i3"|"i3wm")
             install_packages "i3 Window Manager" i3-wm i3status i3lock dmenu rofi alacritty \
                 picom thunar xorg-server xorg-xinit feh \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "hyprland")
-            install_packages "Hyprland" hyprland waybar swaylock swayidle \
+            install_packages "Hyprland" hyprland hyprlock hypridle waybar \
                 rofi-wayland grim slurp kitty xdg-desktop-portal-hyprland \
                 wl-clipboard thunar mako polkit-kde-agent \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-jetbrains-mono-nerd noto-fonts noto-fonts-emoji firefox
             ;;
         "sway")
             install_packages "Sway" sway swaylock swayidle waybar \
                 rofi-wayland grim slurp foot xdg-desktop-portal-wlr \
                 wl-clipboard mako thunar \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "cinnamon")
-            install_packages "Cinnamon" cinnamon nemo-fileroller \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol firefox
+            install_packages "Cinnamon" cinnamon nemo-fileroller xorg-server xorg-xinit \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "mate")
-            install_packages "MATE" mate mate-extra \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol firefox
+            install_packages "MATE" mate mate-extra xorg-server xorg-xinit \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "budgie")
-            install_packages "Budgie" budgie-desktop budgie-extras \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol firefox
+            install_packages "Budgie" budgie-desktop budgie-extras xorg-server xorg-xinit \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "cosmic")
-            install_packages "COSMIC (base)" networkmanager pipewire pipewire-pulse firefox
+            install_packages "COSMIC" cosmic-session \
+                networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "deepin")
-            install_packages "Deepin" deepin deepin-extra \
-                networkmanager firefox
+            install_packages "Deepin" deepin deepin-extra xorg-server xorg-xinit \
+                networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "lxde")
             install_packages "LXDE" lxde \
-                networkmanager firefox
+                networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "lxqt")
             install_packages "LXQt" lxqt breeze-icons \
-                networkmanager firefox
+                networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "bspwm")
             install_packages "bspwm" bspwm sxhkd xorg-server xorg-xinit alacritty dmenu picom feh thunar \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "awesome")
-            install_packages "Awesome WM" awesome xorg-server xorg-xinit alacritty picom thunar feh \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "Awesome WM" awesome xorg-server xorg-xinit alacritty dmenu picom thunar feh \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "qtile")
-            install_packages "Qtile" qtile python-psutil xorg-server xorg-xinit alacritty picom thunar \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "Qtile" qtile python-psutil xorg-server xorg-xinit alacritty dmenu picom thunar feh \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "river")
-            install_packages "River" river xdg-desktop-portal-wlr waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "River" river xdg-desktop-portal-wlr swaylock swayidle waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "niri")
-            install_packages "Niri" niri xdg-desktop-portal-gnome waybar foot fuzzel mako grim slurp wl-clipboard nautilus \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "Niri" niri xdg-desktop-portal-gnome swaylock swayidle waybar foot fuzzel mako grim slurp wl-clipboard nautilus \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "labwc")
-            install_packages "Labwc" labwc xdg-desktop-portal-wlr waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "Labwc" labwc xdg-desktop-portal-wlr swaylock swayidle waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "xmonad")
-            install_packages "XMonad" xmonad xmonad-contrib xmobar xorg-server xorg-xinit dmenu alacritty picom thunar \
-                networkmanager network-manager-applet pipewire pipewire-pulse pavucontrol \
+            install_packages "XMonad" xmonad xmonad-contrib xmobar xorg-server xorg-xinit dmenu alacritty picom thunar feh \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "none"|"minimal"|"")
@@ -1479,10 +1480,8 @@ install_de_aur_packages() {
             aur_packages=(wlogout)
             ;;
         "cosmic")
-            aur_packages=(cosmic-session cosmic-comp cosmic-panel cosmic-settings
-                          cosmic-applets cosmic-bg cosmic-greeter cosmic-launcher
-                          cosmic-notifications cosmic-osd cosmic-screenshot
-                          cosmic-workspaces)
+            # COSMIC is in official Arch repos since 2025 — no AUR packages needed
+            return 0
             ;;
         *)
             return 0
@@ -1543,6 +1542,11 @@ install_display_manager() {
             log_info "Enabling Ly service..."
             systemctl enable ly.service || log_warn "Failed to enable ly.service"
             ;;
+        "cosmic-greeter")
+            install_packages "COSMIC Greeter" cosmic-greeter
+            log_cmd "systemctl enable cosmic-greeter.service"
+            systemctl enable cosmic-greeter.service || log_warn "Failed to enable cosmic-greeter.service"
+            ;;
         "greetd")
             install_packages "greetd" greetd greetd-tuigreet
             log_cmd "systemctl enable greetd.service"
@@ -1550,16 +1554,42 @@ install_display_manager() {
             # Configure tuigreet as default greeter
             log_cmd "mkdir -p /etc/greetd"
             mkdir -p /etc/greetd || log_warn "Failed to create /etc/greetd"
-            log_cmd "Writing /etc/greetd/config.toml"
-            cat > /etc/greetd/config.toml << 'GREETD_EOF'
+            # Determine session command based on desktop environment
+            local greetd_session="/bin/bash"
+            local de_lower="${DESKTOP_ENVIRONMENT:-none}"
+            de_lower="${de_lower,,}"
+            case "$de_lower" in
+                "sway")       greetd_session="sway" ;;
+                "hyprland")   greetd_session="Hyprland" ;;
+                "river")      greetd_session="river" ;;
+                "niri")       greetd_session="niri-session" ;;
+                "labwc")      greetd_session="labwc" ;;
+                "i3"|"i3wm")  greetd_session="i3" ;;
+                "awesome")    greetd_session="awesome" ;;
+                "qtile")      greetd_session="qtile start" ;;
+                "bspwm")      greetd_session="bspwm" ;;
+                "xmonad")     greetd_session="xmonad" ;;
+                "gnome")      greetd_session="gnome-session" ;;
+                "kde"|"plasma") greetd_session="startplasma-wayland" ;;
+                "xfce")       greetd_session="startxfce4" ;;
+                "cinnamon")   greetd_session="cinnamon-session" ;;
+                "mate")       greetd_session="mate-session" ;;
+                "budgie")     greetd_session="budgie-desktop" ;;
+                "deepin")     greetd_session="startdde" ;;
+                "lxde")       greetd_session="startlxde" ;;
+                "lxqt")       greetd_session="startlxqt" ;;
+                *)            greetd_session="/bin/bash" ;;
+            esac
+            log_cmd "Writing /etc/greetd/config.toml (session: $greetd_session)"
+            cat > /etc/greetd/config.toml << GREETD_EOF
 [terminal]
 vt = 1
 
 [default_session]
-command = "tuigreet --time --cmd /bin/bash"
+command = "tuigreet --time --cmd $greetd_session"
 user = "greeter"
 GREETD_EOF
-            log_success "greetd configured with tuigreet greeter"
+            log_success "greetd configured with tuigreet greeter (session: $greetd_session)"
             ;;
         "none"|"")
             log_info "No display manager selected - skipping"

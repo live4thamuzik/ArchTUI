@@ -146,7 +146,7 @@ pub enum DesktopEnvironment {
 impl DesktopEnvironment {
     /// Whether this DE/WM has packages that are only available in the AUR
     pub fn requires_aur(&self) -> bool {
-        matches!(self, Self::Hyprland | Self::Cosmic)
+        matches!(self, Self::Hyprland)
     }
 }
 
@@ -170,6 +170,8 @@ pub enum DisplayManager {
     Ly,
     #[strum(serialize = "greetd")]
     Greetd,
+    #[strum(serialize = "cosmic-greeter")]
+    CosmicGreeter,
 }
 
 /// Bootloader selection
