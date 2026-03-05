@@ -279,6 +279,7 @@ fn desktop_to_profile(de: DesktopEnvironment) -> Profile {
         DesktopEnvironment::Niri => Profile::Niri,
         DesktopEnvironment::Labwc => Profile::Labwc,
         DesktopEnvironment::Xmonad => Profile::Xmonad,
+        DesktopEnvironment::Dwm => Profile::Dwm,
     }
 }
 
@@ -585,6 +586,7 @@ mod tests {
         assert_eq!(desktop_to_profile(DesktopEnvironment::Niri), Profile::Niri);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Labwc), Profile::Labwc);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Xmonad), Profile::Xmonad);
+        assert_eq!(desktop_to_profile(DesktopEnvironment::Dwm), Profile::Dwm);
     }
 
     // =========================================================================

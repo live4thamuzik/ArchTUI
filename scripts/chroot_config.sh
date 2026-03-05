@@ -1458,6 +1458,11 @@ install_desktop_environment() {
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
+        "dwm")
+            install_packages "DWM" dwm xorg-server xorg-xinit dmenu alacritty picom thunar feh \
+                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
+                ttf-dejavu noto-fonts firefox
+            ;;
         "none"|"minimal"|"")
             log_info "No desktop environment selected - skipping"
             ;;
@@ -1569,6 +1574,7 @@ install_display_manager() {
                 "qtile")      greetd_session="qtile start" ;;
                 "bspwm")      greetd_session="bspwm" ;;
                 "xmonad")     greetd_session="xmonad" ;;
+                "dwm")        greetd_session="dwm" ;;
                 "gnome")      greetd_session="gnome-session" ;;
                 "kde"|"plasma") greetd_session="startplasma-wayland" ;;
                 "xfce")       greetd_session="startxfce4" ;;

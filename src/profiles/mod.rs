@@ -31,6 +31,7 @@
 //! | Niri      | Niri (Wayland tiling) | SDDM |
 //! | Labwc     | Labwc (Wayland stacking) | SDDM |
 //! | Xmonad    | XMonad (X11 tiling) | LightDM |
+//! | Dwm       | DWM (X11 tiling, suckless) | LightDM |
 //!
 //! # Package List Philosophy
 //!
@@ -134,6 +135,10 @@ pub enum Profile {
     /// XMonad tiling window manager (X11).
     /// Haskell-based tiling WM.
     Xmonad,
+
+    /// DWM tiling window manager (X11).
+    /// Suckless dynamic window manager.
+    Dwm,
 }
 
 impl Profile {
@@ -723,6 +728,40 @@ impl Profile {
                 // Utilities
                 "firefox",
             ],
+
+            Profile::Dwm => &[
+                // DWM window manager
+                "dwm",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
+                // Terminal (st is suckless default, but alacritty is more usable out of the box)
+                "alacritty",
+                // Launcher
+                "dmenu",
+                // Compositor
+                "picom",
+                // File manager
+                "thunar",
+                // Wallpaper
+                "feh",
+                // Display manager
+                "lightdm",
+                "lightdm-gtk-greeter",
+                // Network
+                "networkmanager",
+                "network-manager-applet",
+                // Audio
+                "pipewire",
+                "pipewire-pulse",
+                "wireplumber",
+                "pavucontrol",
+                // Fonts
+                "ttf-dejavu",
+                "noto-fonts",
+                // Utilities
+                "firefox",
+            ],
         }
     }
 
@@ -739,7 +778,7 @@ impl Profile {
             | Profile::Lxqt | Profile::River | Profile::Niri | Profile::Labwc => Some("sddm"),
             Profile::I3 | Profile::Xfce | Profile::Cinnamon | Profile::Mate
             | Profile::Budgie | Profile::Deepin | Profile::Bspwm | Profile::Awesome
-            | Profile::Qtile | Profile::Xmonad => Some("lightdm"),
+            | Profile::Qtile | Profile::Xmonad | Profile::Dwm => Some("lightdm"),
             Profile::Lxde => Some("lxdm"),
         }
     }
@@ -768,6 +807,7 @@ impl Profile {
             Profile::Hyprland | Profile::Sway | Profile::I3
             | Profile::Bspwm | Profile::Awesome | Profile::Qtile
             | Profile::River | Profile::Niri | Profile::Xmonad
+            | Profile::Dwm
         )
     }
 
@@ -805,6 +845,7 @@ impl Profile {
             Profile::Niri => "Niri Wayland compositor (scrollable tiling)",
             Profile::Labwc => "Labwc Wayland compositor (Openbox-like)",
             Profile::Xmonad => "XMonad window manager (Haskell, X11)",
+            Profile::Dwm => "DWM window manager (suckless, X11)",
         }
     }
 }
