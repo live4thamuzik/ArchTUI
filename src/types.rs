@@ -67,7 +67,6 @@ pub enum PartitionScheme {
     PreMounted,
 }
 
-#[allow(dead_code)] // API: Utility methods for partition strategy selection logic
 impl PartitionScheme {
     /// Check if this scheme requires RAID (multiple disks)
     pub fn requires_raid(&self) -> bool {
