@@ -111,11 +111,14 @@ teardown() {
 }
 
 @test "configure_snapper installs snapper packages" {
-    grep -q 'pacman -S snapper snap-pac --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
+    # snapper and snap-pac are installed separately (snap-pac last to avoid dbus hook noise)
+    grep -q 'pacman -S snapper --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
+    grep -q 'pacman -S snap-pac --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_snapper creates snapper config for root" {
-    grep -q 'snapper -c root create-config' "$SCRIPTS_DIR/chroot_config.sh"
+    # Uses --no-dbus because dbus is unavailable inside chroot
+    grep -q 'snapper --no-dbus -c root create-config' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_snapper enables snapper timers" {
@@ -163,8 +166,9 @@ teardown() {
     grep -q 'hooks=.*plymouth' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
-@test "configure_mkinitcpio adds plymouth-encrypt hook for encrypted systems" {
-    grep -q 'plymouth-encrypt' "$SCRIPTS_DIR/chroot_config.sh"
+@test "configure_mkinitcpio adds sd-encrypt hook for encrypted systems" {
+    # plymouth-encrypt replaced by sd-encrypt (systemd-based initramfs)
+    grep -q 'sd-encrypt' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_mkinitcpio adds lvm2 hook when needed" {

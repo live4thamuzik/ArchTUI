@@ -266,7 +266,7 @@ teardown() {
         export MAIN_USERNAME="user"
         export MAIN_USER_PASSWORD="pass"
         export ROOT_PASSWORD="root"
-        export ENCRYPTION="yes"
+        export ENCRYPTION="Yes"
         export ENCRYPTION_PASSWORD=""
 
         run validate_configuration
