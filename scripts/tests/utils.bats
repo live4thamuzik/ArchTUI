@@ -266,10 +266,11 @@ teardown() {
     assert_mock_called_with_pattern "mkfs.fat.*/dev/sda1"
 }
 
-@test "format_filesystem calls mkswap for swap" {
+@test "format_filesystem rejects swap type (swap handled by create_swap_partition)" {
+    # format_filesystem does not handle swap — swap formatting is done inline
+    # by create_swap_partition/create_swapfile in disk_utils.sh
     run format_filesystem "/dev/sda1" "swap"
-    [ "$status" -eq 0 ]
-    assert_mock_called_with_pattern "mkswap.*/dev/sda1"
+    [ "$status" -eq 1 ]
 }
 
 @test "format_filesystem fails for unknown filesystem type" {

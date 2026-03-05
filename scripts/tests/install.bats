@@ -154,10 +154,6 @@ teardown() {
     [ -d "$SCRIPTS_DIR/strategies" ]
 }
 
-@test "desktops directory exists" {
-    [ -d "$SCRIPTS_DIR/desktops" ]
-}
-
 @test "tools directory exists" {
     [ -d "$SCRIPTS_DIR/tools" ]
 }

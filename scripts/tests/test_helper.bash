@@ -257,6 +257,27 @@ create_mock_commands() {
     }
     export -f swapon
 
+    # Mock udevadm
+    udevadm() {
+        log_mock_call "udevadm" "$@"
+        return 0
+    }
+    export -f udevadm
+
+    # Mock sleep (avoid real delays in tests)
+    sleep() {
+        log_mock_call "sleep" "$@"
+        return 0
+    }
+    export -f sleep
+
+    # Mock sync (used by sync_partitions)
+    sync() {
+        log_mock_call "sync" "$@"
+        return 0
+    }
+    export -f sync
+
     # Mock mountpoint - simulate not mounted by default
     mountpoint() {
         log_mock_call "mountpoint" "$@"
