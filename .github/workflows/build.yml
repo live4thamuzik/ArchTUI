@@ -25,8 +25,19 @@ jobs:
           -P scripts/tools \
           {} +
 
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install bats
+      run: sudo apt-get update && sudo apt-get install -y bats
+
+    - name: Run BATS tests
+      run: bats scripts/tests/*.bats
+
   build:
-    needs: shellcheck
+    needs: [shellcheck, bats]
     runs-on: ubuntu-latest
 
     steps:
@@ -46,3 +57,9 @@ jobs:
     - name: Build release
       # Note: alpm feature disabled on Ubuntu (requires libalpm from Arch Linux)
       run: cargo build --release --no-default-features
+
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Run cargo audit
+      run: cargo audit

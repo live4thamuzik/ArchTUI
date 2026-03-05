@@ -204,9 +204,9 @@ case "$ACTION" in
         
         # Mount status
         log_info "📌 Mount Status:"
-        if mountpoint -q "$DEVICE" 2>/dev/null; then
+        if findmnt -n "$DEVICE" >/dev/null 2>&1; then
             log_success "  ✅ Device is mounted"
-            mount | grep -F "$DEVICE" | sed 's/^/  /'
+            findmnt -n "$DEVICE" | sed 's/^/  /'
         else
             log_info "  ℹ️  Device is not mounted"
         fi
@@ -261,10 +261,10 @@ case "$ACTION" in
             error_exit "Device does not exist: $DEVICE"
         fi
         
-        # Check if device is already mounted
-        if mountpoint -q "$DEVICE" 2>/dev/null; then
+        # Check if device is already mounted (findmnt works on block devices, mountpoint only works on directories)
+        if findmnt -n "$DEVICE" >/dev/null 2>&1; then
             log_warning "⚠️  Device $DEVICE is already mounted"
-            mount | grep -F "$DEVICE" | sed 's/^/  /'
+            findmnt -n "$DEVICE" | sed 's/^/  /'
 
             if [[ "$FORCE" == true ]]; then
                 log_info "Force mode enabled - unmounting first..."
@@ -373,8 +373,8 @@ case "$ACTION" in
         log_info "🔌 Unmounting $TARGET_TYPE: $TARGET"
         echo "=================================================="
         
-        # Check if target is mounted
-        if ! mountpoint -q "$TARGET" 2>/dev/null; then
+        # Check if target is mounted (findmnt handles both block devices and directories)
+        if ! findmnt -n "$TARGET" >/dev/null 2>&1; then
             log_warning "⚠️  $TARGET_TYPE $TARGET is not mounted"
             exit 0
         fi

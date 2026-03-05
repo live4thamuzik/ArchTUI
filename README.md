@@ -262,7 +262,7 @@ cargo build --release --features alpm
 
 ### Runtime dependencies
 
-The compiled binary has no runtime library dependencies (statically linked, LTO, stripped). The bash scripts expect standard Arch Linux utilities: `pacman`, `sgdisk`, `mkfs.*`, `cryptsetup`, `mdadm`, `arch-chroot`, etc. — all present on the Arch live ISO.
+The compiled binary requires glibc (dynamically linked, LTO, stripped). The bash scripts expect standard Arch Linux utilities: `pacman`, `sgdisk`, `mkfs.*`, `cryptsetup`, `mdadm`, `arch-chroot`, etc. — all present on the Arch live ISO.
 
 ---
 
@@ -282,8 +282,8 @@ What exists and works:
 - Pre-install orchestration (mirror ranking with network awareness)
 - Post-install orchestration (AUR helper, dotfiles — non-fatal)
 - Comprehensive logging (master log, per-script verbose trace, config dump, `log_cmd` before all destructive ops)
-- 298 unit tests passing
-- CI pipeline (shellcheck on all scripts + cargo clippy + cargo test)
+- 329 unit tests passing
+- CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit)
 
 What is incomplete or untested:
 - End-to-end installation has not been validated on real hardware

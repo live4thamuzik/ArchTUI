@@ -38,6 +38,9 @@ pub enum Filesystem {
     /// FAT32 filesystem for EFI System Partition (internal use only, not user-selectable)
     #[strum(serialize = "fat32")]
     Fat32,
+    /// Swap space (internal use only — represents mkswap, not a real filesystem)
+    #[strum(serialize = "swap")]
+    Swap,
 }
 
 /// Disk partitioning strategy

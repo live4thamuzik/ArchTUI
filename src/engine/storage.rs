@@ -330,7 +330,7 @@ fn plan_simple(
         let swap_part = partition_path(disk, root_part_num + 1);
         ops.push(StorageOp::FormatFs {
             device: swap_part,
-            filesystem: Filesystem::Ext4, // placeholder — swap is mkswap, not a FS
+            filesystem: Filesystem::Swap,
             label: Some(format!("swap:{}", swap_size)),
         });
     }
@@ -503,7 +503,7 @@ fn plan_lvm(
         let swap_lv = PathBuf::from(format!("/dev/{}/swap", vg_name));
         ops.push(StorageOp::FormatFs {
             device: swap_lv,
-            filesystem: Filesystem::Ext4, // placeholder for mkswap
+            filesystem: Filesystem::Swap,
             label: Some("swap".to_string()),
         });
     }
@@ -616,7 +616,7 @@ fn plan_luks_lvm(
         let swap_lv = PathBuf::from(format!("/dev/{}/swap", vg_name));
         ops.push(StorageOp::FormatFs {
             device: swap_lv,
-            filesystem: Filesystem::Ext4,
+            filesystem: Filesystem::Swap,
             label: Some("swap".to_string()),
         });
     }

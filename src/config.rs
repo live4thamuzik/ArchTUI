@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::{debug, error, info};
 
 /// Package structure for structured package data
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -54,16 +55,19 @@ impl ConfigOption {
     /// Validate the current value
     pub fn is_valid(&self) -> bool {
         if self.required && self.value.trim().is_empty() {
+            error!(field = %self.name, "Required field is empty");
             return false;
         }
         // Add specific validation based on field type
-        match self.name.as_str() {
+        let valid = match self.name.as_str() {
             "Hostname" => {
                 let value = self.get_value();
+                // RFC 1123: 1-63 chars, lowercase alphanumeric + hyphens, no leading/trailing hyphens
                 !value.is_empty()
                     && value.len() <= 63
-                    && value.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c == '_')
-                    && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+                    && value.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                    && value.chars().last().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                    && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
             }
             "Username" => {
                 let value = self.get_value();
@@ -80,14 +84,21 @@ impl ConfigOption {
             "Git Repository URL" => {
                 let value = self.get_value();
                 let trimmed = value.trim();
+                // DD#37/DD#44: https-only policy (matches config_file.rs)
                 trimmed.is_empty()
-                    || trimmed.starts_with("http://")
                     || trimmed.starts_with("https://")
-                    || trimmed.starts_with("git://")
-                    || trimmed.starts_with("ssh://")
             }
             _ => true, // Default: any non-empty value is valid
+        };
+        if !valid {
+            // ROE §8.1: never log password values
+            if self.name.contains("Password") {
+                error!(field = %self.name, "Field validation failed (value redacted)");
+            } else {
+                error!(field = %self.name, value = %self.get_value(), "Field validation failed");
+            }
         }
+        valid
     }
 
     /// Get validation error message if invalid
@@ -97,8 +108,11 @@ impl ConfigOption {
                 Some(format!("{} is required", self.name))
             } else {
                 match self.name.as_str() {
-                    "Username" | "Hostname" => {
-                        Some(format!("{} must contain only alphanumeric characters and underscores, start with a letter, and be 3-32 characters", self.name))
+                    "Hostname" => {
+                        Some(format!("{} must be 1-63 lowercase alphanumeric characters and hyphens (RFC 1123, no leading/trailing hyphens)", self.name))
+                    }
+                    "Username" => {
+                        Some(format!("{} must be 3-32 lowercase characters starting with a letter (lowercase letters, digits, underscores)", self.name))
                     }
                     "User Password" | "Root Password" => {
                         Some(format!("{} cannot be empty or contain whitespace", self.name))
@@ -107,7 +121,7 @@ impl ConfigOption {
                         Some(format!("{} must be a valid device path (e.g., /dev/sda)", self.name))
                     }
                     "Git Repository URL" => {
-                        Some(format!("{} must be a valid URL (http://, https://, git://, or ssh://)", self.name))
+                        Some(format!("{} must be a valid https:// URL", self.name))
                     }
                     _ => Some(format!("{} has an invalid value", self.name))
                 }
@@ -339,6 +353,7 @@ impl Configuration {
             env_vars.insert(env_name.to_string(), value);
         }
 
+        info!(count = env_vars.len(), "Built environment variable map from TUI config");
         env_vars
     }
 
@@ -351,6 +366,7 @@ impl Configuration {
     /// Returns (user_password, root_password, encryption_password)
     #[allow(dead_code)] // Library API for future use
     pub fn get_passwords(&self) -> (String, String, Option<String>) {
+        debug!("Extracting passwords from config (values redacted)");
         let mut user_password = String::new();
         let mut root_password = String::new();
         let mut encryption_password: Option<String> = None;

@@ -312,7 +312,7 @@ impl UserConfigField {
 }
 
 /// State for the user configuration screen.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct UserConfigState {
     /// Current field being edited.
     pub current_field: usize,
@@ -326,6 +326,22 @@ pub struct UserConfigState {
     pub sudo_enabled: bool,
     /// Validation error message.
     pub error: Option<String>,
+}
+
+// ROE §8.1: Custom Debug impl redacts password fields
+impl std::fmt::Debug for UserConfigState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserConfigState")
+            .field("current_field", &self.current_field)
+            .field("hostname", &self.hostname)
+            .field("username", &self.username)
+            .field("password", &"********")
+            .field("confirm_password", &"********")
+            .field("root_password", &"********")
+            .field("sudo_enabled", &self.sudo_enabled)
+            .field("error", &self.error)
+            .finish()
+    }
 }
 
 impl UserConfigState {

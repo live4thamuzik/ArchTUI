@@ -77,6 +77,7 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         Kernel::LinuxHardened => kernel_packages::LINUX_HARDENED,
     };
     packages.extend_from_slice(kernel_pkgs);
+    tracing::debug!(kernel = %config.kernel, count = kernel_pkgs.len(), "Resolved kernel packages");
 
     // 3. GPU drivers
     let gpu_pkgs = match config.gpu_drivers {
@@ -104,10 +105,13 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         Bootloader::Efistub => bootloader_packages::EFISTUB,
     };
     packages.extend_from_slice(boot_pkgs);
+    tracing::debug!(bootloader = %config.bootloader, count = boot_pkgs.len(), "Resolved bootloader packages");
 
     // 5. Desktop/WM profile
     let profile = desktop_to_profile(config.desktop_environment);
-    packages.extend_from_slice(profile.get_packages());
+    let profile_pkgs = profile.get_packages();
+    packages.extend_from_slice(profile_pkgs);
+    tracing::debug!(de = %config.desktop_environment, count = profile_pkgs.len(), "Resolved profile packages");
 
     // 6. Flatpak
     if config.flatpak == Toggle::Yes {
@@ -245,6 +249,7 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
     result.sort();
     result.dedup();
 
+    tracing::debug!(count = result.len(), services = ?result, "Service resolution complete");
     result
 }
 

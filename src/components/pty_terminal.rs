@@ -74,6 +74,8 @@ pub struct PtyTerminal {
     output_buffer: Arc<Mutex<Vec<u8>>>,
     /// Writer to send input to PTY
     writer: Option<Box<dyn Write + Send>>,
+    /// Master PTY handle (retained for resize operations)
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
     /// Child process handle
     child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     /// Whether the terminal is still running
@@ -95,6 +97,7 @@ impl PtyTerminal {
             },
             output_buffer: Arc::new(Mutex::new(Vec::new())),
             writer: None,
+            master: None,
             child: None,
             running: Arc::new(Mutex::new(false)),
             exit_status: Arc::new(Mutex::new(None)),
@@ -103,6 +106,7 @@ impl PtyTerminal {
 
     /// Spawn a command in the PTY
     pub fn spawn_command(&mut self, cmd: &str, args: &[&str]) -> PtyResult<()> {
+        tracing::info!(cmd = %cmd, args = ?args, "Spawning command in PTY");
         // Create PTY system
         let pty_system = native_pty_system();
 
@@ -141,9 +145,11 @@ impl PtyTerminal {
 
         // Set up shared state
         self.writer = Some(writer);
+        self.master = Some(pair.master);
         self.child = Some(child);
         // SAFETY: poison recovery via into_inner — never panic on mutex
         *self.running.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        tracing::info!(cmd = %cmd, "PTY command spawned successfully");
 
         // Spawn reader thread
         let output_buffer = Arc::clone(&self.output_buffer);
@@ -226,6 +232,7 @@ impl PtyTerminal {
             // try_wait returns Ok(Some(status)) if exited, Ok(None) if still running
             match child.try_wait() {
                 Ok(Some(status)) => {
+                    tracing::info!(success = status.success(), "PTY process exited");
                     // SAFETY: poison recovery via into_inner — never panic on mutex
                     *self.exit_status.lock().unwrap_or_else(|e| e.into_inner()) = Some(status);
                     // SAFETY: poison recovery via into_inner — never panic on mutex
@@ -252,6 +259,7 @@ impl PtyTerminal {
 
     /// Resize the PTY
     pub fn resize(&mut self, cols: u16, rows: u16) -> PtyResult<()> {
+        tracing::debug!(cols, rows, "Resizing PTY");
         self.size = PtySize {
             rows,
             cols,
@@ -259,8 +267,12 @@ impl PtyTerminal {
             pixel_height: 0,
         };
         self.parser.set_size(rows, cols);
-        // Note: Resizing the actual PTY would require keeping a reference to the master
-        // For now, we just update the parser size
+        // Propagate resize to actual PTY (sends SIGWINCH to child process)
+        if let Some(ref master) = self.master {
+            master
+                .resize(self.size)
+                .map_err(|e| PtyError::Write(format!("PTY resize failed: {}", e)))?;
+        }
         Ok(())
     }
 
@@ -344,6 +356,7 @@ impl PtyTerminal {
 
     /// Kill the PTY process
     pub fn kill(&mut self) {
+        tracing::info!("Killing PTY process");
         if let Some(ref mut child) = self.child {
             let _ = child.kill();
         }
@@ -450,11 +463,18 @@ pub enum PtySpawnResult {
 
 /// Attempt to spawn a command in a PTY, with fallback support
 pub fn spawn_or_fallback(cmd: &str, args: &[&str], cols: u16, rows: u16) -> PtySpawnResult {
+    tracing::debug!(cmd = %cmd, "Attempting PTY spawn");
     match PtyTerminal::new(cols, rows) {
         Ok(mut pty) => match pty.spawn_command(cmd, args) {
             Ok(()) => PtySpawnResult::Success(Box::new(pty)),
-            Err(e) => PtySpawnResult::Fallback(format!("Failed to spawn: {}", e)),
+            Err(e) => {
+                tracing::warn!(cmd = %cmd, error = %e, "PTY spawn failed, using fallback");
+                PtySpawnResult::Fallback(format!("Failed to spawn: {}", e))
+            }
         },
-        Err(e) => PtySpawnResult::Fallback(format!("Failed to create PTY: {}", e)),
+        Err(e) => {
+            tracing::warn!(error = %e, "PTY creation failed, using fallback");
+            PtySpawnResult::Fallback(format!("Failed to create PTY: {}", e))
+        }
     }
 }

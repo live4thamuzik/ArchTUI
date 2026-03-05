@@ -70,6 +70,10 @@ lint: lint-rust lint-bash
 lint-rust:
 	cargo clippy -- -D warnings
 
+# Match CI flags exactly (alpm feature disabled on non-Arch systems)
+lint-ci:
+	cargo clippy --no-default-features -- -D warnings
+
 lint-bash:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "Running shellcheck on all scripts..."; \

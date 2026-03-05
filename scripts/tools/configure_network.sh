@@ -300,8 +300,11 @@ configure_dhcp() {
     log_info "🔧 Configuring '$iface' with DHCP..."
     
     # Enable interface first
-    ip link set "$iface" up
-    
+    ip link set "$iface" up || {
+        log_error "Failed to bring up interface '$iface'"
+        return 1
+    }
+
     # Try dhcpcd if available
     if command -v dhcpcd >/dev/null 2>&1; then
         log_info "Using dhcpcd for DHCP configuration..."
@@ -369,7 +372,10 @@ configure_static() {
             if [[ "$dns" == *,* ]]; then
                 echo "nameserver $(echo "$dns" | cut -d',' -f2)"
             fi
-        } > /etc/resolv.conf
+        } > /etc/resolv.conf || {
+            log_error "Failed to write /etc/resolv.conf"
+            return 1
+        }
         log_success "✅ DNS servers configured (temporary)"
     fi
     

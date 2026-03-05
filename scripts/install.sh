@@ -407,7 +407,7 @@ validate_configuration() {
     # Validate filesystem types
     for _fs_check in "$ROOT_FILESYSTEM" "$HOME_FILESYSTEM"; do
         case "$_fs_check" in
-            ext4|xfs|btrfs|fat32|"") ;;
+            ext4|xfs|btrfs|f2fs|fat32|"") ;;
             *) log_error "Unknown filesystem type: $_fs_check"; return 1 ;;
         esac
     done
@@ -668,6 +668,9 @@ install_base_system() {
                 ;;
             "ext4")
                 fs_packages+=("e2fsprogs")
+                ;;
+            "f2fs")
+                fs_packages+=("f2fs-tools")
                 ;;
         esac
     done

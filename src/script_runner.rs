@@ -106,12 +106,16 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     let env_vars = args.get_env_vars();
 
     args.validate().map_err(|e| anyhow::anyhow!("Argument validation failed: {}", e))?;
+    tracing::debug!(script = %script_name, "Argument validation passed");
 
     // Log exact command and environment for transparency
+    // ROE §8.1: redact password-containing env vars
+    let redacted_env = redact_env_vars(&env_vars);
     info!(
         script = %script_name,
         path = %script_path,
         args = ?cli_args,
+        env = ?redacted_env,
         destructive = args.is_destructive(),
         "Spawning script"
     );
@@ -121,11 +125,8 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     // Skip destructive operations when dry-run is enabled
     // ========================================================================
     if is_dry_run() && args.is_destructive() {
-        // Format the command that WOULD have been executed
-        let env_display: Vec<String> = env_vars
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect();
+        // Format the command that WOULD have been executed (passwords redacted)
+        let env_display = redact_env_vars(&env_vars);
         let env_prefix = if env_display.is_empty() {
             String::new()
         } else {
@@ -221,6 +222,24 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     }
 }
 
+/// Redact password-containing environment variables for safe logging.
+///
+/// ROE §8.1: password values must NEVER appear in logs or tracing output.
+/// Any env var whose name contains "PASSWORD" (case-insensitive) gets its
+/// value replaced with `<REDACTED>`.
+pub fn redact_env_vars(env_vars: &[(String, String)]) -> Vec<String> {
+    env_vars
+        .iter()
+        .map(|(k, v)| {
+            if k.to_uppercase().contains("PASSWORD") {
+                format!("{}=<REDACTED>", k)
+            } else {
+                format!("{}={}", k, v)
+            }
+        })
+        .collect()
+}
+
 /// Output from a script execution.
 #[derive(Debug, Clone)]
 pub struct ScriptOutput {
@@ -253,5 +272,63 @@ impl ScriptOutput {
                 self.stderr.trim()
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redact_env_vars_redacts_passwords() {
+        let env = vec![
+            ("INSTALL_DISK".to_string(), "/dev/sda".to_string()),
+            ("MAIN_USER_PASSWORD".to_string(), "s3cret!".to_string()),
+            ("ROOT_PASSWORD".to_string(), "r00t!".to_string()),
+            ("ENCRYPTION_PASSWORD".to_string(), "luk$".to_string()),
+            ("HOSTNAME".to_string(), "archbox".to_string()),
+        ];
+
+        let redacted = redact_env_vars(&env);
+
+        assert_eq!(redacted[0], "INSTALL_DISK=/dev/sda");
+        assert_eq!(redacted[1], "MAIN_USER_PASSWORD=<REDACTED>");
+        assert_eq!(redacted[2], "ROOT_PASSWORD=<REDACTED>");
+        assert_eq!(redacted[3], "ENCRYPTION_PASSWORD=<REDACTED>");
+        assert_eq!(redacted[4], "HOSTNAME=archbox");
+
+        // Verify no actual password values leak
+        for entry in &redacted {
+            assert!(!entry.contains("s3cret"), "Password value leaked: {}", entry);
+            assert!(!entry.contains("r00t"), "Password value leaked: {}", entry);
+            assert!(!entry.contains("luk$"), "Password value leaked: {}", entry);
+        }
+    }
+
+    #[test]
+    fn test_redact_env_vars_case_insensitive() {
+        let env = vec![
+            ("user_password".to_string(), "pw1".to_string()),
+            ("Password_Field".to_string(), "pw2".to_string()),
+        ];
+
+        let redacted = redact_env_vars(&env);
+
+        assert_eq!(redacted[0], "user_password=<REDACTED>");
+        assert_eq!(redacted[1], "Password_Field=<REDACTED>");
+    }
+
+    #[test]
+    fn test_redact_env_vars_empty() {
+        let env: Vec<(String, String)> = vec![];
+        let redacted = redact_env_vars(&env);
+        assert!(redacted.is_empty());
+    }
+
+    #[test]
+    fn test_scripts_base_dir_returns_path() {
+        let dir = scripts_base_dir();
+        // Should return a path (may not exist in test env but should not panic)
+        assert!(!dir.as_os_str().is_empty());
     }
 }

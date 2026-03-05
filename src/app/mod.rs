@@ -245,18 +245,18 @@ impl App {
                             status: "Ready to install".to_string(),
                         });
                         state.pre_dialog_mode = Some(AppMode::AutomatedInstall);
-                        state.mode = AppMode::FloatingOutput;
+                        state.set_mode(AppMode::FloatingOutput);
                     }
                     Err(e) => {
                         let mut state = self.lock_state();
-                        state.mode = AppMode::AutomatedInstall;
+                        state.set_mode(AppMode::AutomatedInstall);
                         state.status_message = format!("Config validation failed: {}", e);
                     }
                 }
             }
             Err(e) => {
                 let mut state = self.lock_state();
-                state.mode = AppMode::AutomatedInstall;
+                state.set_mode(AppMode::AutomatedInstall);
                 state.status_message = format!("Failed to load config: {}", e);
             }
         }
@@ -289,7 +289,7 @@ impl App {
                     return_mode,
                     return_menu_selection,
                 });
-                state.mode = AppMode::EmbeddedTerminal;
+                state.set_mode(AppMode::EmbeddedTerminal);
                 Ok(())
             }
             PtySpawnResult::Fallback(reason) => {
@@ -383,7 +383,7 @@ impl App {
             state.tools_menu_selection = terminal_state.return_menu_selection;
             state.status_message = format!("{} closed", terminal_state.tool_name);
         } else {
-            state.mode = AppMode::MainMenu;
+            state.set_mode(AppMode::MainMenu);
         }
 
         Ok(())
@@ -859,7 +859,7 @@ impl App {
                     } else {
                         // Cancelled - return to automated install screen
                         state.file_browser = None;
-                        state.mode = AppMode::AutomatedInstall;
+                        state.set_mode(AppMode::AutomatedInstall);
                         state.status_message = "File selection cancelled".to_string();
                     }
                 }
@@ -894,7 +894,7 @@ impl App {
                         if let Some(prev_mode) = state.pre_dialog_mode.take() {
                             state.mode = prev_mode;
                         } else {
-                            state.mode = AppMode::ToolsMenu;
+                            state.set_mode(AppMode::ToolsMenu);
                         }
 
                         if confirmed {
@@ -912,7 +912,7 @@ impl App {
                         if let Some(prev_mode) = state.pre_dialog_mode.take() {
                             state.mode = prev_mode;
                         } else {
-                            state.mode = AppMode::ToolsMenu;
+                            state.set_mode(AppMode::ToolsMenu);
                         }
                     }
                     _ => {}
@@ -1216,14 +1216,14 @@ impl App {
             }
             AppMode::Complete => {
                 let mut state = self.lock_state();
-                state.mode = AppMode::MainMenu;
+                state.set_mode(AppMode::MainMenu);
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
             AppMode::DryRunSummary => {
                 // Dismiss dry-run summary and return to guided installer
                 let mut state = self.lock_state();
-                state.mode = AppMode::GuidedInstaller;
+                state.set_mode(AppMode::GuidedInstaller);
                 state.dry_run_summary = None;
             }
         }
@@ -1322,7 +1322,7 @@ impl App {
                                 if state.pre_dialog_mode.is_none() {
                                     state.pre_dialog_mode = Some(state.mode);
                                 }
-                                state.mode = AppMode::FloatingOutput;
+                                state.set_mode(AppMode::FloatingOutput);
                                 state.current_tool = Some(display_name);
                             }
                             self.spawn_tool_script_with_env(&script_path, cli_args, env_vars)?;
@@ -1376,18 +1376,18 @@ impl App {
         match selection {
             0 => {
                 // Guided Installer
-                state.mode = AppMode::GuidedInstaller;
+                state.set_mode(AppMode::GuidedInstaller);
                 state.status_message = "Starting guided installation...".to_string();
             }
             1 => {
                 // Automated Install
-                state.mode = AppMode::AutomatedInstall;
+                state.set_mode(AppMode::AutomatedInstall);
                 state.status_message =
                     "Select configuration file for automated installation...".to_string();
             }
             2 => {
                 // Arch Linux Tools
-                state.mode = AppMode::ToolsMenu;
+                state.set_mode(AppMode::ToolsMenu);
                 state.tools_menu_selection = 0;
                 state.status_message =
                     "Arch Linux Tools - System repair and administration".to_string();
@@ -1412,31 +1412,31 @@ impl App {
         match selection {
             0 => {
                 // Disk & Filesystem Tools
-                state.mode = AppMode::DiskTools;
+                state.set_mode(AppMode::DiskTools);
                 state.tools_menu_selection = 0;
                 state.status_message = "Disk & Filesystem Tools".to_string();
             }
             1 => {
                 // System & Boot Tools
-                state.mode = AppMode::SystemTools;
+                state.set_mode(AppMode::SystemTools);
                 state.tools_menu_selection = 0;
                 state.status_message = "System & Boot Tools".to_string();
             }
             2 => {
                 // User & Security Tools
-                state.mode = AppMode::UserTools;
+                state.set_mode(AppMode::UserTools);
                 state.tools_menu_selection = 0;
                 state.status_message = "User & Security Tools".to_string();
             }
             3 => {
                 // Network Tools
-                state.mode = AppMode::NetworkTools;
+                state.set_mode(AppMode::NetworkTools);
                 state.tools_menu_selection = 0;
                 state.status_message = "Network Tools".to_string();
             }
             4 => {
                 // Back to Main Menu
-                state.mode = AppMode::MainMenu;
+                state.set_mode(AppMode::MainMenu);
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
@@ -1464,7 +1464,7 @@ impl App {
         if is_back_option {
             // Go back to tools menu
             let mut state = self.lock_state();
-            state.mode = AppMode::ToolsMenu;
+            state.set_mode(AppMode::ToolsMenu);
             state.tools_menu_selection = 0;
             state.status_message =
                 "Arch Linux Tools - System repair and administration".to_string();
@@ -1679,7 +1679,7 @@ impl App {
                 let mut state = self.lock_state();
                 state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
                 state.confirm_dialog = Some(start_install_confirm());
-                state.mode = AppMode::ConfirmDialog;
+                state.set_mode(AppMode::ConfirmDialog);
             } else {
                 // Validation failed - status message already set in validate_configuration_for_installation
             }
@@ -1699,7 +1699,7 @@ impl App {
 
         let mut state = self.lock_state();
         state.file_browser = Some(file_browser);
-        state.mode = AppMode::FileBrowser;
+        state.set_mode(AppMode::FileBrowser);
         state.status_message = "Select a configuration file (.toml or .json)".to_string();
         Ok(())
     }
@@ -1720,19 +1720,19 @@ impl App {
             }
             AppMode::GuidedInstaller => {
                 // Go back to main menu from guided installer
-                state.mode = AppMode::MainMenu;
+                state.set_mode(AppMode::MainMenu);
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
             AppMode::AutomatedInstall => {
                 // Go back to main menu
-                state.mode = AppMode::MainMenu;
+                state.set_mode(AppMode::MainMenu);
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
             AppMode::ToolsMenu => {
                 // Go back to main menu
-                state.mode = AppMode::MainMenu;
+                state.set_mode(AppMode::MainMenu);
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
@@ -1741,7 +1741,7 @@ impl App {
             | AppMode::UserTools
             | AppMode::NetworkTools => {
                 // Go back to tools menu
-                state.mode = AppMode::ToolsMenu;
+                state.set_mode(AppMode::ToolsMenu);
                 state.tools_menu_selection = 0;
                 state.status_message =
                     "Arch Linux Tools - System repair and administration".to_string();
@@ -1756,34 +1756,34 @@ impl App {
                         | "partition_create_table" | "partition_add"
                         | "partition_delete" | "partition_action_menu" => {
                             state.pending_tool_device = None;
-                            state.mode = AppMode::DiskTools;
+                            state.set_mode(AppMode::DiskTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
                         }
                         "install_bootloader" | "generate_fstab" | "chroot" | "info"
                         | "manage_services" | "system_info" | "enable_services"
                         | "install_aur_helper" | "rebuild_initramfs" => {
-                            state.mode = AppMode::SystemTools;
+                            state.set_mode(AppMode::SystemTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
                         "add_user" | "reset_password" | "manage_groups"
                         | "configure_ssh" | "security_audit" | "install_dotfiles"
                         | "run_as_user" => {
-                            state.mode = AppMode::UserTools;
+                            state.set_mode(AppMode::UserTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
                         "configure_network" | "configure_firewall"
                         | "test_network" | "network_diagnostics"
                         | "update_mirrors" => {
-                            state.mode = AppMode::NetworkTools;
+                            state.set_mode(AppMode::NetworkTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "Network Tools".to_string();
                         }
                         _ => {
                             // Fallback to tools menu
-                            state.mode = AppMode::ToolsMenu;
+                            state.set_mode(AppMode::ToolsMenu);
                             state.tools_menu_selection = 0;
                             state.status_message =
                                 "Arch Linux Tools - System repair and administration".to_string();
@@ -1791,7 +1791,7 @@ impl App {
                     }
                 } else {
                     // Fallback to tools menu
-                    state.mode = AppMode::ToolsMenu;
+                    state.set_mode(AppMode::ToolsMenu);
                     state.tools_menu_selection = 0;
                     state.status_message =
                         "Arch Linux Tools - System repair and administration".to_string();
@@ -1810,13 +1810,13 @@ impl App {
                         registry.unregister(pid);
                     }
                 }
-                state.mode = AppMode::GuidedInstaller;
+                state.set_mode(AppMode::GuidedInstaller);
                 state.status_message =
                     "Installation cancelled - configure your settings".to_string();
             }
             AppMode::Complete => {
                 // From completion screen, go back to main menu
-                state.mode = AppMode::MainMenu;
+                state.set_mode(AppMode::MainMenu);
                 state.main_menu_selection = 0;
                 state.status_message = "Welcome to Arch Linux Toolkit".to_string();
             }
@@ -1827,7 +1827,7 @@ impl App {
             | AppMode::ConfirmDialog => {}
             AppMode::DryRunSummary => {
                 // Return to guided installer from dry-run summary
-                state.mode = AppMode::GuidedInstaller;
+                state.set_mode(AppMode::GuidedInstaller);
                 state.dry_run_summary = None;
                 state.status_message = "Dry-run complete - review your configuration".to_string();
             }
@@ -2114,7 +2114,7 @@ impl App {
         let mut state = self.lock_state();
         state.dry_run_summary = Some(summary);
         state.dry_run_scroll_offset = 0;
-        state.mode = AppMode::DryRunSummary;
+        state.set_mode(AppMode::DryRunSummary);
         state.status_message = "Test Config - review your settings (B to go back)".to_string();
         Ok(())
     }
@@ -2202,7 +2202,7 @@ impl App {
         // Update state to installation mode
         {
             let mut state = self.lock_state();
-            state.mode = AppMode::Installation;
+            state.set_mode(AppMode::Installation);
             state.status_message = "Starting installation...".to_string();
         }
 
@@ -2245,6 +2245,7 @@ impl App {
             state.config.options[current_step].clone()
         };
 
+        debug!(option = %option.name, "Opening inline editor");
         match option.name.as_str() {
             "Boot Mode" => {
                 let options = InputHandler::get_predefined_options(&option.name);
@@ -3101,6 +3102,7 @@ impl App {
         &mut self,
         partitioning_strategy: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        debug!(strategy = %partitioning_strategy, "Auto-setting encryption from strategy");
         // Only auto-set if not manual partitioning
         if partitioning_strategy != "manual" {
             let encryption_value = if partitioning_strategy.contains("luks") {
@@ -3150,6 +3152,7 @@ impl App {
         &mut self,
         desktop_env: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        debug!(de = %desktop_env, "Auto-setting DE dependencies");
         let display_manager = match desktop_env {
             "gnome" => "gdm",
             "kde" | "hyprland" | "sway" | "lxqt" | "river" | "niri" | "labwc" => "sddm",
@@ -3209,6 +3212,7 @@ impl App {
         option_name: &str,
         value: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        debug!(option = %option_name, value = %value, "Handling dependent option cascades");
         { let mut state = self.lock_state();
             match option_name {
                 "Swap" => {
@@ -4376,40 +4380,40 @@ impl App {
                         | "partition_create_table" | "partition_add"
                         | "partition_delete" | "partition_action_menu" => {
                             state.pending_tool_device = None;
-                            state.mode = AppMode::DiskTools;
+                            state.set_mode(AppMode::DiskTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "Disk & Filesystem Tools".to_string();
                         }
                         "install_bootloader" | "generate_fstab" | "chroot" | "info"
                         | "manage_services" | "system_info" | "enable_services"
                         | "install_aur_helper" | "rebuild_initramfs" => {
-                            state.mode = AppMode::SystemTools;
+                            state.set_mode(AppMode::SystemTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
                         "add_user" | "reset_password" | "manage_groups"
                         | "configure_ssh" | "security_audit" | "install_dotfiles"
                         | "run_as_user" => {
-                            state.mode = AppMode::UserTools;
+                            state.set_mode(AppMode::UserTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
                         "configure_network" | "configure_firewall"
                         | "test_network" | "network_diagnostics"
                         | "update_mirrors" => {
-                            state.mode = AppMode::NetworkTools;
+                            state.set_mode(AppMode::NetworkTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "Network Tools".to_string();
                         }
                         _ => {
-                            state.mode = AppMode::ToolsMenu;
+                            state.set_mode(AppMode::ToolsMenu);
                             state.tools_menu_selection = 0;
                             state.status_message =
                                 "Arch Linux Tools - System repair and administration".to_string();
                         }
                     }
                 } else {
-                    state.mode = AppMode::ToolsMenu;
+                    state.set_mode(AppMode::ToolsMenu);
                     state.tools_menu_selection = 0;
                     state.status_message =
                         "Arch Linux Tools - System repair and administration".to_string();
@@ -4525,7 +4529,7 @@ impl App {
             param_values,
             is_executing: false,
         });
-        state.mode = AppMode::ToolDialog;
+        state.set_mode(AppMode::ToolDialog);
         state.status_message = format!("Configure parameters for {}", tool_name);
 
         Ok(())
@@ -4748,7 +4752,7 @@ impl App {
             status,
         });
         state.pre_dialog_mode = Some(AppMode::DiskTools);
-        state.mode = AppMode::FloatingOutput;
+        state.set_mode(AppMode::FloatingOutput);
     }
 
     /// Show the partition action menu (Selection dialog with 5 options).
@@ -4780,7 +4784,7 @@ impl App {
             param_values,
             is_executing: false,
         });
-        state.mode = AppMode::ToolDialog;
+        state.set_mode(AppMode::ToolDialog);
         state.status_message = format!("Select partition action for {}", device);
     }
 
@@ -4808,7 +4812,7 @@ impl App {
             param_values,
             is_executing: false,
         });
-        state.mode = AppMode::ToolDialog;
+        state.set_mode(AppMode::ToolDialog);
         state.status_message = "Select filesystem type for formatting".to_string();
     }
 
@@ -4837,7 +4841,7 @@ impl App {
             param_values,
             is_executing: false,
         });
-        state.mode = AppMode::ToolDialog;
+        state.set_mode(AppMode::ToolDialog);
         state.status_message = "Select wipe method for disk".to_string();
     }
 
@@ -4865,7 +4869,7 @@ impl App {
             param_values,
             is_executing: false,
         });
-        state.mode = AppMode::ToolDialog;
+        state.set_mode(AppMode::ToolDialog);
         state.status_message = format!("Configure parameters for {}", tool_name);
     }
 
@@ -4921,7 +4925,7 @@ impl App {
                 status: "Dry run complete".to_string(),
             });
             state.pre_dialog_mode = Some(state.mode);
-            state.mode = AppMode::FloatingOutput;
+            state.set_mode(AppMode::FloatingOutput);
             return Ok(());
         }
 
@@ -4960,7 +4964,7 @@ impl App {
                     .with_detail(&detail2)
                     .with_action_data(&action_data),
             );
-            state.mode = AppMode::ConfirmDialog;
+            state.set_mode(AppMode::ConfirmDialog);
             return Ok(());
         }
 
@@ -5002,7 +5006,7 @@ impl App {
             if state.pre_dialog_mode.is_none() {
                 state.pre_dialog_mode = Some(state.mode);
             }
-            state.mode = AppMode::FloatingOutput;
+            state.set_mode(AppMode::FloatingOutput);
             state.current_tool = Some(display_name.to_string());
         }
 
@@ -5107,7 +5111,7 @@ impl App {
                     let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = None;
-                    state.mode = AppMode::DiskTools;
+                    state.set_mode(AppMode::DiskTools);
                     state.status_message = "No device selected".to_string();
                     return Ok(());
                 }
@@ -5139,7 +5143,7 @@ impl App {
                     }
                     _ => {
                         let mut state = self.lock_state();
-                        state.mode = AppMode::DiskTools;
+                        state.set_mode(AppMode::DiskTools);
                         state.status_message = "Unknown action selected".to_string();
                     }
                 }
@@ -5223,7 +5227,7 @@ impl App {
                     let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
-                    state.mode = AppMode::DiskTools;
+                    state.set_mode(AppMode::DiskTools);
                     state.status_message = "Create table cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
@@ -5259,7 +5263,7 @@ impl App {
                     let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
-                    state.mode = AppMode::DiskTools;
+                    state.set_mode(AppMode::DiskTools);
                     state.status_message = "Add partition cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
@@ -5293,7 +5297,7 @@ impl App {
                     let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
-                    state.mode = AppMode::DiskTools;
+                    state.set_mode(AppMode::DiskTools);
                     state.status_message = "Delete partition cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
