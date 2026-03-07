@@ -110,7 +110,7 @@ load_config_from_json() {
     export BTRFS_SNAPSHOTS="$(jq -r '.btrfs_snapshots // "No"' "$config_file")"
     export BTRFS_FREQUENCY="$(jq -r '.btrfs_frequency // "weekly"' "$config_file")"
     export BTRFS_KEEP_COUNT="$(jq -r '.btrfs_keep_count // "3"' "$config_file")"
-    export BTRFS_ASSISTANT="$(jq -r '.btrfs_assistant // "No"' "$config_file")"
+    export SNAPSHOT_TOOL="$(jq -r '.snapshot_tool // .btrfs_assistant // "none"' "$config_file")"
     export UNIFIED_KERNEL_IMAGE="$(jq -r '.unified_kernel_image // "No"' "$config_file")"
     export ENCRYPTION_KEY_TYPE="$(jq -r '.encryption_key_type // "Password"' "$config_file")"
 

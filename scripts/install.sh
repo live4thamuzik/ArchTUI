@@ -229,7 +229,7 @@ export ENCRYPTION ENCRYPTION_KEY_TYPE ENCRYPTION_PASSWORD
 BTRFS_SNAPSHOTS="${BTRFS_SNAPSHOTS:-No}"
 BTRFS_FREQUENCY="${BTRFS_FREQUENCY:-weekly}"
 BTRFS_KEEP_COUNT="${BTRFS_KEEP_COUNT:-3}"
-BTRFS_ASSISTANT="${BTRFS_ASSISTANT:-No}"
+SNAPSHOT_TOOL="${SNAPSHOT_TOOL:-none}"
 
 # Time and Location
 TIMEZONE_REGION="${TIMEZONE_REGION:-America}"
@@ -740,6 +740,22 @@ install_base_system() {
         microcode_packages+=("amd-ucode")
     fi
 
+    # Add snapshot tool packages (installed via pacstrap to avoid dbus issues in chroot)
+    local -a snapshot_packages=()
+    if [[ "$BTRFS_SNAPSHOTS" == "Yes" && "$ROOT_FILESYSTEM" == "btrfs" ]]; then
+        case "$SNAPSHOT_TOOL" in
+            "snapper")
+                snapshot_packages+=("snapper" "snap-pac")
+                if [[ "$BOOTLOADER" == "grub" ]]; then
+                    snapshot_packages+=("grub-btrfs")
+                fi
+                ;;
+            "timeshift")
+                snapshot_packages+=("timeshift")
+                ;;
+        esac
+    fi
+
     # Combine all packages
     local -a all_packages=(
         "${base_packages[@]}"
@@ -747,6 +763,7 @@ install_base_system() {
         "${fs_packages[@]}"
         "${bootloader_packages[@]}"
         "${microcode_packages[@]}"
+        "${snapshot_packages[@]}"
     )
 
     log_info "Total packages to install: ${#all_packages[@]}"
@@ -919,7 +936,7 @@ configure_chroot() {
         printf 'export BTRFS_SNAPSHOTS=%q\n' "$BTRFS_SNAPSHOTS"
         printf 'export BTRFS_FREQUENCY=%q\n' "$BTRFS_FREQUENCY"
         printf 'export BTRFS_KEEP_COUNT=%q\n' "$BTRFS_KEEP_COUNT"
-        printf 'export BTRFS_ASSISTANT=%q\n' "$BTRFS_ASSISTANT"
+        printf 'export SNAPSHOT_TOOL=%q\n' "$SNAPSHOT_TOOL"
         printf 'export SWAP=%q\n' "$SWAP"
         printf 'export WANT_SWAP=%q\n' "$WANT_SWAP"
         printf 'export SWAP_UUID=%q\n' "${SWAP_UUID:-}"
