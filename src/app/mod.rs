@@ -581,9 +581,9 @@ impl App {
                 }
                 // Sync actual installer output viewport height for scroll calculations
                 if state.mode == AppMode::Installation {
-                    // Layout: nav_bar(1) + header(7) + title(3) + progress(3) + status(1) + output(rest)
-                    // Output block has borders (2 lines), so inner height = total - 17 - 2
-                    let output_inner = f.area().height.saturating_sub(19) as usize;
+                    // Layout: nav_bar(1) + breadcrumb(1) + progress(3) + phases(1) + status(1)
+                    // Output block has borders (2 lines), so inner height = total - 7 - 2
+                    let output_inner = f.area().height.saturating_sub(9) as usize;
                     if output_inner > 0 {
                         state.installer_visible_height = output_inner;
                     }
