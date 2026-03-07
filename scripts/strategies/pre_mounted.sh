@@ -41,7 +41,7 @@ execute_pre_mounted_partitioning() {
     root_uuid=$(get_device_uuid "$root_source") || error_exit "Cannot get UUID for root device $root_source"
     export ROOT_UUID="$root_uuid"
     log_info "ROOT_UUID=$root_uuid"
-    capture_device_info "root" "$root_source" "$root_fstype"
+    capture_device_info "root" "$root_source"
 
     # Detect LUKS (if root is a dm-crypt mapper device)
     if [[ "$root_source" == /dev/mapper/* ]]; then
@@ -53,7 +53,7 @@ execute_pre_mounted_partitioning() {
             if [[ -n "${luks_uuid:-}" ]]; then
                 export LUKS_UUID="$luks_uuid"
                 log_info "LUKS_UUID=$luks_uuid (backing device: $luks_device)"
-                capture_device_info "luks" "$luks_device" "luks2"
+                capture_device_info "luks" "$luks_device"
             fi
         fi
     fi
@@ -66,9 +66,9 @@ execute_pre_mounted_partitioning() {
             boot_fstype_boot=$(findmnt -n -o FSTYPE "$boot_path" 2>/dev/null || echo "")
             log_info "Boot: $boot_source ($boot_fstype_boot) at $boot_path"
             if [[ "$boot_fstype_boot" == "vfat" ]]; then
-                capture_device_info "efi" "$boot_source" "$boot_fstype_boot"
+                capture_device_info "efi" "$boot_source"
             else
-                capture_device_info "boot" "$boot_source" "$boot_fstype_boot"
+                capture_device_info "boot" "$boot_source"
             fi
         fi
     done
@@ -97,7 +97,7 @@ execute_pre_mounted_partitioning() {
         home_source=$(findmnt -n -o SOURCE /mnt/home 2>/dev/null || echo "")
         home_fstype_home=$(findmnt -n -o FSTYPE /mnt/home 2>/dev/null || echo "")
         log_info "Home: $home_source ($home_fstype_home)"
-        capture_device_info "home" "$home_source" "$home_fstype_home"
+        capture_device_info "home" "$home_source"
     fi
 
     # Detect active swap
@@ -111,7 +111,7 @@ execute_pre_mounted_partitioning() {
             export SWAP_UUID="$swap_uuid"
             log_info "SWAP_UUID=$swap_uuid"
         fi
-        capture_device_info "swap" "$swap_device" "swap"
+        capture_device_info "swap" "$swap_device"
     fi
 
     log_success "Pre-mounted partition detection complete"

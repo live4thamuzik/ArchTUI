@@ -175,6 +175,7 @@ fi
 # Boot Configuration
 BOOT_MODE="${BOOT_MODE:-Auto}"
 SECURE_BOOT="${SECURE_BOOT:-No}"
+UNIFIED_KERNEL_IMAGE="${UNIFIED_KERNEL_IMAGE:-No}"
 
 # System Locale and Input
 LOCALE="${LOCALE:-en_US.UTF-8}"
@@ -426,13 +427,17 @@ validate_configuration() {
         return 1
     fi
 
-    # RAID strategies require at least 2 disks
+    # RAID strategies require at least 2 disks + valid RAID level
     if [[ "$PARTITIONING_STRATEGY" == *"raid"* ]]; then
         IFS=',' read -ra _raid_count_check <<< "$INSTALL_DISK"
         if [[ ${#_raid_count_check[@]} -lt 2 ]]; then
             log_error "RAID strategies require at least 2 disks (found ${#_raid_count_check[@]})"
             return 1
         fi
+        case "${RAID_LEVEL:-raid1}" in
+            raid0|raid1|raid5|raid6|raid10) ;;
+            *) log_error "Invalid RAID level: $RAID_LEVEL (must be raid0/raid1/raid5/raid6/raid10)"; return 1 ;;
+        esac
     fi
 
     # systemd-boot and efistub require kernels on FAT32 (ESP at /boot)
@@ -899,12 +904,14 @@ configure_chroot() {
         printf 'export GRUB_THEME=%q\n' "$GRUB_THEME"
         printf 'export GRUB_THEME_SELECTION=%q\n' "$GRUB_THEME_SELECTION"
         printf 'export SECURE_BOOT=%q\n' "$SECURE_BOOT"
+        printf 'export UNIFIED_KERNEL_IMAGE=%q\n' "$UNIFIED_KERNEL_IMAGE"
         printf 'export KERNEL=%q\n' "$KERNEL"
         printf 'export MULTILIB=%q\n' "$MULTILIB"
         printf 'export TIME_SYNC=%q\n' "$TIME_SYNC"
         printf 'export INSTALL_DISK=%q\n' "$INSTALL_DISK"
         printf 'export PARTITIONING_STRATEGY=%q\n' "$PARTITIONING_STRATEGY"
         printf 'export ENCRYPTION=%q\n' "$ENCRYPTION"
+        printf 'export ENCRYPTION_KEY_TYPE=%q\n' "$ENCRYPTION_KEY_TYPE"
         printf 'export ROOT_FILESYSTEM=%q\n' "$ROOT_FILESYSTEM"
         printf 'export HOME_FILESYSTEM=%q\n' "$HOME_FILESYSTEM"
         printf 'export BTRFS_SNAPSHOTS=%q\n' "$BTRFS_SNAPSHOTS"

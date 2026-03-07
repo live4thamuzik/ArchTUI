@@ -126,9 +126,9 @@ execute_simple_luks_partitioning() {
         if [ "$WANT_HOME_PARTITION" != "yes" ]; then
             include_home="yes"
         fi
-        setup_btrfs_subvolumes "/dev/mapper/cryptroot" "$include_home"
+        setup_btrfs_subvolumes "$encrypted_dev" "$include_home"
     else
-        safe_mount "/dev/mapper/cryptroot" "/mnt"
+        safe_mount "$encrypted_dev" "/mnt"
     fi
 
     # Separate home partition (if requested)

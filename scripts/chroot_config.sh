@@ -136,20 +136,27 @@ main() {
     log_info "=== Phase 1: Basic System Configuration ==="
     echo "PROGRESS: Configuring base system"
 
-    configure_localization
-    configure_hostname
-    create_user_account
-    configure_sudoers
-    enable_base_services
+    configure_localization || log_error "Locale configuration failed"
+    configure_hostname || log_error "Hostname configuration failed"
+    create_user_account || log_error "User account creation failed"
+    configure_sudoers || log_error "Sudoers configuration failed"
+    enable_base_services || log_error "Base services configuration failed"
 
     # --- Phase 2: Bootloader & Initramfs ---
     log_info "=== Phase 2: Bootloader & Initramfs ==="
     echo "PROGRESS: Configuring bootloader"
 
-    configure_mkinitcpio
-    install_bootloader
-    configure_grub_settings
+    # Boot-critical functions: failures are logged but must not prevent DE/user setup
+    # (a partially-configured system is easier to fix from live USB than a bare one)
+    local _boot_ok=true
+    configure_mkinitcpio || { log_error "mkinitcpio configuration failed — system may not boot"; _boot_ok=false; }
+    install_bootloader || { log_error "Bootloader installation failed — system may not boot"; _boot_ok=false; }
+    configure_grub_settings || { log_error "GRUB settings failed — system may not boot"; _boot_ok=false; }
     configure_secure_boot || log_warn "Secure boot configuration skipped"
+    if [[ "$_boot_ok" == "false" ]]; then
+        log_error "WARNING: Boot configuration had errors — system may not boot correctly"
+        log_error "The installer will continue to set up DE, users, and software"
+    fi
 
     # --- Phase 3: Desktop Environment ---
     log_info "=== Phase 3: Desktop Environment ==="
@@ -168,9 +175,9 @@ main() {
     fi
 
     install_aur_helper || log_warn "AUR helper installation failed — continuing"
-    install_desktop_environment
+    install_desktop_environment || log_warn "Desktop environment installation had issues — continuing"
     install_de_aur_packages || log_warn "DE AUR packages had issues — continuing"
-    install_display_manager
+    install_display_manager || log_warn "Display manager installation had issues — continuing"
     install_gpu_drivers || log_warn "GPU driver installation failed — continuing"
 
     # --- Phase 4: Additional Software (non-critical) ---
@@ -249,7 +256,9 @@ configure_localization() {
 configure_hostname() {
     log_info "Configuring hostname: ${SYSTEM_HOSTNAME:-archlinux}"
 
+    # RFC 1123: hostnames are case-insensitive; store in lowercase per Linux convention
     local hostname="${SYSTEM_HOSTNAME:-archlinux}"
+    hostname="${hostname,,}"
     log_cmd "echo $hostname > /etc/hostname"
     echo "$hostname" > /etc/hostname || { log_error "Failed to write /etc/hostname"; return 1; }
 
@@ -463,12 +472,40 @@ configure_mkinitcpio() {
             fi
         fi
 
-        # Add amdgpu module for early KMS if AMD GPU detected
-        if lspci 2>/dev/null | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
+        # Add GPU modules for early KMS (required for Plymouth + proprietary drivers)
+        # Check GPU_DRIVERS env var first, fall back to hardware detection
+        local _gpu_drv="${GPU_DRIVERS:-Auto}"
+        _gpu_drv="${_gpu_drv,,}"  # lowercase
+
+        if [[ "$_gpu_drv" == "nvidia" || "$_gpu_drv" == "nvidia-open" ]] \
+           || { [[ "$_gpu_drv" == "auto" ]] && lspci 2>/dev/null | grep -qi nvidia; }; then
+            # NVIDIA early KMS: required for Plymouth, DRM modeset, Wayland compositors
+            # https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting
+            local nvidia_mods="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
+            for nmod in $nvidia_mods; do
+                if ! grep -q "$nmod" /etc/mkinitcpio.conf; then
+                    sed -i "s/^MODULES=(\(.*\))/MODULES=(\1 $nmod)/" /etc/mkinitcpio.conf || log_warn "Failed to add $nmod module"
+                    sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
+                fi
+            done
+            log_info "Added NVIDIA modules for early KMS: $nvidia_mods"
+        fi
+
+        if [[ "$_gpu_drv" == "amd" ]] \
+           || { [[ "$_gpu_drv" == "auto" ]] && lspci 2>/dev/null | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; }; then
             if ! grep -q "amdgpu" /etc/mkinitcpio.conf; then
                 sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 amdgpu)/' /etc/mkinitcpio.conf || log_warn "Failed to add amdgpu module"
                 sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
                 log_info "Added amdgpu module for early KMS"
+            fi
+        fi
+
+        if [[ "$_gpu_drv" == "intel" ]] \
+           || { [[ "$_gpu_drv" == "auto" ]] && lspci 2>/dev/null | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; }; then
+            if ! grep -q "i915" /etc/mkinitcpio.conf; then
+                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 i915)/' /etc/mkinitcpio.conf || log_warn "Failed to add i915 module"
+                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
+                log_info "Added i915 module for early KMS"
             fi
         fi
 
@@ -697,6 +734,14 @@ install_systemd_boot() {
         options="$options splash"
     fi
 
+    # NVIDIA DRM modeset
+    local _gpu_sdb="${GPU_DRIVERS:-Auto}"
+    _gpu_sdb="${_gpu_sdb,,}"
+    if [[ "$_gpu_sdb" == "nvidia" || "$_gpu_sdb" == "nvidia-open" ]] \
+       || { [[ "$_gpu_sdb" == "auto" ]] && lspci 2>/dev/null | grep -qi nvidia; }; then
+        options="$options nvidia-drm.modeset=1"
+    fi
+
     # Microcode
     local microcode_initrd=""
     if [[ -f "${esp_path}/intel-ucode.img" ]]; then
@@ -790,6 +835,14 @@ _build_kernel_options() {
     # Plymouth splash
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
         options="$options splash"
+    fi
+
+    # NVIDIA DRM modeset
+    local _gpu_ko="${GPU_DRIVERS:-Auto}"
+    _gpu_ko="${_gpu_ko,,}"
+    if [[ "$_gpu_ko" == "nvidia" || "$_gpu_ko" == "nvidia-open" ]] \
+       || { [[ "$_gpu_ko" == "auto" ]] && lspci 2>/dev/null | grep -qi nvidia; }; then
+        options="$options nvidia-drm.modeset=1"
     fi
 
     echo "$options"
@@ -1013,6 +1066,15 @@ configure_grub_settings() {
         cmdline="$cmdline splash"
     fi
 
+    # NVIDIA DRM modeset (required for Wayland compositors, Plymouth, early KMS)
+    local _gpu_grub="${GPU_DRIVERS:-Auto}"
+    _gpu_grub="${_gpu_grub,,}"
+    if [[ "$_gpu_grub" == "nvidia" || "$_gpu_grub" == "nvidia-open" ]] \
+       || { [[ "$_gpu_grub" == "auto" ]] && lspci 2>/dev/null | grep -qi nvidia; }; then
+        cmdline="$cmdline nvidia-drm.modeset=1"
+        log_info "Added nvidia-drm.modeset=1 for NVIDIA DRM KMS"
+    fi
+
     # Update GRUB_CMDLINE_LINUX_DEFAULT
     sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"|" "$grub_default" || log_warn "Failed to update GRUB_CMDLINE_LINUX_DEFAULT"
 
@@ -1072,15 +1134,25 @@ WINEOF
         fi
     fi
 
-    # Enable GRUB_ENABLE_CRYPTODISK for encrypted /boot
+    # Enable GRUB_ENABLE_CRYPTODISK only if /boot is on the encrypted root.
+    # All auto_*_luks strategies create a SEPARATE unencrypted /boot partition,
+    # so GRUB can read it without decryption. Setting this unnecessarily causes
+    # GRUB to prompt for a password at every boot even when not needed.
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-        if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
-            echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
+        if mountpoint -q /boot 2>/dev/null; then
+            # /boot is a separate mount → unencrypted, GRUB can read it directly
+            log_info "Skipping GRUB_ENABLE_CRYPTODISK (/boot is a separate unencrypted partition)"
+        else
+            # /boot is on the encrypted root → GRUB needs crypto to read it
+            if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
+                echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
+                log_info "Enabled GRUB_ENABLE_CRYPTODISK (/boot on encrypted root)"
+            fi
         fi
     fi
 
-    # Configure GRUB theme if requested
-    configure_grub_theme
+    # Configure GRUB theme if requested (cosmetic — must not block grub-mkconfig)
+    configure_grub_theme || log_warn "GRUB theme installation failed — continuing without theme"
 
     # Generate GRUB config
     mkdir -p /boot/grub
@@ -1388,7 +1460,7 @@ install_desktop_environment() {
             ;;
         "i3"|"i3wm")
             install_packages "i3 Window Manager" i3-wm i3status i3lock dmenu rofi alacritty \
-                picom thunar xorg-server xorg-xinit feh \
+                picom dunst maim xdotool thunar xorg-server xorg-xinit feh \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
@@ -1407,7 +1479,8 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "cinnamon")
-            install_packages "Cinnamon" cinnamon nemo-fileroller xorg-server xorg-xinit \
+            install_packages "Cinnamon" cinnamon nemo-fileroller gnome-terminal gnome-screenshot \
+                xorg-server xorg-xinit \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "mate")
@@ -1415,11 +1488,15 @@ install_desktop_environment() {
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "budgie")
-            install_packages "Budgie" budgie-desktop budgie-extras xorg-server xorg-xinit \
+            install_packages "Budgie" budgie-desktop budgie-extras gnome-terminal nautilus gnome-screenshot \
+                xorg-server xorg-xinit \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "cosmic")
             install_packages "COSMIC" cosmic-session \
+                cosmic-terminal cosmic-files cosmic-text-editor cosmic-store cosmic-settings \
+                cosmic-screenshot cosmic-player cosmic-icon-theme cosmic-wallpapers \
+                cosmic-app-library cosmic-initial-setup xdg-desktop-portal-cosmic \
                 networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "deepin")
@@ -1427,7 +1504,7 @@ install_desktop_environment() {
                 networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "lxde")
-            install_packages "LXDE" lxde \
+            install_packages "LXDE" lxde xorg-server xorg-xinit \
                 networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "lxqt")
@@ -1435,17 +1512,20 @@ install_desktop_environment() {
                 networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "bspwm")
-            install_packages "bspwm" bspwm sxhkd xorg-server xorg-xinit alacritty dmenu picom feh thunar \
+            install_packages "bspwm" bspwm sxhkd xorg-server xorg-xinit alacritty dmenu picom \
+                dunst maim xdotool feh thunar \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "awesome")
-            install_packages "Awesome WM" awesome xorg-server xorg-xinit alacritty dmenu picom thunar feh \
+            install_packages "Awesome WM" awesome xorg-server xorg-xinit alacritty dmenu picom \
+                maim xdotool thunar feh \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "qtile")
-            install_packages "Qtile" qtile python-psutil xorg-server xorg-xinit alacritty dmenu picom thunar feh \
+            install_packages "Qtile" qtile python-psutil xorg-server xorg-xinit alacritty dmenu picom \
+                dunst maim xdotool thunar feh \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
@@ -1465,12 +1545,14 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "xmonad")
-            install_packages "XMonad" xmonad xmonad-contrib xmobar xorg-server xorg-xinit dmenu alacritty picom thunar feh \
+            install_packages "XMonad" xmonad xmonad-contrib xmobar xorg-server xorg-xinit dmenu alacritty picom \
+                dunst maim xdotool thunar feh \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
         "dwm")
-            install_packages "DWM" dwm xorg-server xorg-xinit dmenu alacritty picom thunar feh \
+            install_packages "DWM" dwm xorg-server xorg-xinit dmenu alacritty picom \
+                dunst maim xdotool thunar feh \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
@@ -1980,11 +2062,8 @@ configure_snapper() {
     systemctl enable snapper-timeline.timer 2>/dev/null || log_warn "Failed to enable snapper-timeline.timer"
     systemctl enable snapper-cleanup.timer 2>/dev/null || log_warn "Failed to enable snapper-cleanup.timer"
 
-    # Install snap-pac LAST so its pacman hooks don't spam dbus errors during
-    # the above pacman calls (hooks fire on every transaction, dbus unavailable in chroot)
-    pacman -S snap-pac --noconfirm --needed || log_warn "Failed to install snap-pac"
-
     # Install grub-btrfs for boot integration if using GRUB
+    # (BEFORE snap-pac so its hooks don't fire during this install)
     if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
         pacman -S grub-btrfs --noconfirm --needed || log_warn "grub-btrfs not available"
         # Enable grub-btrfs path monitoring if installed
@@ -1994,11 +2073,23 @@ configure_snapper() {
         fi
     fi
 
-    # Install btrfs-assistant if requested
+    # Install btrfs-assistant if requested (BEFORE snap-pac)
     if [[ "${BTRFS_ASSISTANT:-No}" == "Yes" ]]; then
         log_info "Installing btrfs-assistant..."
         pacman -S btrfs-assistant --noconfirm --needed || log_warn "Failed to install btrfs-assistant"
     fi
+
+    # Install snap-pac DEAD LAST — its alpm hooks call snapper which needs dbus.
+    # dbus is not running in chroot, causing "FATAL: dbus/library error" from
+    # snapper when the PostTransaction hook fires. The error is cosmetic (packages
+    # still install correctly), but alarming. We suppress by temporarily masking
+    # snapper's dbus calls via environment.
+    #
+    # snap-pac hooks invoke `snapper` which checks SNAPPER_CLEANUP env internally.
+    # Unfortunately there's no SNAPPER_NO_DBUS env var — the --no-dbus flag is
+    # CLI-only. So we install snap-pac and accept the harmless hook noise, but
+    # redirect stderr to avoid alarming the user.
+    pacman -S snap-pac --noconfirm --needed 2>/dev/null || log_warn "Failed to install snap-pac"
 
     log_success "Snapper configured for automatic Btrfs snapshots"
 }

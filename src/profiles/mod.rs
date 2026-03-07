@@ -289,6 +289,11 @@ impl Profile {
                 "rofi",
                 // Compositor (for transparency)
                 "picom",
+                // Notification daemon
+                "dunst",
+                // Screenshot
+                "maim",
+                "xdotool",
                 // File manager
                 "thunar",
                 // Display manager
@@ -340,6 +345,10 @@ impl Profile {
                 // Cinnamon desktop
                 "cinnamon",
                 "nemo-fileroller",
+                // Terminal (cinnamon doesn't include one)
+                "gnome-terminal",
+                // Screenshot
+                "gnome-screenshot",
                 // X11 essentials
                 "xorg-server",
                 "xorg-xinit",
@@ -384,6 +393,12 @@ impl Profile {
                 // Budgie desktop
                 "budgie-desktop",
                 "budgie-extras",
+                // Terminal (budgie-desktop doesn't include one)
+                "gnome-terminal",
+                // File manager
+                "nautilus",
+                // Screenshot
+                "gnome-screenshot",
                 // X11 essentials
                 "xorg-server",
                 "xorg-xinit",
@@ -405,6 +420,19 @@ impl Profile {
             Profile::Cosmic => &[
                 // COSMIC desktop (official Arch repos since 2025)
                 "cosmic-session",
+                // Core COSMIC apps (not pulled by cosmic-session)
+                "cosmic-terminal",
+                "cosmic-files",
+                "cosmic-text-editor",
+                "cosmic-store",
+                "cosmic-settings",
+                "cosmic-screenshot",
+                "cosmic-player",
+                "cosmic-icon-theme",
+                "cosmic-wallpapers",
+                "cosmic-app-library",
+                "cosmic-initial-setup",
+                "xdg-desktop-portal-cosmic",
                 // Display manager
                 "cosmic-greeter",
                 // Network
@@ -442,6 +470,9 @@ impl Profile {
             Profile::Lxde => &[
                 // LXDE desktop
                 "lxde",
+                // X11 essentials
+                "xorg-server",
+                "xorg-xinit",
                 // Display manager
                 "lxdm",
                 // Network
@@ -485,6 +516,11 @@ impl Profile {
                 "dmenu",
                 // Compositor
                 "picom",
+                // Notification daemon
+                "dunst",
+                // Screenshot
+                "maim",
+                "xdotool",
                 // Wallpaper
                 "feh",
                 // File manager
@@ -519,6 +555,9 @@ impl Profile {
                 "dmenu",
                 // Compositor
                 "picom",
+                // Screenshot
+                "maim",
+                "xdotool",
                 // File manager
                 "thunar",
                 // Wallpaper
@@ -554,6 +593,11 @@ impl Profile {
                 "dmenu",
                 // Compositor
                 "picom",
+                // Notification daemon
+                "dunst",
+                // Screenshot
+                "maim",
+                "xdotool",
                 // File manager
                 "thunar",
                 // Wallpaper
@@ -707,6 +751,11 @@ impl Profile {
                 "alacritty",
                 // Compositor
                 "picom",
+                // Notification daemon
+                "dunst",
+                // Screenshot
+                "maim",
+                "xdotool",
                 // File manager
                 "thunar",
                 // Wallpaper
@@ -741,6 +790,11 @@ impl Profile {
                 "dmenu",
                 // Compositor
                 "picom",
+                // Notification daemon
+                "dunst",
+                // Screenshot
+                "maim",
+                "xdotool",
                 // File manager
                 "thunar",
                 // Wallpaper
