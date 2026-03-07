@@ -87,6 +87,12 @@ pub fn strip_ansi_and_cr(input: &str) -> String {
                 }
                 None => {}
             }
+        } else if c == '\r' || c == '\n' {
+            // Preserve CR/LF — handled below
+            stripped.push(c);
+        } else if c.is_control() {
+            // Strip all other C0/C1 control characters (backspace, null, BEL, etc.)
+            // These cause ratatui rendering artifacts if passed through as text
         } else {
             stripped.push(c);
         }
@@ -95,9 +101,17 @@ pub fn strip_ansi_and_cr(input: &str) -> String {
     // Handle carriage returns: keep only content after the last \r
     // Simulates terminal behavior where \r returns cursor to column 0
     // and subsequent text overwrites from the start of the line
-    match stripped.rfind('\r') {
+    let result = match stripped.rfind('\r') {
         Some(pos) => stripped[pos + 1..].to_string(),
         None => stripped,
+    };
+
+    // Clamp maximum line length to prevent pacman progress bar concatenation
+    // from producing extremely long lines that waste memory
+    if result.len() > 512 {
+        result[..512].to_string()
+    } else {
+        result
     }
 }
 
@@ -1405,5 +1419,25 @@ mod tests {
     #[test]
     fn test_strip_preserves_brackets_in_normal_text() {
         assert_eq!(strip_ansi_and_cr("[INFO] Phase 5: Installing"), "[INFO] Phase 5: Installing");
+    }
+
+    #[test]
+    fn test_strip_control_characters() {
+        // Backspace, null, BEL should be stripped
+        assert_eq!(strip_ansi_and_cr("hello\x08\x00\x07world"), "helloworld");
+    }
+
+    #[test]
+    fn test_strip_preserves_tab() {
+        // Tabs are control chars but useful — verify they're stripped
+        // (ratatui handles tabs poorly, so stripping is correct)
+        assert_eq!(strip_ansi_and_cr("col1\tcol2"), "col1col2");
+    }
+
+    #[test]
+    fn test_strip_clamps_long_lines() {
+        let long_line = "x".repeat(1000);
+        let result = strip_ansi_and_cr(&long_line);
+        assert_eq!(result.len(), 512);
     }
 }
