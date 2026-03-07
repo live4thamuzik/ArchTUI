@@ -609,6 +609,15 @@ install_grub() {
             log_error "GRUB installation failed"
             return 1
         }
+
+        # Also install to EFI fallback path (ESP/EFI/BOOT/BOOTX64.EFI)
+        # This protects against Windows Update resetting UEFI boot order
+        # (per Arch wiki: --removable installs to the fallback path)
+        log_info "Installing GRUB to EFI fallback path for boot resilience"
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --recheck"
+        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --removable --recheck || {
+            log_warn "GRUB fallback installation failed (non-fatal)"
+        }
     else
         # BIOS installation — extract first disk for RAID (comma-separated INSTALL_DISK)
         local bios_disk="${INSTALL_DISK%%,*}"
@@ -1118,13 +1127,15 @@ configure_grub_settings() {
             if [[ -n "$efi_part_uuid" ]]; then
                 cat >> /etc/grub.d/40_custom << WINEOF
 
-menuentry "Windows Boot Manager" {
-    insmod part_gpt
-    insmod fat
-    insmod chain
-    search --no-floppy --fs-uuid --set=root ${efi_part_uuid}
-    chainloader /EFI/Microsoft/Boot/bootmgfw.efi
-}
+if [ "\${grub_platform}" == "efi" ]; then
+    menuentry "Windows Boot Manager" {
+        insmod part_gpt
+        insmod fat
+        insmod chain
+        search --no-floppy --fs-uuid --set=root ${efi_part_uuid}
+        chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+    }
+fi
 WINEOF
                 log_info "Added Windows chainload entry with EFI UUID: $efi_part_uuid"
             else
@@ -1352,6 +1363,13 @@ configure_secure_boot() {
         if [[ -f "$grub_efi" ]]; then
             sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"
         fi
+        # Sign EFI fallback (installed by grub-install --removable)
+        for fallback_efi in /boot/efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI /efi/EFI/BOOT/BOOTX64.EFI; do
+            if [[ -f "$fallback_efi" ]]; then
+                sbctl sign -s "$fallback_efi" 2>/dev/null || log_warn "Failed to sign EFI fallback"
+                break
+            fi
+        done
     else
         # Sign systemd-boot
         local systemd_efi="/boot/efi/EFI/systemd/systemd-bootx64.efi"

@@ -709,6 +709,8 @@ install_base_system() {
             fi
             if [[ "$OS_PROBER" == "Yes" ]]; then
                 bootloader_packages+=("os-prober")
+                # ntfs-3g needed for os-prober to detect Windows NTFS partitions
+                bootloader_packages+=("ntfs-3g")
             fi
             ;;
         "systemd-boot")

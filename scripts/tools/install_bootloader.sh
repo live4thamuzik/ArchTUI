@@ -220,6 +220,15 @@ case "$BOOTLOADER_TYPE" in
                 --efi-directory="$EFI_PATH" \
                 --bootloader-id=GRUB \
                 --recheck || error_exit "grub-install (UEFI) failed"
+
+            # Also install to EFI fallback path for boot resilience
+            # Protects against Windows Update resetting UEFI boot order
+            log_cmd "arch-chroot $ROOT_PATH grub-install --target=x86_64-efi --efi-directory=$EFI_PATH --removable --recheck"
+            arch-chroot "$ROOT_PATH" grub-install \
+                --target=x86_64-efi \
+                --efi-directory="$EFI_PATH" \
+                --removable \
+                --recheck || log_warning "GRUB fallback install failed (non-fatal)"
         else
             log_info "Installing GRUB for BIOS mode..."
             log_cmd "arch-chroot $ROOT_PATH grub-install --target=i386-pc $TARGET_DISK --recheck"
