@@ -121,7 +121,7 @@ if [[ -d "$ROOT/$BUILD_DIR" ]]; then
 fi
 
 log_cmd "arch-chroot $ROOT runuser -u $USER -- timeout 60 git clone $AUR_URL $BUILD_DIR"
-arch-chroot "$ROOT" runuser -u "$USER" -- timeout 60 git clone "$AUR_URL" "$BUILD_DIR"
+arch-chroot "$ROOT" runuser -u "$USER" -- timeout 60 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 clone "$AUR_URL" "$BUILD_DIR"
 
 if [[ ! -f "$ROOT/$BUILD_DIR/PKGBUILD" ]]; then
     log_error "PKGBUILD not found in $BUILD_DIR — clone may have failed"

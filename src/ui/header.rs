@@ -12,7 +12,7 @@ use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, Borders, Clear, Gauge, List, ListItem, Scrollbar,
+        Block, BorderType, Borders, Gauge, List, ListItem, Scrollbar,
         ScrollbarOrientation, ScrollbarState,
     },
     Frame,
@@ -42,8 +42,6 @@ pub fn render_installer_output(
     scroll_offset: usize,
     auto_scroll: bool,
 ) {
-    f.render_widget(Clear, area);
-
     let total = output.len();
 
     let content_block = Block::default()
