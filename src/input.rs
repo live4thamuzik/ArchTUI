@@ -8,7 +8,7 @@ use crate::process_guard::CommandProcessGroup;
 use crate::types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
     EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
-    SnapshotFrequency, Toggle,
+    SnapshotFrequency, SnapshotTool, Toggle,
 };
 use ratatui::widgets::ListState;
 use strum::IntoEnumIterator;
@@ -1342,8 +1342,8 @@ impl InputHandler {
             "Separate Home Partition" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Swap" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Btrfs Snapshots" => Toggle::iter().map(|v| v.to_string()).collect(),
-            "Btrfs Frequency" => SnapshotFrequency::iter().map(|v| v.to_string()).collect(),
-            "Btrfs Assistant" => Toggle::iter().map(|v| v.to_string()).collect(),
+            "Snapshot Frequency" => SnapshotFrequency::iter().map(|v| v.to_string()).collect(),
+            "Snapshot Tool" => SnapshotTool::iter().map(|v| v.to_string()).collect(),
             "Time Sync (NTP)" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Kernel" => Kernel::iter().map(|v| v.to_string()).collect(),
             "Multilib" => Toggle::iter().map(|v| v.to_string()).collect(),
@@ -1446,7 +1446,7 @@ impl InputHandler {
                 "1TB".to_string(),
                 "Remaining".to_string(),
             ],
-            "Btrfs Keep Count" => vec![
+            "Snapshot Keep Count" => vec![
                 "3".to_string(),
                 "5".to_string(),
                 "10".to_string(),

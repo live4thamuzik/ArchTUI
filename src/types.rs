@@ -334,6 +334,20 @@ pub enum GrubTheme {
     None,
 }
 
+/// Btrfs snapshot tool selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Display, EnumString, EnumIter)]
+#[strum(serialize_all = "lowercase")]
+pub enum SnapshotTool {
+    #[strum(serialize = "snapper")]
+    Snapper,
+    #[strum(serialize = "timeshift")]
+    Timeshift,
+    #[default]
+    #[strum(serialize = "none")]
+    None,
+}
+
 /// Btrfs snapshot frequency
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumIter)]
