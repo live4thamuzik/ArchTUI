@@ -980,7 +980,7 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
             vec![
                 Constraint::Length(1), // Breadcrumb
                 Constraint::Length(5), // Status banner
-                Constraint::Length(7), // Secure Boot reminder
+                Constraint::Length(10), // Secure Boot reminder
                 Constraint::Min(1),   // Output log
                 Constraint::Length(1), // Hint
             ]
@@ -1023,22 +1023,30 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
         let sb_lines = vec![
             Line::from(""),
             Line::from(Span::styled(
-                "  ACTION REQUIRED \u{2014} Secure Boot",
+                "  ACTION REQUIRED \u{2014} Secure Boot Setup",
                 Style::default()
                     .fg(Colors::WARNING)
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from(Span::styled(
-                "    1. Boot into Arch with Secure Boot OFF",
+                "    1. Reboot into new Arch install with Secure Boot still OFF",
                 Style::default().fg(Colors::WARNING),
             )),
             Line::from(Span::styled(
-                "    2. Run: /root/enroll-secure-boot-keys.sh",
+                "    2. Run: sudo /root/enroll-secure-boot-keys.sh",
                 Style::default().fg(Colors::WARNING),
             )),
             Line::from(Span::styled(
-                "    3. Reboot to UEFI firmware and enable Secure Boot",
+                "    3. If Setup Mode not active: reboot to UEFI, clear Secure Boot keys, then re-run script",
                 Style::default().fg(Colors::WARNING),
+            )),
+            Line::from(Span::styled(
+                "    4. Reboot to UEFI firmware and enable Secure Boot",
+                Style::default().fg(Colors::WARNING),
+            )),
+            Line::from(Span::styled(
+                "    Kernel updates are auto-signed via pacman hook",
+                Style::default().fg(Colors::FG_MUTED),
             )),
         ];
         let sb_para = Paragraph::new(sb_lines)

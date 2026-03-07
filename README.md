@@ -163,6 +163,22 @@ All automated strategies create an EFI System Partition and an XBOOTLDR partitio
 
 **Plymouth:** optional boot splash with theme selection (arch-glow, arch-mac-style)
 
+**Secure Boot:** optional, via sbctl. Keys are created and EFI binaries are signed during installation. A pacman hook automatically re-signs kernels on updates.
+
+---
+
+## Secure Boot setup
+
+Secure Boot key enrollment cannot be completed during installation — it requires a reboot into the installed system first. The installer creates `/root/enroll-secure-boot-keys.sh` and displays post-install instructions on the completion screen.
+
+1. **Keep Secure Boot OFF** and reboot into the new Arch install
+2. Run `sudo /root/enroll-secure-boot-keys.sh`
+3. If the script reports Setup Mode is not active: reboot to UEFI firmware settings, find Secure Boot options, and clear/reset the Secure Boot keys (this enables Setup Mode). Boot back into Arch and run the script again
+4. Once keys are enrolled: reboot to UEFI firmware settings and **enable Secure Boot**
+5. Boot normally — Secure Boot is now active with your custom keys
+
+Kernel and bootloader updates are automatically re-signed by a pacman hook (`/etc/pacman.d/hooks/95-secureboot.hook`). No manual action is needed after initial setup.
+
 ---
 
 ## Architecture
