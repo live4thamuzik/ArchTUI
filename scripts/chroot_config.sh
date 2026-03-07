@@ -1195,6 +1195,14 @@ _grub_theme_git_clone() {
         }
     fi
 
+    # Verify network/DNS works inside chroot before attempting clone
+    if ! getent hosts github.com &>/dev/null; then
+        log_warn "DNS resolution failed for github.com inside chroot — cannot clone GRUB theme"
+        log_warn "Check /etc/resolv.conf in the chroot environment"
+        rm -rf "${tmp_dir:?}"
+        return 1
+    fi
+
     log_cmd "git clone --depth 1 $repo_url"
     local clone_ok=false
     local clone_err
@@ -1224,7 +1232,7 @@ _grub_theme_git_clone() {
             log_warn "theme.txt not found in cloned repo: $repo_url"
         fi
     else
-        log_error "Failed to clone GRUB theme after 2 attempts: $repo_url"
+        log_error "Failed to clone GRUB theme after 3 attempts: $repo_url"
     fi
     rm -rf "${tmp_dir:?}"
 }
@@ -1811,6 +1819,12 @@ install_aur_helper() {
 
     log_info "Installing AUR helper: $helper"
 
+    # Verify network/DNS works inside chroot before attempting AUR clone
+    if ! getent hosts aur.archlinux.org &>/dev/null; then
+        log_warn "DNS resolution failed for aur.archlinux.org inside chroot — cannot install AUR helper"
+        return 1
+    fi
+
     # AUR helpers must be built as non-root user (unique temp dir per invocation)
     local build_dir
     build_dir=$(mktemp -d "/tmp/aur_build.XXXXXX") || { log_error "Failed to create AUR build directory"; return 1; }
@@ -2013,6 +2027,18 @@ _configure_snapper() {
     # snap-pac hooks call snapper which requires dbus — unavailable in chroot
     local hook_dir="/usr/share/libalpm/hooks"
     local hooks_disabled=false
+
+    # shellcheck disable=SC2317
+    _re_enable_snap_pac_hooks() {
+        if [[ "$hooks_disabled" == true ]]; then
+            mv "$hook_dir/snap-pac-pre.hook.disabled" "$hook_dir/snap-pac-pre.hook" 2>/dev/null || true
+            mv "$hook_dir/snap-pac-post.hook.disabled" "$hook_dir/snap-pac-post.hook" 2>/dev/null || true
+            log_info "Re-enabled snap-pac hooks"
+        fi
+    }
+    # Guarantee hooks are re-enabled on ANY exit path (normal, error, early return)
+    trap _re_enable_snap_pac_hooks RETURN
+
     if [[ -f "$hook_dir/snap-pac-pre.hook" ]]; then
         mv "$hook_dir/snap-pac-pre.hook" "$hook_dir/snap-pac-pre.hook.disabled" 2>/dev/null || true
         mv "$hook_dir/snap-pac-post.hook" "$hook_dir/snap-pac-post.hook.disabled" 2>/dev/null || true
@@ -2099,12 +2125,7 @@ _configure_snapper() {
         log_info "Enabled grub-btrfs daemon for boot menu updates"
     fi
 
-    # Re-enable snap-pac hooks now that chroot package installs are done
-    if [[ "$hooks_disabled" == true ]]; then
-        mv "$hook_dir/snap-pac-pre.hook.disabled" "$hook_dir/snap-pac-pre.hook" 2>/dev/null || true
-        mv "$hook_dir/snap-pac-post.hook.disabled" "$hook_dir/snap-pac-post.hook" 2>/dev/null || true
-        log_info "Re-enabled snap-pac hooks"
-    fi
+    # snap-pac hooks are re-enabled automatically by the RETURN trap above
 
     log_success "Snapper configured for automatic btrfs snapshots"
 }
