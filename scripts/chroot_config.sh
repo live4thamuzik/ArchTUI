@@ -146,6 +146,22 @@ main() {
     log_info "=== Phase 2: Bootloader & Initramfs ==="
     echo "PROGRESS: Configuring bootloader"
 
+    # Enable multilib repository BEFORE GPU drivers (needed for lib32 packages)
+    if [[ "${MULTILIB:-No}" == "Yes" ]]; then
+        log_info "Enabling multilib repository in chroot..."
+        sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf || log_warn "Failed to enable multilib in pacman.conf"
+        if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+            log_warn "Could not enable multilib in pacman.conf — lib32 packages may not install"
+        fi
+        log_cmd "pacman -Sy"
+        pacman -Sy || log_warn "Failed to sync multilib repository"
+        log_success "Multilib repository enabled in chroot"
+    fi
+
+    # GPU drivers MUST be installed before mkinitcpio so nvidia/amdgpu/i915
+    # kernel modules exist when added to MODULES= and initramfs is regenerated
+    install_gpu_drivers || log_warn "GPU driver installation failed — continuing"
+
     # Boot-critical functions: failures are logged but must not prevent DE/user setup
     # (a partially-configured system is easier to fix from live USB than a bare one)
     local _boot_ok=true
@@ -162,23 +178,10 @@ main() {
     log_info "=== Phase 3: Desktop Environment ==="
     echo "PROGRESS: Installing desktop environment"
 
-    # Enable multilib repository in chroot if requested
-    if [[ "${MULTILIB:-No}" == "Yes" ]]; then
-        log_info "Enabling multilib repository in chroot..."
-        sed -i '/^#\[multilib\]/,/^#Include/s/^#//' /etc/pacman.conf || log_warn "Failed to enable multilib in pacman.conf"
-        if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
-            log_warn "Could not enable multilib in pacman.conf — lib32 packages may not install"
-        fi
-        log_cmd "pacman -Sy"
-        pacman -Sy || log_warn "Failed to sync multilib repository"
-        log_success "Multilib repository enabled in chroot"
-    fi
-
     install_aur_helper || log_warn "AUR helper installation failed — continuing"
     install_desktop_environment || log_warn "Desktop environment installation had issues — continuing"
     install_de_aur_packages || log_warn "DE AUR packages had issues — continuing"
     install_display_manager || log_warn "Display manager installation had issues — continuing"
-    install_gpu_drivers || log_warn "GPU driver installation failed — continuing"
 
     # --- Phase 4: Additional Software (non-critical) ---
     log_info "=== Phase 4: Additional Software ==="
@@ -1195,12 +1198,16 @@ _grub_theme_git_clone() {
     log_cmd "git clone --depth 1 $repo_url"
     local clone_ok=false
     local clone_err
-    # Try twice — chroot DNS may take a moment to resolve on first attempt
-    for attempt in 1 2; do
-        clone_err=$(timeout 60 git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>&1) && { clone_ok=true; break; }
+    # Try 3 times — older network cards may need retries for TLS/DNS
+    # Git timeout config: abort if transfer drops below 1000 bytes/sec for 10s
+    for attempt in 1 2 3; do
+        clone_err=$(timeout 60 git \
+            -c http.lowSpeedLimit=1000 \
+            -c http.lowSpeedTime=10 \
+            clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>&1) && { clone_ok=true; break; }
         log_warn "GRUB theme clone attempt $attempt failed: $clone_err"
         rm -rf "${tmp_dir:?}/$clone_dir"
-        sleep 2
+        sleep 3
     done
 
     if [[ "$clone_ok" == "true" ]]; then
@@ -1819,7 +1826,7 @@ install_aur_helper() {
             AUR_BUILD_DIR="$build_dir" runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build paru from AUR"
 set -e
 cd "$AUR_BUILD_DIR"
-timeout 60 git clone https://aur.archlinux.org/paru.git
+timeout 60 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 clone https://aur.archlinux.org/paru.git
 [[ -d paru ]] || { echo "ERROR: paru clone directory not found"; exit 1; }
 cd paru
 timeout 300 makepkg -si --noconfirm
@@ -1833,7 +1840,7 @@ AUREOF
             AUR_BUILD_DIR="$build_dir" runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build yay from AUR"
 set -e
 cd "$AUR_BUILD_DIR"
-timeout 60 git clone https://aur.archlinux.org/yay.git
+timeout 60 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 clone https://aur.archlinux.org/yay.git
 [[ -d yay ]] || { echo "ERROR: yay clone directory not found"; exit 1; }
 cd yay
 timeout 300 makepkg -si --noconfirm
@@ -1846,7 +1853,7 @@ AUREOF
             AUR_BUILD_DIR="$build_dir" runuser -u "$MAIN_USERNAME" -- bash << 'AUREOF' || log_warn "Failed to build pikaur from AUR"
 set -e
 cd "$AUR_BUILD_DIR"
-timeout 60 git clone https://aur.archlinux.org/pikaur.git
+timeout 60 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 clone https://aur.archlinux.org/pikaur.git
 [[ -d pikaur ]] || { echo "ERROR: pikaur clone directory not found"; exit 1; }
 cd pikaur
 timeout 300 makepkg -si --noconfirm
@@ -2097,17 +2104,26 @@ configure_snapper() {
         pacman -S btrfs-assistant --noconfirm --needed || log_warn "Failed to install btrfs-assistant"
     fi
 
-    # Install snap-pac DEAD LAST — its alpm hooks call snapper which needs dbus.
-    # dbus is not running in chroot, causing "FATAL: dbus/library error" from
-    # snapper when the PostTransaction hook fires. The error is cosmetic (packages
-    # still install correctly), but alarming. We suppress by temporarily masking
-    # snapper's dbus calls via environment.
-    #
-    # snap-pac hooks invoke `snapper` which checks SNAPPER_CLEANUP env internally.
-    # Unfortunately there's no SNAPPER_NO_DBUS env var — the --no-dbus flag is
-    # CLI-only. So we install snap-pac and accept the harmless hook noise, but
-    # redirect stderr to avoid alarming the user.
-    pacman -S snap-pac --noconfirm --needed 2>/dev/null || log_warn "Failed to install snap-pac"
+    # snap-pac's alpm hooks call snapper which requires dbus — unavailable in chroot.
+    # This causes "FATAL: dbus/library error" on stdout (not suppressible with 2>/dev/null).
+    # Solution: defer snap-pac install to first boot via a one-shot systemd service.
+    cat > /etc/systemd/system/install-snap-pac.service << 'SNAPEOF'
+[Unit]
+Description=Install snap-pac (deferred from installer — requires dbus)
+After=dbus.service
+ConditionPathExists=!/usr/share/libalpm/hooks/snap-pac-pre.hook
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pacman -S snap-pac --noconfirm --needed
+ExecStartPost=/usr/bin/systemctl disable install-snap-pac.service
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SNAPEOF
+    systemctl enable install-snap-pac.service 2>/dev/null || log_warn "Failed to enable snap-pac first-boot service"
+    log_info "snap-pac will be installed on first boot (requires dbus, unavailable in chroot)"
 
     log_success "Snapper configured for automatic Btrfs snapshots"
 }
@@ -2165,7 +2181,7 @@ deploy_dotfiles() {
 
     local user_home="/home/$MAIN_USERNAME"
 
-    timeout 60 runuser -u "$MAIN_USERNAME" -- git clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
+    timeout 60 runuser -u "$MAIN_USERNAME" -- git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=10 clone "$GIT_REPOSITORY_URL" "$user_home/dotfiles" || {
         log_warn "Failed to clone dotfiles repository"
         return 0
     }

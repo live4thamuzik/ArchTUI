@@ -769,7 +769,7 @@ impl App {
                         // Check if we're in the disk layout → action loop
                         let pending_device = state.pending_tool_device.clone();
                         let tool = state.current_tool.clone();
-                        if let (Some(device), Some(ref tool_name)) = (pending_device, &tool) {
+                        if let (Some(device), Some(tool_name)) = (pending_device, &tool) {
                             match tool_name.as_str() {
                                 "manual_partition" => {
                                     // Enter = correct disk → show action menu
@@ -1859,7 +1859,7 @@ impl App {
             AppMode::ToolDialog => {
                 // Go back to the appropriate tool menu based on current tool
                 // NOTE: tool names must match what create_tool_dialog() and execute_tool() set
-                if let Some(ref tool_name) = state.current_tool {
+                if let Some(tool_name) = &state.current_tool {
                     match tool_name.as_str() {
                         "format_partition" | "wipe_disk" | "health" | "mount"
                         | "manual_partition" | "encrypt_device"
@@ -4549,7 +4549,7 @@ impl App {
                 state.current_tool = None;
                 state.pre_dialog_mode = None;
                 // Go back to appropriate tool menu
-                if let Some(ref tool_name) = current_tool {
+                if let Some(tool_name) = current_tool {
                     match tool_name.as_str() {
                         "format_partition" | "wipe_disk" | "health" | "mount"
                         | "manual_partition" | "encrypt_device"

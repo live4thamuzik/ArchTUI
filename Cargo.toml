@@ -1,8 +1,8 @@
 [package]
 name = "archtui"
 version = "0.4.0"
-edition = "2021"
-rust-version = "1.74"
+edition = "2024"
+rust-version = "1.85"
 license = "MIT"
 description = "A terminal-based interface for installing and administering Arch Linux"
 repository = "https://github.com/live4thamuzik/ArchTUI"

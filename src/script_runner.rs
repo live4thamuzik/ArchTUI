@@ -372,9 +372,10 @@ mod tests {
 
     #[test]
     fn test_log_dir_respects_env_var() {
-        std::env::set_var("ARCHTUI_LOG_DIR", "/tmp/archtui-test-logs");
+        // SAFETY: test is single-threaded, no other threads reading env vars
+        unsafe { std::env::set_var("ARCHTUI_LOG_DIR", "/tmp/archtui-test-logs") };
         let dir = log_dir();
         assert_eq!(dir, PathBuf::from("/tmp/archtui-test-logs"));
-        std::env::remove_var("ARCHTUI_LOG_DIR");
+        unsafe { std::env::remove_var("ARCHTUI_LOG_DIR") };
     }
 }
