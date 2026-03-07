@@ -361,9 +361,13 @@ mod tests {
         config.multilib = Toggle::Yes;
         let packages = resolve_packages(&config);
 
-        assert!(packages.contains(&"nvidia".to_string()));
+        assert!(packages.contains(&"nvidia-dkms".to_string()));
         assert!(packages.contains(&"nvidia-utils".to_string()));
+        assert!(packages.contains(&"libglvnd".to_string()));
+        assert!(packages.contains(&"opencl-nvidia".to_string()));
         assert!(packages.contains(&"lib32-nvidia-utils".to_string()));
+        assert!(packages.contains(&"lib32-libglvnd".to_string()));
+        assert!(packages.contains(&"lib32-opencl-nvidia".to_string()));
     }
 
     #[test]
@@ -373,10 +377,14 @@ mod tests {
         config.multilib = Toggle::No;
         let packages = resolve_packages(&config);
 
-        assert!(packages.contains(&"nvidia".to_string()));
+        assert!(packages.contains(&"nvidia-dkms".to_string()));
         assert!(packages.contains(&"nvidia-utils".to_string()));
+        assert!(packages.contains(&"libglvnd".to_string()));
+        assert!(packages.contains(&"opencl-nvidia".to_string()));
         // lib32 packages excluded
         assert!(!packages.contains(&"lib32-nvidia-utils".to_string()));
+        assert!(!packages.contains(&"lib32-libglvnd".to_string()));
+        assert!(!packages.contains(&"lib32-opencl-nvidia".to_string()));
     }
 
     #[test]
@@ -702,8 +710,8 @@ mod tests {
     #[test]
     fn test_resolve_packages_all_gpu_drivers() {
         let gpus = [
-            (GpuDriver::Nvidia, Some("nvidia")),
-            (GpuDriver::NvidiaOpen, Some("nvidia-open")),
+            (GpuDriver::Nvidia, Some("nvidia-dkms")),
+            (GpuDriver::NvidiaOpen, Some("nvidia-open-dkms")),
             (GpuDriver::Amd, Some("mesa")),
             (GpuDriver::Intel, Some("mesa")),
             (GpuDriver::Nouveau, Some("mesa")),

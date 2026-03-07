@@ -1743,7 +1743,9 @@ install_gpu_drivers() {
             # Auto-detect GPU
             if lspci | grep -qi nvidia; then
                 log_info "NVIDIA GPU detected"
-                pacman -S nvidia nvidia-utils nvidia-settings --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
+                local nvidia_auto_pkgs=(nvidia-dkms libglvnd nvidia-utils opencl-nvidia nvidia-settings)
+                [[ "$use_lib32" == "yes" ]] && nvidia_auto_pkgs+=(lib32-libglvnd lib32-nvidia-utils lib32-opencl-nvidia)
+                pacman -S "${nvidia_auto_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
             fi
             if lspci | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
                 log_info "AMD GPU detected"
@@ -1759,10 +1761,14 @@ install_gpu_drivers() {
             fi
             ;;
         "nvidia"|"NVIDIA")
-            pacman -S nvidia nvidia-utils nvidia-settings --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
+            local nvidia_pkgs=(nvidia-dkms libglvnd nvidia-utils opencl-nvidia nvidia-settings)
+            [[ "$use_lib32" == "yes" ]] && nvidia_pkgs+=(lib32-libglvnd lib32-nvidia-utils lib32-opencl-nvidia)
+            pacman -S "${nvidia_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
             ;;
         "nvidia-open")
-            pacman -S nvidia-open nvidia-utils nvidia-settings --noconfirm --needed || log_warn "Failed to install NVIDIA-open drivers"
+            local nvidia_open_pkgs=(nvidia-open-dkms libglvnd nvidia-utils opencl-nvidia nvidia-settings)
+            [[ "$use_lib32" == "yes" ]] && nvidia_open_pkgs+=(lib32-libglvnd lib32-nvidia-utils lib32-opencl-nvidia)
+            pacman -S "${nvidia_open_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install NVIDIA-open drivers"
             ;;
         "amd"|"AMD")
             local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
