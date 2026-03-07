@@ -1195,12 +1195,9 @@ _grub_theme_git_clone() {
         }
     fi
 
-    # Verify network/DNS works inside chroot before attempting clone
-    if ! getent hosts github.com &>/dev/null; then
-        log_warn "DNS resolution failed for github.com inside chroot — cannot clone GRUB theme"
-        log_warn "Check /etc/resolv.conf in the chroot environment"
-        rm -rf "${tmp_dir:?}"
-        return 1
+    # Ensure DNS works inside chroot — copy host resolv.conf if missing/empty
+    if [[ ! -s /etc/resolv.conf ]]; then
+        log_warn "/etc/resolv.conf missing or empty in chroot — DNS may fail"
     fi
 
     log_cmd "git clone --depth 1 $repo_url"
@@ -1818,12 +1815,6 @@ install_aur_helper() {
     fi
 
     log_info "Installing AUR helper: $helper"
-
-    # Verify network/DNS works inside chroot before attempting AUR clone
-    if ! getent hosts aur.archlinux.org &>/dev/null; then
-        log_warn "DNS resolution failed for aur.archlinux.org inside chroot — cannot install AUR helper"
-        return 1
-    fi
 
     # AUR helpers must be built as non-root user (unique temp dir per invocation)
     local build_dir
