@@ -821,22 +821,69 @@ impl App {
                 KeyCode::Up => {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
-                        if output.scroll_offset > 0 {
-                            output.scroll_offset -= 1;
+                        // Estimate visible height: 70% of terminal height - 4 (borders+footer)
+                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
+                        if output.auto_scroll {
+                            // Snap offset to actual bottom before scrolling up
                             output.auto_scroll = false;
+                            output.scroll_offset = output.content.len().saturating_sub(visible_h);
                         }
+                        output.scroll_offset = output.scroll_offset.saturating_sub(1);
                     }
                 }
                 KeyCode::Down => {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
-                        let max = output.content.len().saturating_sub(1);
-                        if output.scroll_offset < max {
+                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
+                        let max_offset = output.content.len().saturating_sub(visible_h);
+                        if output.scroll_offset < max_offset {
                             output.scroll_offset += 1;
                         }
-                        if output.scroll_offset >= max {
+                        if output.scroll_offset >= max_offset {
                             output.auto_scroll = true;
                         }
+                    }
+                }
+                KeyCode::PageUp => {
+                    let mut state = self.lock_state();
+                    if let Some(ref mut output) = state.floating_output {
+                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
+                        if output.auto_scroll {
+                            output.auto_scroll = false;
+                            output.scroll_offset = output.content.len().saturating_sub(visible_h);
+                        }
+                        output.scroll_offset = output.scroll_offset.saturating_sub(visible_h);
+                    }
+                }
+                KeyCode::PageDown => {
+                    let mut state = self.lock_state();
+                    if let Some(ref mut output) = state.floating_output {
+                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
+                        let max_offset = output.content.len().saturating_sub(visible_h);
+                        output.scroll_offset = (output.scroll_offset + visible_h).min(max_offset);
+                        if output.scroll_offset >= max_offset {
+                            output.auto_scroll = true;
+                        }
+                    }
+                }
+                KeyCode::Home => {
+                    let mut state = self.lock_state();
+                    if let Some(ref mut output) = state.floating_output {
+                        output.auto_scroll = false;
+                        output.scroll_offset = 0;
+                    }
+                }
+                KeyCode::End => {
+                    let mut state = self.lock_state();
+                    if let Some(ref mut output) = state.floating_output {
+                        output.auto_scroll = true;
+                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
+                        output.scroll_offset = output.content.len().saturating_sub(visible_h);
                     }
                 }
                 _ => {}
@@ -1051,7 +1098,7 @@ impl App {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_up();
                 }
-                AppMode::Installation => {
+                AppMode::Installation | AppMode::Complete => {
                     // Snapshot current position when switching from auto to manual
                     if state.installer_auto_scroll {
                         state.installer_scroll_offset =
@@ -1119,15 +1166,13 @@ impl App {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_down();
                 }
-                AppMode::Installation => {
-                    let max_offset = state.installer_output.len().saturating_sub(1);
+                AppMode::Installation | AppMode::Complete => {
+                    let max_offset = state.installer_output.len()
+                        .saturating_sub(state.installer_visible_height);
                     if state.installer_scroll_offset < max_offset {
                         state.installer_scroll_offset += 1;
                     }
-                    // Re-enable auto-scroll when scrolled near bottom
-                    if state.installer_scroll_offset
-                        >= state.installer_output.len().saturating_sub(state.installer_visible_height)
-                    {
+                    if state.installer_scroll_offset >= max_offset {
                         state.installer_auto_scroll = true;
                     }
                 }
@@ -1144,38 +1189,79 @@ impl App {
         }
     }
 
-    /// Page up in configuration list
+    /// Page up in configuration list or installer output
     fn page_up(&self) {
         { let mut state = self.lock_state();
-            if state.mode == AppMode::GuidedInstaller {
-                state.config_scroll.page_up();
+            match state.mode {
+                AppMode::GuidedInstaller => {
+                    state.config_scroll.page_up();
+                }
+                AppMode::Installation | AppMode::Complete => {
+                    let vh = state.installer_visible_height;
+                    if state.installer_auto_scroll {
+                        state.installer_auto_scroll = false;
+                        state.installer_scroll_offset =
+                            state.installer_output.len().saturating_sub(vh);
+                    }
+                    state.installer_scroll_offset =
+                        state.installer_scroll_offset.saturating_sub(vh);
+                }
+                _ => {}
             }
         }
     }
 
-    /// Page down in configuration list
+    /// Page down in configuration list or installer output
     fn page_down(&self) {
         { let mut state = self.lock_state();
-            if state.mode == AppMode::GuidedInstaller {
-                state.config_scroll.page_down();
+            match state.mode {
+                AppMode::GuidedInstaller => {
+                    state.config_scroll.page_down();
+                }
+                AppMode::Installation | AppMode::Complete => {
+                    let vh = state.installer_visible_height;
+                    let max_offset = state.installer_output.len().saturating_sub(vh);
+                    state.installer_scroll_offset =
+                        (state.installer_scroll_offset + vh).min(max_offset);
+                    if state.installer_scroll_offset >= max_offset {
+                        state.installer_auto_scroll = true;
+                    }
+                }
+                _ => {}
             }
         }
     }
 
-    /// Move to first configuration option
+    /// Move to first configuration option or top of installer output
     fn move_to_first(&self) {
         { let mut state = self.lock_state();
-            if state.mode == AppMode::GuidedInstaller {
-                state.config_scroll.move_to_first();
+            match state.mode {
+                AppMode::GuidedInstaller => {
+                    state.config_scroll.move_to_first();
+                }
+                AppMode::Installation | AppMode::Complete => {
+                    state.installer_auto_scroll = false;
+                    state.installer_scroll_offset = 0;
+                }
+                _ => {}
             }
         }
     }
 
-    /// Move to last configuration option
+    /// Move to last configuration option or bottom of installer output
     fn move_to_last(&self) {
         { let mut state = self.lock_state();
-            if state.mode == AppMode::GuidedInstaller {
-                state.config_scroll.move_to_last();
+            match state.mode {
+                AppMode::GuidedInstaller => {
+                    state.config_scroll.move_to_last();
+                }
+                AppMode::Installation | AppMode::Complete => {
+                    state.installer_auto_scroll = true;
+                    let vh = state.installer_visible_height;
+                    state.installer_scroll_offset =
+                        state.installer_output.len().saturating_sub(vh);
+                }
+                _ => {}
             }
         }
     }

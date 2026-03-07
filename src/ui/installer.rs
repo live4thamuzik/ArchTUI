@@ -445,8 +445,14 @@ fn render_detail_text_input(
         .unwrap_or_else(|| " ".to_string());
     let rest: String = display_value.chars().skip(cursor + 1).collect();
 
+    // Box inner width between │ and │ (matches dash count in top/bottom borders)
+    let box_inner = area.width.saturating_sub(6) as usize;
+    // "│ " provides 1 space left, " │" provides 1 space right = 2 chars overhead
+    let text_len = before.chars().count() + cursor_char.chars().count() + rest.chars().count();
+    let pad = box_inner.saturating_sub(text_len + 2);
+
     let input_line = Line::from(vec![
-        Span::styled("  ", Style::default()),
+        Span::styled("  \u{2502} ", Style::default().fg(Colors::BORDER_ACTIVE)),
         Span::styled(before, Style::default().fg(Colors::FG_PRIMARY)),
         Span::styled(
             cursor_char,
@@ -454,7 +460,11 @@ fn render_detail_text_input(
                 .fg(Colors::BG_PRIMARY)
                 .bg(Colors::SECONDARY),
         ),
-        Span::styled(rest, Style::default().fg(Colors::FG_PRIMARY)),
+        Span::styled(
+            format!("{}{}", rest, " ".repeat(pad)),
+            Style::default().fg(Colors::FG_PRIMARY),
+        ),
+        Span::styled(" \u{2502}", Style::default().fg(Colors::BORDER_ACTIVE)),
     ]);
 
     let mut lines = vec![
@@ -1041,9 +1051,24 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
     };
     let hint_idx = log_idx + 1;
 
-    // Output log (tail)
+    // Output log (scrollable — reuses installer_scroll_offset from Installation mode)
     let total_lines = state.installer_output.len();
-    let pos_text = format!(" {}/{} lines ", total_lines, total_lines);
+    let output_block_tmp = panel_inactive("Installer Output");
+    let output_inner_area = output_block_tmp.inner(layout[log_idx]);
+    let output_visible = output_inner_area.height as usize;
+
+    let output_start = if state.installer_auto_scroll {
+        total_lines.saturating_sub(output_visible)
+    } else {
+        state.installer_scroll_offset.min(total_lines.saturating_sub(output_visible))
+    };
+    let output_end = (output_start + output_visible).min(total_lines);
+
+    let pos_text = if total_lines > output_visible {
+        format!(" {}-{}/{} ", output_start + 1, output_end, total_lines)
+    } else {
+        format!(" {}/{} lines ", total_lines, total_lines)
+    };
     let output_block = panel_inactive("Installer Output").title_bottom(
         Line::from(vec![Span::styled(
             pos_text,
@@ -1054,9 +1079,7 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
     let inner_area = output_block.inner(layout[log_idx]);
     f.render_widget(output_block, layout[log_idx]);
 
-    let visible_height = inner_area.height as usize;
-    let start = state.installer_output.len().saturating_sub(visible_height);
-    let tail: Vec<ListItem> = state.installer_output[start..]
+    let tail: Vec<ListItem> = state.installer_output[output_start..output_end]
         .iter()
         .map(|line| {
             let style = if line.contains("ERROR") || line.contains("error") {
@@ -1079,8 +1102,8 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(output_list, inner_area);
 
     // Scrollbar on output
-    if total_lines > visible_height {
-        let mut scrollbar_state = ScrollbarState::new(total_lines).position(start);
+    if total_lines > output_visible {
+        let mut scrollbar_state = ScrollbarState::new(total_lines).position(output_start);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(None)
             .end_symbol(None)
