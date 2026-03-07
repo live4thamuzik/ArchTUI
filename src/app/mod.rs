@@ -194,7 +194,7 @@ impl App {
         }
     }
 
-    /// Load a configuration file and start installation
+    /// Load a configuration file and show confirmation dialog to start installation
     fn load_config_file(&mut self, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
         use crate::config_file::InstallationConfig;
 
@@ -209,44 +209,45 @@ impl App {
             Ok(config) => {
                 match config.validate() {
                     Ok(_) => {
-                        // Config is valid - start installation
-                        let mut state = self.lock_state();
-                        state.status_message = format!(
-                            "Configuration loaded from: {}",
-                            path.display()
+                        // Config is valid — show summary and confirm dialog
+                        info!(path = %path.display(), "Configuration loaded and validated");
+
+                        let mut summary = format!(
+                            "Configuration: {}\n\n\
+                             Disk: {}\n\
+                             Strategy: {}\n\
+                             Hostname: {}\n\
+                             Username: {}\n\
+                             Bootloader: {}",
+                            path.display(),
+                            config.install_disk,
+                            config.partitioning_strategy,
+                            config.hostname,
+                            config.username,
+                            config.bootloader,
                         );
 
-                        // Set up floating output to show config details
-                        let mut content = vec![
-                            format!("Configuration file: {}", path.display()),
-                            String::new(),
-                            "Configuration loaded successfully!".to_string(),
-                            String::new(),
-                            format!("Disk: {}", config.install_disk),
-                            format!("Hostname: {}", config.hostname),
-                            format!("Username: {}", config.username),
-                            format!("Bootloader: {}", config.bootloader),
-                            String::new(),
-                        ];
-
                         if config.desktop_environment != crate::types::DesktopEnvironment::None {
-                            content.push(format!("Desktop: {}", config.desktop_environment));
+                            summary.push_str(&format!("\nDesktop: {}", config.desktop_environment));
                         }
 
-                        content.push(String::new());
-                        content.push("Press Enter to start installation or Esc to cancel".to_string());
+                        summary.push_str("\n\nProceed with installation?");
 
-                        state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
-                            title: "Configuration Loaded".to_string(),
-                            content,
-                            scroll_offset: 0,
-                            auto_scroll: false,
-                            complete: true,
-                            progress: None,
-                            status: "Ready to install".to_string(),
-                        });
+                        // Store the loaded config for use when confirmed
+                        let mut state = self.lock_state();
+                        state.loaded_file_config = Some(config);
                         state.pre_dialog_mode = Some(AppMode::AutomatedInstall);
-                        state.set_mode(AppMode::FloatingOutput);
+                        state.confirm_dialog = Some(
+                            ConfirmDialogState::new(
+                                "Start Installation",
+                                &summary,
+                                crate::components::confirm_dialog::ConfirmSeverity::Warning,
+                                "start_installation_from_file",
+                            )
+                            .with_detail("The target disk will be formatted")
+                            .with_detail("Do not power off during installation"),
+                        );
+                        state.set_mode(AppMode::ConfirmDialog);
                     }
                     Err(e) => {
                         let mut state = self.lock_state();
@@ -728,6 +729,24 @@ impl App {
                         }
                     }
                     return Ok(false);
+                }
+
+                // Secure Boot: warning acknowledged → show Yes/No selection instead of writing "acknowledged"
+                if value == "acknowledged" {
+                    let is_secure_boot = {
+                        let state = self.lock_state();
+                        state.config_scroll.selected_index < state.config.options.len()
+                            && state.config.options[state.config_scroll.selected_index].name == "Secure Boot"
+                    };
+                    if is_secure_boot {
+                        let options = InputHandler::get_predefined_options("Secure Boot");
+                        let current = {
+                            let state = self.lock_state();
+                            state.config.options[state.config_scroll.selected_index].get_value()
+                        };
+                        self.set_inline_selection(options, current);
+                        return Ok(false);
+                    }
                 }
 
                 // User confirmed input, update configuration
@@ -1270,8 +1289,12 @@ impl App {
                 }
             }
             "start_installation" => {
-                // Start the installation process
+                // Start the installation process from TUI config
                 self.start_installation()?;
+            }
+            "start_installation_from_file" => {
+                // Start installation from a loaded config file
+                self.start_installation_from_file_config()?;
             }
             "execute_tool" => {
                 if let Some(data) = data {
@@ -2003,18 +2026,34 @@ impl App {
             let mut state = self.lock_state();
             let errors = self.get_validation_errors(&config);
 
+            // Show validation errors prominently via FloatingOutput
+            let mut content = vec![
+                "Configuration is not ready for installation:".to_string(),
+                String::new(),
+            ];
             if errors.is_empty() {
-                state.status_message =
-                    "Cannot start installation: configuration is invalid".to_string();
-            } else if errors.len() == 1 {
-                state.status_message = format!("Cannot start installation: {}", errors[0]);
+                content.push("  - One or more required fields are invalid".to_string());
             } else {
-                state.status_message = format!(
-                    "Cannot start installation: {} (and {} more errors)",
-                    errors[0],
-                    errors.len() - 1
-                );
+                for err in &errors {
+                    content.push(format!("  - {}", err));
+                }
             }
+            content.push(String::new());
+            content.push("Fix the errors above, then try again.".to_string());
+            content.push("Press Enter or Esc to dismiss.".to_string());
+
+            state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
+                title: "Validation Failed".to_string(),
+                content,
+                scroll_offset: 0,
+                auto_scroll: false,
+                complete: true,
+                progress: None,
+                status: format!("{} error(s) found", errors.len().max(1)),
+            });
+            state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
+            state.set_mode(AppMode::FloatingOutput);
+
             false
         }
     }
@@ -2131,15 +2170,34 @@ impl App {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("archtui-config.json");
 
-        let mut state = self.lock_state();
         match file_config.save_to_file(&export_path) {
             Ok(()) => {
                 info!("Exported config to: {}", export_path.display());
+                let mut state = self.lock_state();
                 state.status_message =
                     format!("Config exported to {}", export_path.display());
+                state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
+                    title: "Configuration Exported".to_string(),
+                    content: vec![
+                        format!("Saved to: {}", export_path.display()),
+                        String::new(),
+                        "Use this file with:".to_string(),
+                        format!("  archtui install --config {}", export_path.display()),
+                        String::new(),
+                        "Press Enter or Esc to dismiss".to_string(),
+                    ],
+                    scroll_offset: 0,
+                    auto_scroll: false,
+                    complete: true,
+                    progress: None,
+                    status: "Export complete".to_string(),
+                });
+                state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
+                state.set_mode(AppMode::FloatingOutput);
             }
             Err(e) => {
                 tracing::error!("Failed to export config: {}", e);
+                let mut state = self.lock_state();
                 state.status_message = format!("Export failed: {}", e);
             }
         }
@@ -2223,6 +2281,44 @@ impl App {
         Ok(())
     }
 
+    /// Start installation from a previously loaded file-based InstallationConfig.
+    /// Called when the user confirms the ConfirmDialog after loading a config file.
+    fn start_installation_from_file_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Extract the loaded config from state
+        let file_config = {
+            let mut state = self.lock_state();
+            state.loaded_file_config.take()
+        };
+
+        let file_config = match file_config {
+            Some(c) => c,
+            None => {
+                let mut state = self.lock_state();
+                state.status_message = "No configuration file loaded".to_string();
+                return Ok(());
+            }
+        };
+
+        info!(disk = %file_config.install_disk, hostname = %file_config.hostname,
+              "Starting installation from file config");
+
+        // Update state to installation mode
+        {
+            let mut state = self.lock_state();
+            state.set_mode(AppMode::Installation);
+            state.status_message = "Starting installation...".to_string();
+        }
+
+        // Create installer from file config and start
+        self.installer = Some(Installer::from_file_config(&file_config, Arc::clone(&self.state)));
+
+        if let Some(ref mut installer) = self.installer {
+            installer.start()?;
+        }
+
+        Ok(())
+    }
+
     // =========================================================================
     // SECTION: Inline Config Editor (Redesigned TUI)
     // =========================================================================
@@ -2266,25 +2362,9 @@ impl App {
                     return Ok(());
                 }
 
-                let warning_shown = {
-                    let state = self.lock_state();
-                    state.secure_boot_warning_shown
-                };
-
-                if !warning_shown {
-                    {
-                        let mut state = self.lock_state();
-                        state.secure_boot_warning_shown = true;
-                    }
-                    self.show_secure_boot_warning();
-                } else {
-                    {
-                        let mut state = self.lock_state();
-                        state.secure_boot_warning_shown = false;
-                    }
-                    let options = InputHandler::get_predefined_options(&option.name);
-                    self.set_inline_selection(options, option.get_value());
-                }
+                // Always show warning first — when dismissed, the "acknowledged"
+                // handler above will immediately open the Yes/No selection
+                self.show_secure_boot_warning();
             }
             "Encryption" => {
                 let partitioning_strategy = {
