@@ -107,9 +107,13 @@ pub fn strip_ansi_and_cr(input: &str) -> String {
     };
 
     // Clamp maximum line length to prevent pacman progress bar concatenation
-    // from producing extremely long lines that waste memory
+    // from producing extremely long lines that waste memory.
+    // Use char_indices for UTF-8 safe truncation (byte slicing panics on boundaries).
     if result.len() > 512 {
-        result[..512].to_string()
+        match result.char_indices().nth(512) {
+            Some((byte_pos, _)) => result[..byte_pos].to_string(),
+            None => result, // fewer than 512 chars despite >512 bytes
+        }
     } else {
         result
     }
@@ -1438,6 +1442,16 @@ mod tests {
     fn test_strip_clamps_long_lines() {
         let long_line = "x".repeat(1000);
         let result = strip_ansi_and_cr(&long_line);
-        assert_eq!(result.len(), 512);
+        assert_eq!(result.chars().count(), 512);
+    }
+
+    #[test]
+    fn test_strip_clamps_utf8_safe() {
+        // 513 multi-byte chars (each 3 bytes in UTF-8) → must not panic
+        let long_utf8 = "\u{2713}".repeat(513); // ✓ = 3 bytes each
+        let result = strip_ansi_and_cr(&long_utf8);
+        assert_eq!(result.chars().count(), 512);
+        // Verify result is valid UTF-8 (would panic on construction if not)
+        assert!(result.is_char_boundary(result.len()));
     }
 }

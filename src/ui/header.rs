@@ -114,10 +114,21 @@ pub fn render_installer_output(
                     .fg(Colors::FG_PRIMARY)
                     .bg(Colors::BG_PRIMARY)
             };
-            // Truncate to display width then pad — prevents line wrapping artifacts
-            let truncated: String = line.chars().take(pad_width).collect();
-            let padded = format!("{:<pad_width$}", truncated);
-            ListItem::new(padded).style(style)
+            // Truncate to display width then pad with spaces — prevents line
+            // wrapping artifacts. Uses char count as proxy for column width
+            // (safe for ASCII-dominated installer output; avoids unicode-width dep).
+            if pad_width == 0 {
+                ListItem::new("").style(style)
+            } else {
+                let truncated: String = line.chars().take(pad_width).collect();
+                let char_count = truncated.chars().count();
+                let pad = pad_width.saturating_sub(char_count);
+                let mut padded = truncated;
+                for _ in 0..pad {
+                    padded.push(' ');
+                }
+                ListItem::new(padded).style(style)
+            }
         })
         .collect();
 
