@@ -294,7 +294,7 @@ What exists and works:
 - Pre-install orchestration (mirror ranking with network awareness)
 - Post-install orchestration (AUR helper, dotfiles — non-fatal)
 - Comprehensive logging (master log, per-script verbose trace, config dump, `log_cmd` before all destructive ops)
-- 337 unit tests passing
+- 338 unit tests passing
 - CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit)
 
 What is incomplete or untested:
