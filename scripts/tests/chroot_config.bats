@@ -168,8 +168,8 @@ teardown() {
     grep -q 'hooks=.*plymouth' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
-@test "configure_mkinitcpio adds sd-encrypt hook for encrypted systems" {
-    # plymouth-encrypt replaced by sd-encrypt (systemd-based initramfs)
+@test "configure_mkinitcpio adds sd-encrypt hook for FIDO2 encrypted systems" {
+    # sd-encrypt used only with FIDO2 (requires systemd hooks + crypttab.initramfs)
     grep -q 'sd-encrypt' "$SCRIPTS_DIR/chroot_config.sh"
 }
 

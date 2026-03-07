@@ -378,33 +378,54 @@ configure_mkinitcpio() {
     log_info "Configuring mkinitcpio..."
 
     # Build hooks list based on configuration
-    # Systemd-based hooks (default since mkinitcpio 39, 2025):
     # https://wiki.archlinux.org/title/Mkinitcpio
     # https://wiki.archlinux.org/title/Dm-crypt/System_configuration
     #
-    # Standard: base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
-    # Encrypted: base systemd keyboard sd-vconsole autodetect microcode modconf kms block [plymouth] sd-encrypt [lvm2] [resume] filesystems [fsck]
+    # Traditional (udev-based) hooks — most common, battle-tested:
+    #   Standard:  base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck
+    #   Encrypted: base udev keyboard keymap consolefont autodetect microcode modconf kms block [plymouth] encrypt [lvm2] [resume] filesystems [fsck]
+    #   encrypt hook uses cryptdevice=UUID:mapper kernel params
     #
-    # Key requirements per wiki:
-    # - systemd replaces udev (provides device management + more)
-    # - sd-vconsole replaces keymap + consolefont (reads /etc/vconsole.conf)
-    # - sd-encrypt replaces encrypt (uses rd.luks.name= kernel params)
-    # - keyboard/sd-vconsole: BEFORE sd-encrypt (so keyboard works for password entry)
-    # - plymouth: BEFORE sd-encrypt (for graphical password prompt)
-    # - For hardware compatibility (varying keyboards): keyboard BEFORE autodetect
+    # FIDO2 requires systemd-based hooks (sd-encrypt + crypttab.initramfs):
+    #   Encrypted: base systemd keyboard sd-vconsole autodetect microcode modconf kms block [plymouth] sd-encrypt [lvm2] [resume] filesystems [fsck]
+    #   sd-encrypt hook uses rd.luks.name=UUID=mapper kernel params
+    #
+    # Key requirements:
+    # - keyboard/keymap: BEFORE encrypt (so keyboard works for password entry)
+    # - plymouth: BEFORE encrypt (for graphical password prompt)
+    # - For hardware compatibility: keyboard BEFORE autodetect
     local hooks=""
+    local use_systemd_hooks=false
 
-    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-        # Encrypted: keyboard before autodetect for hardware compatibility
-        # This ensures keyboard works even if booting on different hardware than image was built on
-        hooks="base systemd keyboard sd-vconsole autodetect microcode modconf kms block"
-        log_info "Using encrypted system hook order (keyboard before autodetect for compatibility)"
-    else
-        # Non-encrypted: standard systemd-based hook order
-        hooks="base systemd autodetect microcode modconf kms keyboard sd-vconsole block"
+    # FIDO2 encryption requires systemd hooks (sd-encrypt + crypttab.initramfs)
+    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        use_systemd_hooks=true
     fi
 
-    # Add RAID hook if using RAID (must come before sd-encrypt/lvm2)
+    local is_encrypted=false
+    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+        is_encrypted=true
+    fi
+
+    if [[ "$use_systemd_hooks" == true ]]; then
+        # Systemd-based hooks (required for FIDO2)
+        if [[ "$is_encrypted" == true ]]; then
+            hooks="base systemd keyboard sd-vconsole autodetect microcode modconf kms block"
+            log_info "Using systemd hook order (FIDO2 encryption requires sd-encrypt)"
+        else
+            hooks="base systemd autodetect microcode modconf kms keyboard sd-vconsole block"
+        fi
+    else
+        # Traditional udev-based hooks (standard Arch setup)
+        if [[ "$is_encrypted" == true ]]; then
+            hooks="base udev keyboard keymap consolefont autodetect microcode modconf kms block"
+            log_info "Using encrypted system hook order (keyboard before autodetect for compatibility)"
+        else
+            hooks="base udev autodetect microcode modconf kms keyboard keymap consolefont block"
+        fi
+    fi
+
+    # Add RAID hook if using RAID (must come before encrypt/lvm2)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
         hooks="$hooks mdadm_udev"
         log_info "Added mdadm_udev hook for RAID"
@@ -416,22 +437,26 @@ configure_mkinitcpio() {
         fi
     fi
 
-    # Add Plymouth hook BEFORE sd-encrypt (per Arch Wiki: "place plymouth before the encrypt hook")
+    # Add Plymouth hook BEFORE encrypt (per Arch Wiki: "place plymouth before the encrypt hook")
     # Install plymouth BEFORE adding hook so hook files exist when mkinitcpio -P runs
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
         pacman -S plymouth --noconfirm --needed || log_warn "Failed to install plymouth"
         hooks="$hooks plymouth"
-        log_info "Added plymouth hook (before sd-encrypt per Arch Wiki)"
+        log_info "Added plymouth hook (before encrypt per Arch Wiki)"
     fi
 
-    # Add sd-encrypt hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
-    # sd-encrypt uses rd.luks.name= kernel params instead of cryptdevice=
-    if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-        hooks="$hooks sd-encrypt"
-        log_info "Added sd-encrypt hook for LUKS"
+    # Add encrypt hook if using LUKS (must come before lvm2 for LUKS-on-LVM)
+    if [[ "$is_encrypted" == true ]]; then
+        if [[ "$use_systemd_hooks" == true ]]; then
+            hooks="$hooks sd-encrypt"
+            log_info "Added sd-encrypt hook for LUKS (FIDO2 mode)"
+        else
+            hooks="$hooks encrypt"
+            log_info "Added encrypt hook for LUKS"
+        fi
     fi
 
-    # Add LVM hook if using LVM (must come after sd-encrypt for LUKS-on-LVM)
+    # Add LVM hook if using LVM (must come after encrypt for LUKS-on-LVM)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
         hooks="$hooks lvm2"
         log_info "Added lvm2 hook"
@@ -561,6 +586,21 @@ configure_mkinitcpio() {
     else
         log_error "mkinitcpio.conf not found"
         return 1
+    fi
+}
+
+# Build encryption kernel parameters based on hook type
+# FIDO2 uses systemd hooks (rd.luks.name=), standard LUKS uses traditional (cryptdevice=)
+_build_luks_kernel_params() {
+    local luks_uuid="$1"
+    local mapper_name="$2"
+
+    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        # systemd sd-encrypt: rd.luks.name=UUID=mapper
+        echo "rd.luks.name=${luks_uuid}=${mapper_name}"
+    else
+        # traditional encrypt: cryptdevice=UUID:mapper
+        echo "cryptdevice=UUID=${luks_uuid}:${mapper_name}"
     fi
 }
 
@@ -709,15 +749,17 @@ install_systemd_boot() {
     # Build options line
     local options=""
 
-    # Handle encryption (sd-encrypt uses rd.luks.name= instead of cryptdevice=)
+    # Handle encryption
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if [[ -n "${LUKS_UUID:-}" ]]; then
             local mapper_name="cryptroot"
             [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
+            local luks_param
+            luks_param=$(_build_luks_kernel_params "$LUKS_UUID" "$mapper_name")
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
-                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/archvg/root"
+                options="${luks_param} root=/dev/archvg/root"
             else
-                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/mapper/${mapper_name}"
+                options="${luks_param} root=/dev/mapper/${mapper_name}"
             fi
         else
             log_error "LUKS_UUID not set for encrypted system — systemd-boot entry will be invalid"
@@ -807,10 +849,12 @@ _build_kernel_options() {
         if [[ -n "${LUKS_UUID:-}" ]]; then
             local mapper_name="cryptroot"
             [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] && mapper_name="cryptlvm"
+            local luks_param
+            luks_param=$(_build_luks_kernel_params "$LUKS_UUID" "$mapper_name")
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
-                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/archvg/root"
+                options="${luks_param} root=/dev/archvg/root"
             else
-                options="rd.luks.name=${LUKS_UUID}=${mapper_name} root=/dev/mapper/${mapper_name}"
+                options="${luks_param} root=/dev/mapper/${mapper_name}"
             fi
         else
             log_error "LUKS_UUID not set for encrypted system"
@@ -1041,7 +1085,7 @@ configure_grub_settings() {
     # Build kernel command line
     local cmdline="quiet"
 
-    # Add encryption parameters if needed (sd-encrypt uses rd.luks.name= instead of cryptdevice=)
+    # Add encryption parameters if needed
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         if [[ -n "${LUKS_UUID:-}" ]]; then
             # Determine mapper name based on strategy
@@ -1049,7 +1093,9 @@ configure_grub_settings() {
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
                 mapper_name="cryptlvm"
             fi
-            cmdline="$cmdline rd.luks.name=${LUKS_UUID}=${mapper_name}"
+            local luks_param
+            luks_param=$(_build_luks_kernel_params "$LUKS_UUID" "$mapper_name")
+            cmdline="$cmdline ${luks_param}"
             # Add root= for the decrypted mapper device
             if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
                 cmdline="$cmdline root=/dev/archvg/root"
@@ -1217,14 +1263,18 @@ _grub_theme_git_clone() {
 
     if [[ "$clone_ok" == "true" ]]; then
         mkdir -p "/boot/grub/themes/${theme_name}"
-        # Look for theme.txt to find the theme root (may be in a subdirectory)
-        local theme_txt
-        theme_txt="$(find "$tmp_dir/$clone_dir" -name "theme.txt" -print -quit 2>/dev/null)"
+        # Look for theme.txt — prefer "arch" subdirectory if it exists (multi-distro repos)
+        local theme_txt=""
+        local theme_root=""
+        if [[ -f "$tmp_dir/$clone_dir/arch/theme.txt" ]]; then
+            theme_txt="$tmp_dir/$clone_dir/arch/theme.txt"
+        else
+            theme_txt="$(find "$tmp_dir/$clone_dir" -name "theme.txt" -print -quit 2>/dev/null)"
+        fi
         if [[ -n "$theme_txt" ]]; then
-            local theme_root
             theme_root="$(dirname "$theme_txt")"
             cp -r "$theme_root/"* "/boot/grub/themes/${theme_name}/"
-            log_success "GRUB theme installed: $theme_name"
+            log_success "GRUB theme installed: $theme_name (from $(basename "$theme_root"))"
         else
             log_warn "theme.txt not found in cloned repo: $repo_url"
         fi
