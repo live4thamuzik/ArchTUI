@@ -295,7 +295,9 @@ main() {
 
     # Pre-flight: verify network connectivity before downloading packages
     log_info "Verifying network connectivity..."
-    if ! curl -s --max-time 10 --head https://archlinux.org >/dev/null 2>&1; then
+    if ! curl -s --max-time 15 --head https://archlinux.org >/dev/null 2>&1 \
+       && ! ping -c 2 -W 5 archlinux.org >/dev/null 2>&1 \
+       && ! getent hosts archlinux.org >/dev/null 2>&1; then
         error_exit "No network connectivity — pacstrap requires internet access. Check your connection and try again."
     fi
 

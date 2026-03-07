@@ -282,8 +282,18 @@ perform_preflight_checks() {
         log_warn "Not running on Arch Linux ISO — proceeding with caution"
     fi
 
-    # Check that we have basic network connectivity
-    if ! ping -c 1 -W 3 archlinux.org >/dev/null 2>&1; then
+    # Check that we have basic network connectivity (relaxed for older NICs)
+    # Try multiple methods: curl (HTTPS) > ping (ICMP) > DNS resolve
+    local net_ok=false
+    if curl -s --max-time 10 --head https://archlinux.org >/dev/null 2>&1; then
+        net_ok=true
+    elif ping -c 2 -W 5 archlinux.org >/dev/null 2>&1; then
+        net_ok=true
+    elif getent hosts archlinux.org >/dev/null 2>&1; then
+        # DNS works even if ICMP/HTTPS are slow — good enough for pacman
+        net_ok=true
+    fi
+    if [[ "$net_ok" != "true" ]]; then
         log_error "No network connectivity. Cannot reach archlinux.org"
         log_error "Please configure networking before running the installer"
         return 1

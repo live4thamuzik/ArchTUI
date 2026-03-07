@@ -10,6 +10,7 @@ use crate::components::file_browser::FileBrowserState;
 use crate::components::floating_window::FloatingOutputState;
 use crate::components::pty_terminal::PtyTerminalState;
 use crate::config::Configuration;
+use crate::config_file::InstallationConfig;
 use crate::scrolling::ScrollState;
 
 /// Tool parameter types for input dialogs
@@ -179,8 +180,8 @@ pub struct AppState {
     pub config_edit: ConfigEditState,
     /// Cached disk layout lines for the currently selected device
     pub disk_layout: Vec<String>,
-    /// Whether the Secure Boot pre-selection warning has been shown this cycle
-    pub secure_boot_warning_shown: bool,
+    /// Loaded file-based InstallationConfig (for Automated Install flow)
+    pub loaded_file_config: Option<InstallationConfig>,
 }
 
 /// Application operating modes
@@ -264,7 +265,7 @@ impl Default for AppState {
             pending_tool_device: None,
             config_edit: ConfigEditState::None,
             disk_layout: Vec::new(),
-            secure_boot_warning_shown: false,
+            loaded_file_config: None,
         }
     }
 }

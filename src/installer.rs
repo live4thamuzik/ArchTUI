@@ -127,28 +127,31 @@ fn write_master_log(log_file: &Arc<Mutex<Option<File>>>, line: &str) {
 
 /// Installer instance
 pub struct Installer {
-    config: Configuration,
+    env_vars: std::collections::HashMap<String, String>,
     app_state: Arc<Mutex<AppState>>,
 }
 
 impl Installer {
-    /// Create a new installer instance
+    /// Create a new installer from TUI configuration
     pub fn new(config: Configuration, app_state: Arc<Mutex<AppState>>) -> Self {
-        Self { config, app_state }
+        Self {
+            env_vars: config.to_env_vars(),
+            app_state,
+        }
     }
 
-    /// Validate the installation configuration
-    fn validate_configuration(&self) -> bool {
-        self.config.options.iter().all(|option| option.is_valid())
+    /// Create a new installer from a file-based InstallationConfig
+    pub fn from_file_config(
+        config: &crate::config_file::InstallationConfig,
+        app_state: Arc<Mutex<AppState>>,
+    ) -> Self {
+        let env_vars: std::collections::HashMap<String, String> =
+            config.to_env_vars().into_iter().collect();
+        Self { env_vars, app_state }
     }
 
     /// Start the installation process
-    pub fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Validate configuration before starting
-        if !self.validate_configuration() {
-            return Err("Configuration validation failed".into());
-        }
-
+    pub fn start(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Update app state to installation mode
         {
             // SAFETY: poison recovery via into_inner — never panic on mutex
@@ -170,9 +173,7 @@ impl Installer {
                 .push("==========================================".to_string());
         }
 
-        // Prepare environment variables (includes passwords)
-        // Passwords are passed via environment because lint rules forbid `read` in bash
-        let mut env_vars = self.config.to_env_vars();
+        let mut env_vars = self.env_vars.clone();
 
         // Pass LOG_LEVEL to child process (ARCHTUI_LOG_LEVEL env var → LOG_LEVEL in bash)
         let log_level = std::env::var("ARCHTUI_LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
