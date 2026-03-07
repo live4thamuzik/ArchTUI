@@ -96,7 +96,7 @@ load_config_from_json() {
     export ADDITIONAL_AUR_PACKAGES="$(jq -r '.additional_aur_packages // ""' "$config_file")"
     export AUR_HELPER="$(jq -r '.aur_helper // "none"' "$config_file")"
     export PLYMOUTH="$(jq -r '.plymouth // "No"' "$config_file")"
-    export PLYMOUTH_THEME="$(jq -r '.plymouth_theme // "arch-glow"' "$config_file")"
+    export PLYMOUTH_THEME="$(jq -r '.plymouth_theme // "bgrt"' "$config_file")"
     export GRUB_THEME="$(jq -r '.grub_theme // "No"' "$config_file")"
     export GRUB_THEME_SELECTION="$(jq -r '.grub_theme_selection // "PolyDark"' "$config_file")"
     export TIME_SYNC="$(jq -r '.time_sync // "No"' "$config_file")"

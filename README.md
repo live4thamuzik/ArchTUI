@@ -161,7 +161,7 @@ All automated strategies create an EFI System Partition and an XBOOTLDR partitio
 
 **Encryption:** LUKS2 encryption with secure password handling (tmpfs-backed SecretFile, RAII wipe, inline env vars — never written to disk). Encryption key types: Password, FIDO2 hardware key, or Password+FIDO2
 
-**Plymouth:** optional boot splash with theme selection (arch-glow, arch-mac-style)
+**Plymouth:** optional boot splash with theme selection (bgrt, spinner, fade-in, glow, solar, script, spinfinity, tribar, arch-glow, arch-mac-style)
 
 **Secure Boot:** optional, via sbctl. Keys are created and EFI binaries are signed during installation. A pacman hook automatically re-signs kernels on updates.
 

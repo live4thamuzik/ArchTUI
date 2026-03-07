@@ -305,10 +305,28 @@ pub enum EncryptionKeyType {
 }
 
 /// Plymouth theme selection
+/// Stock themes ship with the plymouth package.
+/// arch-glow and arch-mac-style are custom themes bundled in Source/.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumIter)]
 pub enum PlymouthTheme {
     #[default]
+    #[strum(serialize = "bgrt")]
+    Bgrt,
+    #[strum(serialize = "spinner")]
+    Spinner,
+    #[strum(serialize = "fade-in")]
+    FadeIn,
+    #[strum(serialize = "glow")]
+    Glow,
+    #[strum(serialize = "solar")]
+    Solar,
+    #[strum(serialize = "script")]
+    Script,
+    #[strum(serialize = "spinfinity")]
+    Spinfinity,
+    #[strum(serialize = "tribar")]
+    Tribar,
     #[strum(serialize = "arch-glow")]
     ArchGlow,
     #[strum(serialize = "arch-mac-style")]

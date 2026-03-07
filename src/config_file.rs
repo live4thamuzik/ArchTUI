@@ -542,7 +542,7 @@ impl Default for InstallationConfig {
             desktop_environment: DesktopEnvironment::None,
             display_manager: DisplayManager::None,
             plymouth: Toggle::No,
-            plymouth_theme: PlymouthTheme::ArchGlow,
+            plymouth_theme: PlymouthTheme::Bgrt,
             numlock_on_boot: Toggle::No,
             git_repository: Toggle::No,
             git_repository_url: String::new(),
