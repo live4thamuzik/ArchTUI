@@ -2021,7 +2021,7 @@ _configure_snapper() {
 
     # shellcheck disable=SC2317
     _re_enable_snap_pac_hooks() {
-        if [[ "$hooks_disabled" == true ]]; then
+        if [[ "${hooks_disabled:-false}" == true ]]; then
             mv "$hook_dir/snap-pac-pre.hook.disabled" "$hook_dir/snap-pac-pre.hook" 2>/dev/null || true
             mv "$hook_dir/snap-pac-post.hook.disabled" "$hook_dir/snap-pac-post.hook" 2>/dev/null || true
             log_info "Re-enabled snap-pac hooks"
