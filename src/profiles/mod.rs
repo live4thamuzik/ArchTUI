@@ -910,11 +910,17 @@ impl Profile {
 
 /// GPU driver packages indexed by driver type.
 pub mod gpu_packages {
-    /// Nvidia proprietary driver packages.
-    pub const NVIDIA: &[&str] = &["nvidia", "nvidia-utils", "nvidia-settings", "lib32-nvidia-utils"];
+    /// Nvidia proprietary driver packages (DKMS for all kernel variants).
+    pub const NVIDIA: &[&str] = &[
+        "nvidia-dkms", "libglvnd", "nvidia-utils", "opencl-nvidia", "nvidia-settings",
+        "lib32-libglvnd", "lib32-nvidia-utils", "lib32-opencl-nvidia",
+    ];
 
-    /// Nvidia open-source kernel module packages.
-    pub const NVIDIA_OPEN: &[&str] = &["nvidia-open", "nvidia-utils", "nvidia-settings", "lib32-nvidia-utils"];
+    /// Nvidia open-source kernel module packages (DKMS-based).
+    pub const NVIDIA_OPEN: &[&str] = &[
+        "nvidia-open-dkms", "libglvnd", "nvidia-utils", "opencl-nvidia", "nvidia-settings",
+        "lib32-libglvnd", "lib32-nvidia-utils", "lib32-opencl-nvidia",
+    ];
 
     /// AMD open-source driver packages (mesa-based).
     pub const AMD: &[&str] = &["mesa", "xf86-video-amdgpu", "vulkan-radeon", "lib32-mesa"];
