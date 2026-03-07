@@ -1109,7 +1109,18 @@ _grub_theme_git_clone() {
         }
     fi
 
-    if timeout 30 git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>/dev/null; then
+    log_cmd "git clone --depth 1 $repo_url"
+    local clone_ok=false
+    local clone_err
+    # Try twice — chroot DNS may take a moment to resolve on first attempt
+    for attempt in 1 2; do
+        clone_err=$(timeout 60 git clone --depth 1 "$repo_url" "$tmp_dir/$clone_dir" 2>&1) && { clone_ok=true; break; }
+        log_warn "GRUB theme clone attempt $attempt failed: $clone_err"
+        rm -rf "${tmp_dir:?}/$clone_dir"
+        sleep 2
+    done
+
+    if [[ "$clone_ok" == "true" ]]; then
         mkdir -p "/boot/grub/themes/${theme_name}"
         # Look for theme.txt to find the theme root (may be in a subdirectory)
         local theme_txt
@@ -1118,12 +1129,12 @@ _grub_theme_git_clone() {
             local theme_root
             theme_root="$(dirname "$theme_txt")"
             cp -r "$theme_root/"* "/boot/grub/themes/${theme_name}/"
-            log_info "GRUB theme cloned and installed: $theme_name"
+            log_success "GRUB theme installed: $theme_name"
         else
             log_warn "theme.txt not found in cloned repo: $repo_url"
         fi
     else
-        log_warn "Failed to clone GRUB theme: $repo_url"
+        log_error "Failed to clone GRUB theme after 2 attempts: $repo_url"
     fi
     rm -rf "${tmp_dir:?}"
 }

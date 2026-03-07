@@ -116,7 +116,9 @@ pub fn render_installer_output(
                     .fg(Colors::FG_PRIMARY)
                     .bg(Colors::BG_PRIMARY)
             };
-            let padded = format!("{:<pad_width$}", line);
+            // Truncate to display width then pad — prevents line wrapping artifacts
+            let truncated: String = line.chars().take(pad_width).collect();
+            let padded = format!("{:<pad_width$}", truncated);
             ListItem::new(padded).style(style)
         })
         .collect();
