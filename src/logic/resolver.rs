@@ -155,11 +155,20 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         packages.push("mdadm");
     }
 
-    // 13. Snapper (if btrfs snapshots enabled)
+    // 13. Snapshot tool (if btrfs snapshots enabled)
     if config.root_filesystem == Filesystem::Btrfs && config.btrfs_snapshots == Toggle::Yes {
-        packages.push("snapper");
-        if config.btrfs_assistant == Toggle::Yes {
-            packages.push("btrfs-assistant");
+        match config.snapshot_tool {
+            crate::types::SnapshotTool::Snapper => {
+                packages.push("snapper");
+                packages.push("snap-pac");
+                if config.bootloader == Bootloader::Grub {
+                    packages.push("grub-btrfs");
+                }
+            }
+            crate::types::SnapshotTool::Timeshift => {
+                packages.push("timeshift");
+            }
+            crate::types::SnapshotTool::None => {}
         }
     }
 
@@ -813,5 +822,47 @@ mod tests {
                 expected_pkg
             );
         }
+    }
+
+    #[test]
+    fn test_resolve_packages_snapper_snapshot_tool() {
+        let mut config = test_config();
+        config.root_filesystem = Filesystem::Btrfs;
+        config.btrfs_snapshots = Toggle::Yes;
+        config.snapshot_tool = crate::types::SnapshotTool::Snapper;
+        config.bootloader = Bootloader::Grub;
+        let packages = resolve_packages(&config);
+
+        assert!(packages.contains(&"snapper".to_string()));
+        assert!(packages.contains(&"snap-pac".to_string()));
+        assert!(packages.contains(&"grub-btrfs".to_string()));
+        assert!(!packages.contains(&"timeshift".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_timeshift_snapshot_tool() {
+        let mut config = test_config();
+        config.root_filesystem = Filesystem::Btrfs;
+        config.btrfs_snapshots = Toggle::Yes;
+        config.snapshot_tool = crate::types::SnapshotTool::Timeshift;
+        let packages = resolve_packages(&config);
+
+        assert!(packages.contains(&"timeshift".to_string()));
+        assert!(!packages.contains(&"snapper".to_string()));
+        assert!(!packages.contains(&"snap-pac".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_snapper_no_grub_btrfs_with_systemd_boot() {
+        let mut config = test_config();
+        config.root_filesystem = Filesystem::Btrfs;
+        config.btrfs_snapshots = Toggle::Yes;
+        config.snapshot_tool = crate::types::SnapshotTool::Snapper;
+        config.bootloader = Bootloader::SystemdBoot;
+        let packages = resolve_packages(&config);
+
+        assert!(packages.contains(&"snapper".to_string()));
+        assert!(packages.contains(&"snap-pac".to_string()));
+        assert!(!packages.contains(&"grub-btrfs".to_string()));
     }
 }

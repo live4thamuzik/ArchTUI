@@ -190,7 +190,7 @@ main() {
     install_flatpak || log_warn "Flatpak installation failed — continuing"
     install_additional_packages || log_warn "Additional packages had issues — continuing"
     configure_plymouth || log_warn "Plymouth configuration failed — continuing"
-    configure_snapper || log_warn "Snapper configuration failed — continuing"
+    configure_snapshots || log_warn "Snapshot configuration failed — continuing"
 
     # --- Phase 5: Final Configuration (non-critical) ---
     log_info "=== Phase 5: Final Configuration ==="
@@ -1971,33 +1971,53 @@ configure_plymouth() {
     log_success "Plymouth configured"
 }
 
-configure_snapper() {
+configure_snapshots() {
     if [[ "${BTRFS_SNAPSHOTS:-No}" != "Yes" ]]; then
         log_info "Btrfs snapshots not requested"
         return 0
     fi
 
-    # Check if filesystem is btrfs (use ROOT_FILESYSTEM_TYPE, not FILESYSTEM)
     if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" != "btrfs" ]]; then
-        log_info "Snapper requires btrfs filesystem, skipping"
+        log_info "Snapshots require btrfs filesystem, skipping"
         return 0
     fi
 
-    log_info "Configuring Snapper for Btrfs snapshots..."
+    local snapshot_tool="${SNAPSHOT_TOOL:-none}"
+    log_info "Configuring btrfs snapshots (tool: $snapshot_tool)..."
 
-    # Install snapper first (without snap-pac to avoid noisy pacman hooks
-    # in chroot where dbus is unavailable)
-    pacman -S snapper --noconfirm --needed || {
-        log_error "Failed to install snapper"
-        return 1
-    }
+    case "$snapshot_tool" in
+        "snapper")
+            _configure_snapper
+            ;;
+        "timeshift")
+            _configure_timeshift
+            ;;
+        *)
+            log_info "No snapshot tool selected, skipping configuration"
+            return 0
+            ;;
+    esac
+}
+
+_configure_snapper() {
+    # snapper, snap-pac, and grub-btrfs are already installed via pacstrap
+    # (avoids dbus FATAL errors from snap-pac hooks firing in chroot)
+
+    # Temporarily disable snap-pac alpm hooks during remaining chroot package installs
+    # snap-pac hooks call snapper which requires dbus — unavailable in chroot
+    local hook_dir="/usr/share/libalpm/hooks"
+    local hooks_disabled=false
+    if [[ -f "$hook_dir/snap-pac-pre.hook" ]]; then
+        mv "$hook_dir/snap-pac-pre.hook" "$hook_dir/snap-pac-pre.hook.disabled" 2>/dev/null || true
+        mv "$hook_dir/snap-pac-post.hook" "$hook_dir/snap-pac-post.hook.disabled" 2>/dev/null || true
+        hooks_disabled=true
+        log_info "Temporarily disabled snap-pac hooks for chroot configuration"
+    fi
 
     # Remove the @snapshots mount if it exists (snapper will recreate it)
     if mountpoint -q /.snapshots 2>/dev/null; then
         umount /.snapshots 2>/dev/null || true
     fi
-
-    # Remove the .snapshots directory if it exists
     if [[ -d /.snapshots ]]; then
         rmdir /.snapshots 2>/dev/null || true
     fi
@@ -2010,7 +2030,7 @@ configure_snapper() {
     fi
 
     # Delete the subvolume snapper created and recreate .snapshots directory
-    # This is needed because snapper creates a new subvolume, but we want to use @snapshots
+    # snapper creates a new subvolume, but we want to use @snapshots
     if btrfs subvolume delete /.snapshots 2>/dev/null; then
         log_info "Removed snapper-created .snapshots subvolume"
     fi
@@ -2030,48 +2050,28 @@ configure_snapper() {
         log_warn "No @snapshots entry in fstab — snapshots will not use dedicated subvolume"
     fi
 
-    # Set proper permissions
     chmod 750 /.snapshots || log_warn "Failed to set permissions on /.snapshots"
 
     # Configure snapper settings
     if [[ -f /etc/snapper/configs/root ]]; then
-        # Set timeline settings for automatic snapshots
         sed -i 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_CREATE"
         sed -i 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_CLEANUP"
         sed -i 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_MIN_AGE"
 
-        # Map user's frequency preference to snapper timeline settings
         local keep_count="${BTRFS_KEEP_COUNT:-3}"
         local frequency="${BTRFS_FREQUENCY:-weekly}"
 
-        # Reset all limits to 0 first, then set based on frequency
         local hourly_limit="0"
         local daily_limit="0"
         local weekly_limit="0"
         local monthly_limit="0"
 
         case "${frequency,,}" in
-            hourly)
-                hourly_limit="$keep_count"
-                log_info "Snapper: keeping $keep_count hourly snapshots"
-                ;;
-            daily)
-                daily_limit="$keep_count"
-                log_info "Snapper: keeping $keep_count daily snapshots"
-                ;;
-            weekly)
-                weekly_limit="$keep_count"
-                log_info "Snapper: keeping $keep_count weekly snapshots"
-                ;;
-            monthly)
-                monthly_limit="$keep_count"
-                log_info "Snapper: keeping $keep_count monthly snapshots"
-                ;;
-            *)
-                # Default to weekly if unknown
-                weekly_limit="$keep_count"
-                log_warn "Unknown frequency '$frequency', defaulting to weekly"
-                ;;
+            hourly)  hourly_limit="$keep_count" ;;
+            daily)   daily_limit="$keep_count" ;;
+            weekly)  weekly_limit="$keep_count" ;;
+            monthly) monthly_limit="$keep_count" ;;
+            *)       weekly_limit="$keep_count"; log_warn "Unknown frequency '$frequency', defaulting to weekly" ;;
         esac
 
         sed -i "s/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY=\"$hourly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_HOURLY"
@@ -2083,49 +2083,69 @@ configure_snapper() {
         log_info "Configured snapper timeline settings (frequency: $frequency, keep: $keep_count)"
     fi
 
-    # Enable snapper timers (before installing snap-pac to avoid hook noise)
+    # Enable snapper timers
     systemctl enable snapper-timeline.timer 2>/dev/null || log_warn "Failed to enable snapper-timeline.timer"
     systemctl enable snapper-cleanup.timer 2>/dev/null || log_warn "Failed to enable snapper-cleanup.timer"
 
-    # Install grub-btrfs for boot integration if using GRUB
-    # (BEFORE snap-pac so its hooks don't fire during this install)
-    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-        pacman -S grub-btrfs --noconfirm --needed || log_warn "grub-btrfs not available"
-        # Enable grub-btrfs path monitoring if installed
-        if [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]]; then
-            systemctl enable grub-btrfsd.service 2>/dev/null || log_warn "Failed to enable grub-btrfsd.service"
-            log_info "Enabled grub-btrfs daemon for boot menu updates"
-        fi
+    # Enable grub-btrfs path monitoring if installed
+    if [[ -f /usr/lib/systemd/system/grub-btrfsd.service ]]; then
+        systemctl enable grub-btrfsd.service 2>/dev/null || log_warn "Failed to enable grub-btrfsd.service"
+        log_info "Enabled grub-btrfs daemon for boot menu updates"
     fi
 
-    # Install btrfs-assistant if requested (BEFORE snap-pac)
-    if [[ "${BTRFS_ASSISTANT:-No}" == "Yes" ]]; then
-        log_info "Installing btrfs-assistant..."
-        pacman -S btrfs-assistant --noconfirm --needed || log_warn "Failed to install btrfs-assistant"
+    # Re-enable snap-pac hooks now that chroot package installs are done
+    if [[ "$hooks_disabled" == true ]]; then
+        mv "$hook_dir/snap-pac-pre.hook.disabled" "$hook_dir/snap-pac-pre.hook" 2>/dev/null || true
+        mv "$hook_dir/snap-pac-post.hook.disabled" "$hook_dir/snap-pac-post.hook" 2>/dev/null || true
+        log_info "Re-enabled snap-pac hooks"
     fi
 
-    # snap-pac's alpm hooks call snapper which requires dbus — unavailable in chroot.
-    # This causes "FATAL: dbus/library error" on stdout (not suppressible with 2>/dev/null).
-    # Solution: defer snap-pac install to first boot via a one-shot systemd service.
-    cat > /etc/systemd/system/install-snap-pac.service << 'SNAPEOF'
-[Unit]
-Description=Install snap-pac (deferred from installer — requires dbus)
-After=dbus.service
-ConditionPathExists=!/usr/share/libalpm/hooks/snap-pac-pre.hook
+    log_success "Snapper configured for automatic btrfs snapshots"
+}
 
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/pacman -S snap-pac --noconfirm --needed
-ExecStartPost=/usr/bin/systemctl disable install-snap-pac.service
-RemainAfterExit=yes
+_configure_timeshift() {
+    # timeshift is already installed via pacstrap
 
-[Install]
-WantedBy=multi-user.target
-SNAPEOF
-    systemctl enable install-snap-pac.service 2>/dev/null || log_warn "Failed to enable snap-pac first-boot service"
-    log_info "snap-pac will be installed on first boot (requires dbus, unavailable in chroot)"
+    # Create timeshift config directory
+    mkdir -p /etc/timeshift || {
+        log_error "Failed to create /etc/timeshift directory"
+        return 1
+    }
 
-    log_success "Snapper configured for automatic Btrfs snapshots"
+    # Write default timeshift config for btrfs mode
+    cat > /etc/timeshift/timeshift.json << 'TSEOF'
+{
+  "backup_device_uuid" : "",
+  "parent_device_uuid" : "",
+  "do_first_run" : "true",
+  "btrfs_mode" : "true",
+  "include_btrfs_home_for_backup" : "true",
+  "include_btrfs_home_for_restore" : "false",
+  "stop_cron_emails" : "true",
+  "schedule_monthly" : "true",
+  "schedule_weekly" : "true",
+  "schedule_daily" : "true",
+  "schedule_hourly" : "false",
+  "schedule_boot" : "false",
+  "count_monthly" : "2",
+  "count_weekly" : "3",
+  "count_daily" : "5",
+  "count_hourly" : "0",
+  "count_boot" : "0",
+  "snapshot_size" : "0",
+  "snapshot_count" : "0",
+  "exclude" : [],
+  "exclude-apps" : []
+}
+TSEOF
+
+    # Enable timeshift scheduled snapshots via cronie or systemd timer
+    if command -v crond &>/dev/null || [[ -f /usr/lib/systemd/system/cronie.service ]]; then
+        systemctl enable cronie.service 2>/dev/null || log_warn "Failed to enable cronie for timeshift"
+        log_info "Enabled cronie for timeshift scheduled snapshots"
+    fi
+
+    log_success "Timeshift configured for btrfs snapshots (use timeshift-gtk to manage)"
 }
 
 # =============================================================================

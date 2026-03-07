@@ -11,7 +11,7 @@ use std::path::Path;
 use crate::types::{
     AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
     EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
-    SnapshotFrequency, Toggle,
+    SnapshotFrequency, SnapshotTool, Toggle,
 };
 
 /// Installation configuration that can be saved/loaded
@@ -43,7 +43,8 @@ pub struct InstallationConfig {
     pub btrfs_snapshots: Toggle,
     pub btrfs_frequency: SnapshotFrequency,
     pub btrfs_keep_count: u8,
-    pub btrfs_assistant: Toggle,
+    #[serde(alias = "btrfs_assistant")]
+    pub snapshot_tool: SnapshotTool,
 
     // Locale & Time
     pub timezone_region: String, // Too many options for enum
@@ -118,7 +119,7 @@ impl std::fmt::Debug for InstallationConfig {
             .field("btrfs_snapshots", &self.btrfs_snapshots)
             .field("btrfs_frequency", &self.btrfs_frequency)
             .field("btrfs_keep_count", &self.btrfs_keep_count)
-            .field("btrfs_assistant", &self.btrfs_assistant)
+            .field("snapshot_tool", &self.snapshot_tool)
             .field("timezone_region", &self.timezone_region)
             .field("timezone", &self.timezone)
             .field("locale", &self.locale)
@@ -426,8 +427,8 @@ impl InstallationConfig {
                 self.btrfs_keep_count.to_string(),
             ),
             (
-                "BTRFS_ASSISTANT".to_string(),
-                self.btrfs_assistant.to_string(),
+                "SNAPSHOT_TOOL".to_string(),
+                self.snapshot_tool.to_string(),
             ),
             ("TIMEZONE_REGION".to_string(), self.timezone_region.clone()),
             ("TIMEZONE".to_string(), self.timezone.clone()),
@@ -516,7 +517,7 @@ impl Default for InstallationConfig {
             btrfs_snapshots: Toggle::No,
             btrfs_frequency: SnapshotFrequency::Weekly,
             btrfs_keep_count: 3,
-            btrfs_assistant: Toggle::No,
+            snapshot_tool: SnapshotTool::None,
             timezone_region: "America".to_string(),
             timezone: "New_York".to_string(),
             locale: "en_US.UTF-8".to_string(),
@@ -593,9 +594,9 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             root_size: get_value("Root Size"),
             home_size: get_value("Home Size"),
             btrfs_snapshots: parse_or_default(&get_value("Btrfs Snapshots")),
-            btrfs_frequency: parse_or_default(&get_value("Btrfs Frequency")),
-            btrfs_keep_count: get_value("Btrfs Keep Count").parse().unwrap_or(3),
-            btrfs_assistant: parse_or_default(&get_value("Btrfs Assistant")),
+            btrfs_frequency: parse_or_default(&get_value("Snapshot Frequency")),
+            btrfs_keep_count: get_value("Snapshot Keep Count").parse().unwrap_or(3),
+            snapshot_tool: parse_or_default(&get_value("Snapshot Tool")),
             timezone_region: get_value("Timezone Region"),
             timezone: get_value("Timezone"),
             locale: get_value("Locale"),

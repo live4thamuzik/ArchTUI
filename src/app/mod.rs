@@ -2528,7 +2528,7 @@ impl App {
                         "Home size is only configurable when separate home partition is enabled.".to_string();
                 }
             }
-            "Btrfs Frequency" | "Btrfs Keep Count" | "Btrfs Assistant" => {
+            "Snapshot Tool" => {
                 let (is_btrfs, snapshots_enabled) = {
                     let state = self.lock_state();
                     let btrfs = state.config.options.iter()
@@ -2545,11 +2545,49 @@ impl App {
                 if !is_btrfs {
                     let mut state = self.lock_state();
                     state.status_message =
-                        "Btrfs options are only available when Root Filesystem is btrfs."
+                        "Snapshot Tool is only available when Root Filesystem is btrfs."
                             .to_string();
                 } else if snapshots_enabled {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Snapshot Tool can only be configured when Btrfs Snapshots are enabled."
+                            .to_string();
+                }
+            }
+            "Snapshot Frequency" | "Snapshot Keep Count" => {
+                let (is_btrfs, snapshots_enabled, is_snapper) = {
+                    let state = self.lock_state();
+                    let btrfs = state.config.options.iter()
+                        .find(|opt| opt.name == "Root Filesystem")
+                        .map(|opt| opt.get_value().to_lowercase() == "btrfs")
+                        .unwrap_or(false);
+                    let snapshots = state.config.options.iter()
+                        .find(|opt| opt.name == "Btrfs Snapshots")
+                        .map(|opt| opt.get_value().to_lowercase() == "yes")
+                        .unwrap_or(false);
+                    let snapper = state.config.options.iter()
+                        .find(|opt| opt.name == "Snapshot Tool")
+                        .map(|opt| opt.get_value().to_lowercase() == "snapper")
+                        .unwrap_or(false);
+                    (btrfs, snapshots, snapper)
+                };
+
+                if !is_btrfs {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Btrfs options are only available when Root Filesystem is btrfs."
+                            .to_string();
+                } else if snapshots_enabled && is_snapper {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.set_inline_selection(options, option.get_value());
+                } else if snapshots_enabled {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Frequency/Keep Count are only configurable with snapper (timeshift manages its own schedule via GUI)."
+                            .to_string();
                 } else {
                     let mut state = self.lock_state();
                     state.status_message = format!(
@@ -3592,9 +3630,9 @@ impl App {
                         // Disable all btrfs options when not using btrfs
                         for name in &[
                             "Btrfs Snapshots",
-                            "Btrfs Frequency",
-                            "Btrfs Keep Count",
-                            "Btrfs Assistant",
+                            "Snapshot Frequency",
+                            "Snapshot Keep Count",
+                            "Snapshot Tool",
                         ] {
                             if let Some(opt) = state
                                 .config
@@ -3602,8 +3640,10 @@ impl App {
                                 .iter_mut()
                                 .find(|o| o.name == *name)
                             {
-                                opt.value = if *name == "Btrfs Snapshots" || *name == "Btrfs Assistant" {
+                                opt.value = if *name == "Btrfs Snapshots" {
                                     "No".to_string()
+                                } else if *name == "Snapshot Tool" {
+                                    "none".to_string()
                                 } else {
                                     "N/A".to_string()
                                 };
@@ -3613,12 +3653,12 @@ impl App {
                 }
                 "Btrfs Snapshots" => {
                     if value.to_lowercase() == "no" {
-                        // Disable btrfs frequency, keep count, and assistant when snapshots are disabled
+                        // Disable frequency, keep count, and snapshot tool when snapshots disabled
                         if let Some(freq_option) = state
                             .config
                             .options
                             .iter_mut()
-                            .find(|opt| opt.name == "Btrfs Frequency")
+                            .find(|opt| opt.name == "Snapshot Frequency")
                         {
                             freq_option.value = "N/A".to_string();
                         }
@@ -3626,25 +3666,33 @@ impl App {
                             .config
                             .options
                             .iter_mut()
-                            .find(|opt| opt.name == "Btrfs Keep Count")
+                            .find(|opt| opt.name == "Snapshot Keep Count")
                         {
                             keep_option.value = "N/A".to_string();
                         }
-                        if let Some(assistant_option) = state
+                        if let Some(tool_option) = state
                             .config
                             .options
                             .iter_mut()
-                            .find(|opt| opt.name == "Btrfs Assistant")
+                            .find(|opt| opt.name == "Snapshot Tool")
                         {
-                            assistant_option.value = "No".to_string();
+                            tool_option.value = "none".to_string();
                         }
                     } else if value.to_lowercase() == "yes" {
                         // Reset btrfs options to defaults when snapshots are enabled
+                        if let Some(tool_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Snapshot Tool")
+                        {
+                            tool_option.value = "snapper".to_string();
+                        }
                         if let Some(freq_option) = state
                             .config
                             .options
                             .iter_mut()
-                            .find(|opt| opt.name == "Btrfs Frequency")
+                            .find(|opt| opt.name == "Snapshot Frequency")
                         {
                             freq_option.value = "weekly".to_string();
                         }
@@ -3652,7 +3700,46 @@ impl App {
                             .config
                             .options
                             .iter_mut()
-                            .find(|opt| opt.name == "Btrfs Keep Count")
+                            .find(|opt| opt.name == "Snapshot Keep Count")
+                        {
+                            keep_option.value = "3".to_string();
+                        }
+                    }
+                }
+                "Snapshot Tool" => {
+                    if value.to_lowercase() != "snapper" {
+                        // Frequency/Keep Count only apply to snapper
+                        if let Some(freq_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Snapshot Frequency")
+                        {
+                            freq_option.value = "N/A".to_string();
+                        }
+                        if let Some(keep_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Snapshot Keep Count")
+                        {
+                            keep_option.value = "N/A".to_string();
+                        }
+                    } else {
+                        // Reset to snapper defaults
+                        if let Some(freq_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Snapshot Frequency")
+                        {
+                            freq_option.value = "weekly".to_string();
+                        }
+                        if let Some(keep_option) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Snapshot Keep Count")
                         {
                             keep_option.value = "3".to_string();
                         }
