@@ -62,12 +62,13 @@ impl ConfigOption {
         let valid = match self.name.as_str() {
             "Hostname" => {
                 let value = self.get_value();
-                // RFC 1123: 1-63 chars, lowercase alphanumeric + hyphens, no leading/trailing hyphens
+                // RFC 1123: 1-63 chars, alphanumeric + hyphens, no leading/trailing hyphens
+                // Case-insensitive per RFC — uppercase is accepted and lowercased at install time
                 !value.is_empty()
                     && value.len() <= 63
-                    && value.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-                    && value.chars().last().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-                    && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                    && value.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+                    && value.chars().last().is_some_and(|c| c.is_ascii_alphanumeric())
+                    && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             }
             "Username" => {
                 let value = self.get_value();
@@ -109,7 +110,7 @@ impl ConfigOption {
             } else {
                 match self.name.as_str() {
                     "Hostname" => {
-                        Some(format!("{} must be 1-63 lowercase alphanumeric characters and hyphens (RFC 1123, no leading/trailing hyphens)", self.name))
+                        Some(format!("{} must be 1-63 alphanumeric characters and hyphens (no leading/trailing hyphens)", self.name))
                     }
                     "Username" => {
                         Some(format!("{} must be 3-32 lowercase characters starting with a letter (lowercase letters, digits, underscores)", self.name))
