@@ -2714,23 +2714,8 @@ impl App {
                 }
             }
             "Display Manager" => {
-                let desktop_env = {
-                    let state = self.lock_state();
-                    state.config.options.iter()
-                        .find(|opt| opt.name == "Desktop Environment")
-                        .map(|opt| opt.get_value())
-                        .unwrap_or_default()
-                };
-
-                if desktop_env != "none" && !desktop_env.is_empty() {
-                    let mut state = self.lock_state();
-                    state.status_message =
-                        "Display Manager is auto-set based on Desktop Environment selection."
-                            .to_string();
-                } else {
-                    let options = InputHandler::get_predefined_options(&option.name);
-                    self.set_inline_selection(options, option.get_value());
-                }
+                let options = InputHandler::get_predefined_options(&option.name);
+                self.set_inline_selection(options, option.get_value());
             }
             "Plymouth Theme" => {
                 let plymouth_enabled = {
