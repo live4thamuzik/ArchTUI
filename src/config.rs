@@ -188,7 +188,7 @@ impl Default for Configuration {
                 ),
                 ConfigOption::new("Swap", false, "Enable swap partition", "No"),
                 ConfigOption::new("Swap Size", false, "Swap partition size", "N/A"),
-                ConfigOption::new("Root Size", false, "Root partition size", "Remaining"),
+                ConfigOption::new("Root Size", false, "Root partition size", "N/A"),
                 ConfigOption::new("Home Size", false, "Home partition size", "N/A"),
                 ConfigOption::new("Btrfs Snapshots", false, "Enable Btrfs snapshots", "No"),
                 ConfigOption::new(
@@ -243,7 +243,7 @@ impl Default for Configuration {
                 ConfigOption::new("Bootloader", true, "Boot loader", "grub"),
                 ConfigOption::new("OS Prober", false, "Enable OS detection", "No"),
                 ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
-                ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "none"),
+                ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "N/A"),
                 // Desktop Environment (38-39)
                 ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
                 ConfigOption::new("Display Manager", false, "Display manager", "none"),
