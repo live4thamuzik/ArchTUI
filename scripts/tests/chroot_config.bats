@@ -110,10 +110,12 @@ teardown() {
     grep -q 'FILESYSTEM.*btrfs' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
-@test "configure_snapper installs snapper packages" {
-    # snapper and snap-pac are installed separately (snap-pac last to avoid dbus hook noise)
-    grep -q 'pacman -S snapper --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
-    grep -q 'pacman -S snap-pac --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
+@test "configure_snapper uses snapper via pacstrap (not chroot pacman)" {
+    # snapper+snap-pac are installed via pacstrap to avoid dbus hook failures in chroot
+    # Verify chroot_config.sh does NOT install snapper via pacman (it's already present)
+    ! grep -q 'pacman -S snapper --noconfirm --needed' "$SCRIPTS_DIR/chroot_config.sh"
+    # Verify snapper --no-dbus config is still called (snapper is pre-installed)
+    grep -q 'snapper --no-dbus' "$SCRIPTS_DIR/chroot_config.sh"
 }
 
 @test "configure_snapper creates snapper config for root" {
