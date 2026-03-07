@@ -2895,12 +2895,18 @@ impl App {
                                 let mut state = self.lock_state();
                                 state.config_edit = ConfigEditState::None;
                             }
+                            // Close the InputHandler dialog to prevent double-fire
+                            // (config_edit and InputHandler are parallel state machines)
+                            self.input_handler.current_dialog = None;
                             self.update_configuration_value(value)?;
                         }
                     }
                     KeyCode::Esc => {
                         let mut state = self.lock_state();
                         state.config_edit = ConfigEditState::None;
+                        // Also close the InputHandler dialog
+                        drop(state);
+                        self.input_handler.current_dialog = None;
                     }
                     KeyCode::Char(c) => {
                         let lower = c.to_ascii_lowercase();
@@ -2962,12 +2968,15 @@ impl App {
                             let mut state = self.lock_state();
                             state.config_edit = ConfigEditState::None;
                         }
+                        self.input_handler.current_dialog = None;
                         self.update_configuration_value(confirmed)?;
                         return Ok(true);
                     }
                     KeyCode::Esc => {
                         let mut state = self.lock_state();
                         state.config_edit = ConfigEditState::None;
+                        drop(state);
+                        self.input_handler.current_dialog = None;
                         return Ok(true);
                     }
                     _ => {}

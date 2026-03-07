@@ -225,7 +225,7 @@ impl InstallationConfig {
             anyhow::bail!("Install disk must be specified");
         }
 
-        // Validate hostname (RFC 1123: 1-63 chars, lowercase + digits + hyphens + underscores)
+        // Validate hostname (RFC 1123: 1-63 chars, alphanumeric + hyphens, case-insensitive)
         let hostname = self.hostname.trim();
         if hostname.is_empty() {
             tracing::error!(field = "hostname", "Hostname must be specified");
@@ -236,23 +236,23 @@ impl InstallationConfig {
             anyhow::bail!("Hostname must be at most 63 characters long (RFC 1123)");
         }
         if let Some(first_char) = hostname.chars().next() {
-            if !first_char.is_ascii_lowercase() && !first_char.is_ascii_digit() {
-                tracing::error!(field = "hostname", "Hostname must start with lowercase letter or digit (RFC 1123)");
-                anyhow::bail!("Hostname must start with a lowercase letter or digit (RFC 1123)");
+            if !first_char.is_ascii_alphanumeric() {
+                tracing::error!(field = "hostname", "Hostname must start with a letter or digit (RFC 1123)");
+                anyhow::bail!("Hostname must start with a letter or digit (RFC 1123)");
             }
         }
         if let Some(last_char) = hostname.chars().last() {
-            if !last_char.is_ascii_lowercase() && !last_char.is_ascii_digit() {
-                tracing::error!(field = "hostname", "Hostname must end with lowercase letter or digit (RFC 1123)");
-                anyhow::bail!("Hostname must end with a lowercase letter or digit (RFC 1123)");
+            if !last_char.is_ascii_alphanumeric() {
+                tracing::error!(field = "hostname", "Hostname must end with a letter or digit (RFC 1123)");
+                anyhow::bail!("Hostname must end with a letter or digit (RFC 1123)");
             }
         }
         if !hostname
             .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
         {
             tracing::error!(field = "hostname", "Hostname contains invalid characters");
-            anyhow::bail!("Hostname can only contain lowercase letters, numbers, and hyphens (RFC 1123)");
+            anyhow::bail!("Hostname can only contain letters, numbers, and hyphens (RFC 1123)");
         }
 
         // Validate username (3-32 chars, start with lowercase letter, lowercase + digits + underscore)
@@ -886,12 +886,11 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_hostname_uppercase_rejected() {
+    fn test_validation_hostname_uppercase_accepted() {
         let mut config = create_test_config();
-        config.hostname = "HostName".to_string(); // Uppercase not allowed
+        config.hostname = "HostName".to_string(); // RFC 1123 is case-insensitive
         let result = config.validate();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("lowercase"));
+        assert!(result.is_ok());
     }
 
     #[test]
