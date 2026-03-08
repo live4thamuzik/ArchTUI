@@ -401,6 +401,13 @@ validate_configuration() {
         return 1
     fi
 
+    # Validate hostname format (RFC 1123: alphanumeric + hyphens, no leading/trailing hyphen)
+    if ! echo "$SYSTEM_HOSTNAME" | grep -qE '^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$' && \
+       ! echo "$SYSTEM_HOSTNAME" | grep -qE '^[a-zA-Z0-9]$'; then
+        log_error "Invalid hostname format: $SYSTEM_HOSTNAME (RFC 1123: alphanumeric + hyphens, no leading/trailing hyphen)"
+        return 1
+    fi
+
     # Validate partitioning strategy
     case "$PARTITIONING_STRATEGY" in
         auto_simple|auto_simple_luks|auto_lvm|auto_luks_lvm|auto_raid|auto_raid_luks|auto_raid_lvm|auto_raid_lvm_luks|manual|pre_mounted) ;;
@@ -756,6 +763,12 @@ install_base_system() {
         esac
     fi
 
+    # Add sbctl for Secure Boot (install via pacstrap so it's available in chroot)
+    local -a secureboot_packages=()
+    if [[ "${SECURE_BOOT:-No}" == "Yes" ]]; then
+        secureboot_packages+=("sbctl")
+    fi
+
     # Combine all packages
     local -a all_packages=(
         "${base_packages[@]}"
@@ -764,6 +777,7 @@ install_base_system() {
         "${bootloader_packages[@]}"
         "${microcode_packages[@]}"
         "${snapshot_packages[@]}"
+        "${secureboot_packages[@]}"
     )
 
     log_info "Total packages to install: ${#all_packages[@]}"

@@ -162,6 +162,10 @@ main() {
     # kernel modules exist when added to MODULES= and initramfs is regenerated
     install_gpu_drivers || log_warn "GPU driver installation failed — continuing"
 
+    # Plymouth theme MUST be set before mkinitcpio -P so initramfs includes the correct theme
+    # (plymouth-set-default-theme without -R sets default; mkinitcpio -P picks it up)
+    configure_plymouth || log_warn "Plymouth configuration failed — continuing"
+
     # Boot-critical functions: failures are logged but must not prevent DE/user setup
     # (a partially-configured system is easier to fix from live USB than a bare one)
     local _boot_ok=true
@@ -189,7 +193,6 @@ main() {
 
     install_flatpak || log_warn "Flatpak installation failed — continuing"
     install_additional_packages || log_warn "Additional packages had issues — continuing"
-    configure_plymouth || log_warn "Plymouth configuration failed — continuing"
     configure_snapshots || log_warn "Snapshot configuration failed — continuing"
 
     # --- Phase 5: Final Configuration (non-critical) ---
@@ -396,15 +399,15 @@ configure_mkinitcpio() {
     # - For hardware compatibility: keyboard BEFORE autodetect
     local hooks=""
     local use_systemd_hooks=false
-
-    # FIDO2 encryption requires systemd hooks (sd-encrypt + crypttab.initramfs)
-    if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
-        use_systemd_hooks=true
-    fi
-
     local is_encrypted=false
+
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
         is_encrypted=true
+    fi
+
+    # FIDO2 encryption requires systemd hooks (sd-encrypt + crypttab.initramfs)
+    if [[ "$is_encrypted" == true ]] && [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
+        use_systemd_hooks=true
     fi
 
     if [[ "$use_systemd_hooks" == true ]]; then
@@ -1349,14 +1352,14 @@ configure_grub_theme() {
     if [[ -f "${theme_dir}/theme.txt" ]]; then
         # Update GRUB config to use the theme
         if grep -q "^GRUB_THEME=" "$grub_default"; then
-            sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"${theme_dir}/theme.txt\"|" "$grub_default"
+            sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"${theme_dir}/theme.txt\"|" "$grub_default" || log_warn "Failed to update GRUB_THEME in $grub_default"
         else
-            echo "GRUB_THEME=\"${theme_dir}/theme.txt\"" >> "$grub_default"
+            echo "GRUB_THEME=\"${theme_dir}/theme.txt\"" >> "$grub_default" || log_warn "Failed to append GRUB_THEME to $grub_default"
         fi
 
         # Also set gfxmode for better theme rendering
         if ! grep -q "^GRUB_GFXMODE=" "$grub_default"; then
-            echo "GRUB_GFXMODE=auto" >> "$grub_default"
+            echo "GRUB_GFXMODE=auto" >> "$grub_default" || log_warn "Failed to set GRUB_GFXMODE"
         fi
 
         log_success "GRUB theme configured: $theme_name"
@@ -1395,6 +1398,7 @@ configure_secure_boot() {
     # Create Secure Boot keys if they don't exist
     if [[ ! -d /usr/share/secureboot/keys ]]; then
         log_info "Creating Secure Boot keys..."
+        log_cmd "sbctl create-keys"
         sbctl create-keys || {
             log_warn "Failed to create Secure Boot keys"
             return 0
@@ -1410,46 +1414,56 @@ configure_secure_boot() {
     # Sign the kernel
     local kernel="${KERNEL:-linux}"
     if [[ -f "/boot/vmlinuz-${kernel}" ]]; then
+        log_cmd "sbctl sign -s /boot/vmlinuz-${kernel}"
         sbctl sign -s "/boot/vmlinuz-${kernel}" 2>/dev/null || log_warn "Failed to sign vmlinuz-${kernel}"
     fi
 
-    # Sign bootloader based on type
-    if [[ "${BOOTLOADER:-grub}" == "grub" ]]; then
-        # Sign GRUB EFI binary
-        local grub_efi="/boot/efi/EFI/GRUB/grubx64.efi"
-        if [[ -f "$grub_efi" ]]; then
-            sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"
+    # Sign bootloader EFI binaries based on type
+    log_info "Signing bootloader EFI binaries for: ${BOOTLOADER:-grub}"
+    case "${BOOTLOADER:-grub}" in
+        "grub")
+            for grub_efi in /boot/efi/EFI/GRUB/grubx64.efi /boot/EFI/GRUB/grubx64.efi /efi/EFI/GRUB/grubx64.efi; do
+                [[ -f "$grub_efi" ]] && { log_cmd "sbctl sign -s $grub_efi"; sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"; }
+            done
+            ;;
+        "systemd-boot")
+            for sd_efi in /boot/efi/EFI/systemd/systemd-bootx64.efi /boot/EFI/systemd/systemd-bootx64.efi /efi/EFI/systemd/systemd-bootx64.efi; do
+                [[ -f "$sd_efi" ]] && { log_cmd "sbctl sign -s $sd_efi"; sbctl sign -s "$sd_efi" 2>/dev/null || log_warn "Failed to sign systemd-boot"; }
+            done
+            ;;
+        "refind")
+            for refind_efi in /boot/efi/EFI/refind/refind_x64.efi /boot/EFI/refind/refind_x64.efi /efi/EFI/refind/refind_x64.efi; do
+                [[ -f "$refind_efi" ]] && { log_cmd "sbctl sign -s $refind_efi"; sbctl sign -s "$refind_efi" 2>/dev/null || log_warn "Failed to sign rEFInd"; }
+            done
+            ;;
+        "limine")
+            for limine_efi in /boot/efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI /efi/EFI/BOOT/BOOTX64.EFI; do
+                [[ -f "$limine_efi" ]] && { log_cmd "sbctl sign -s $limine_efi"; sbctl sign -s "$limine_efi" 2>/dev/null || log_warn "Failed to sign Limine"; }
+            done
+            ;;
+        "efistub")
+            # EFISTUB uses the kernel directly as EFI binary (already signed above)
+            log_info "EFISTUB uses kernel directly — no separate bootloader to sign"
+            ;;
+    esac
+
+    # Sign EFI fallback bootloader (common to all bootloaders)
+    for fallback_efi in /boot/efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI /efi/EFI/BOOT/BOOTX64.EFI; do
+        if [[ -f "$fallback_efi" ]]; then
+            log_cmd "sbctl sign -s $fallback_efi"
+            sbctl sign -s "$fallback_efi" 2>/dev/null || log_warn "Failed to sign EFI fallback"
+            break
         fi
-        # Also try alternate path
-        grub_efi="/boot/EFI/GRUB/grubx64.efi"
-        if [[ -f "$grub_efi" ]]; then
-            sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"
-        fi
-        # Sign EFI fallback (installed by grub-install --removable)
-        for fallback_efi in /boot/efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI /efi/EFI/BOOT/BOOTX64.EFI; do
-            if [[ -f "$fallback_efi" ]]; then
-                sbctl sign -s "$fallback_efi" 2>/dev/null || log_warn "Failed to sign EFI fallback"
-                break
-            fi
-        done
-    else
-        # Sign systemd-boot
-        local systemd_efi="/boot/efi/EFI/systemd/systemd-bootx64.efi"
-        if [[ -f "$systemd_efi" ]]; then
-            sbctl sign -s "$systemd_efi" 2>/dev/null || log_warn "Failed to sign systemd-boot"
-        fi
-        systemd_efi="/boot/EFI/systemd/systemd-bootx64.efi"
-        if [[ -f "$systemd_efi" ]]; then
-            sbctl sign -s "$systemd_efi" 2>/dev/null || log_warn "Failed to sign systemd-boot"
-        fi
-        # Also sign the Linux EFI stub
-        local linux_efi="/boot/efi/EFI/Linux/"
-        if [[ -d "$linux_efi" ]]; then
-            for efi in "$linux_efi"/*.efi; do
-                [[ -f "$efi" ]] && sbctl sign -s "$efi" 2>/dev/null || true
+    done
+
+    # Sign Linux EFI stubs (UKI / systemd-boot auto-entries)
+    for linux_efi_dir in /boot/efi/EFI/Linux /boot/EFI/Linux /efi/EFI/Linux; do
+        if [[ -d "$linux_efi_dir" ]]; then
+            for efi in "$linux_efi_dir"/*.efi; do
+                [[ -f "$efi" ]] && { sbctl sign -s "$efi" 2>/dev/null || log_warn "Failed to sign $efi"; }
             done
         fi
-    fi
+    done
 
     # Create post-install script for key enrollment
     cat > /root/enroll-secure-boot-keys.sh << 'SBEOF'
@@ -1498,7 +1512,6 @@ Target = linux
 Target = linux-lts
 Target = linux-zen
 Target = linux-hardened
-Target = systemd
 
 [Action]
 Description = Signing EFI binaries for Secure Boot...
@@ -2020,7 +2033,8 @@ configure_plymouth() {
     # Set Plymouth theme if specified
     if [[ -n "${PLYMOUTH_THEME:-}" && "${PLYMOUTH_THEME}" != "none" ]]; then
         if [[ -d "/usr/share/plymouth/themes/${PLYMOUTH_THEME}" ]]; then
-            plymouth-set-default-theme -R "${PLYMOUTH_THEME}" || log_warn "Failed to set Plymouth theme"
+            # No -R flag: mkinitcpio -P runs after this and will pick up the theme
+            plymouth-set-default-theme "${PLYMOUTH_THEME}" || log_warn "Failed to set Plymouth theme"
             log_info "Plymouth theme set to: ${PLYMOUTH_THEME}"
         else
             log_warn "Plymouth theme not found: ${PLYMOUTH_THEME}"
