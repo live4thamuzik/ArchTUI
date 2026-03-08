@@ -15,6 +15,9 @@ execute_raid_partitioning() {
     # Setup cleanup trap for error recovery
     setup_partitioning_trap
 
+    # Clean up stale RAID/LVM/LUKS state from any previous failed attempt
+    cleanup_stale_raid
+
     # Validate RAID requirements
     if [ ${#RAID_DEVICES[@]} -lt 2 ]; then
         error_exit "RAID requires at least 2 disks. Current disks: ${RAID_DEVICES[*]}"
@@ -78,14 +81,16 @@ execute_raid_partitioning() {
         local data_part=$(get_partition_path "$disk" "$data_part_num")
         data_partitions+=("$data_part")
     done
-    
+
+    # Zero stale superblocks and stop auto-assembled arrays before creating new ones
+    prepare_raid_partitions "${data_partitions[@]}"
+
     # Create RAID array
     log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md0 ${data_partitions[*]}"
     mdadm --create --run --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
     
     # Wait for RAID to be ready
-    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out after mdadm --create, falling back to sleep"; sleep 2; }
-    mdadm --wait /dev/md0 || error_exit "RAID array not ready."
+    wait_for_raid_array /dev/md0
     
     # --- Phase 3: Format and mount root FIRST ---
     format_filesystem "/dev/md0" "$ROOT_FILESYSTEM_TYPE"
