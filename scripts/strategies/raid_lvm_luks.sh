@@ -15,6 +15,9 @@ execute_raid_lvm_luks_partitioning() {
     # Setup cleanup trap for error recovery
     setup_partitioning_trap
 
+    # Clean up stale RAID/LVM/LUKS state from any previous failed attempt
+    cleanup_stale_raid
+
     # Validate that we have multiple disks
     if [[ ${#RAID_DEVICES[@]} -lt 2 ]]; then
         error_exit "RAID + LVM + LUKS requires at least 2 disks, but only ${#RAID_DEVICES[@]} provided"
@@ -84,10 +87,14 @@ execute_raid_lvm_luks_partitioning() {
             DATA_PARTS+=("$(get_partition_path "$disk" 3)")
         done
 
+        # Zero stale superblocks and stop auto-assembled arrays
+        prepare_raid_partitions "${XBOOTLDR_PARTS[@]}" "${DATA_PARTS[@]}"
+
         # Create XBOOTLDR RAID1 array
         log_info "Creating XBOOTLDR RAID1 array"
         log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR ${XBOOTLDR_PARTS[*]}"
         mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
+        wait_for_raid_array /dev/md/XBOOTLDR
 
         # Create data RAID array
         log_info "Creating data RAID array"
@@ -95,7 +102,7 @@ execute_raid_lvm_luks_partitioning() {
         mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
         # Wait for RAID arrays to be ready
-        mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
+        wait_for_raid_array /dev/md/DATA
 
         # Format XBOOTLDR
         format_filesystem "/dev/md/XBOOTLDR" "ext4"
@@ -110,10 +117,14 @@ execute_raid_lvm_luks_partitioning() {
             DATA_PARTS+=("$(get_partition_path "$disk" 3)")
         done
 
+        # Zero stale superblocks and stop auto-assembled arrays
+        prepare_raid_partitions "${BOOT_PARTS[@]}" "${DATA_PARTS[@]}"
+
         # Create boot RAID1 array
         log_info "Creating boot RAID1 array"
         log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT ${BOOT_PARTS[*]}"
         mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
+        wait_for_raid_array /dev/md/BOOT
 
         # Create data RAID array
         log_info "Creating data RAID array"
@@ -121,7 +132,7 @@ execute_raid_lvm_luks_partitioning() {
         mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
         # Wait for RAID arrays to be ready
-        mdadm --wait /dev/md/DATA || error_exit "DATA RAID array not ready"
+        wait_for_raid_array /dev/md/DATA
         
         # Format boot
         format_filesystem "/dev/md/BOOT" "ext4"

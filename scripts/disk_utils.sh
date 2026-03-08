@@ -1155,6 +1155,108 @@ cleanup_partitioning() {
     log_warn "Partitioning cleanup complete"
 }
 
+# Pre-cleanup stale RAID/LVM/LUKS state from a previous failed attempt.
+# Call this at the start of each RAID strategy BEFORE partitioning.
+cleanup_stale_raid() {
+    log_info "Cleaning up stale RAID/LVM/LUKS state from any previous attempt..."
+
+    # Unmount anything under /mnt
+    if mountpoint -q /mnt 2>/dev/null; then
+        log_warn "Unmounting stale /mnt mounts"
+        umount -R /mnt 2>/dev/null || umount -l /mnt 2>/dev/null || true
+    fi
+
+    # Turn off swap (active swap blocks umount)
+    swapoff -a 2>/dev/null || true
+
+    # Close LUKS mappings
+    for mapper in /dev/mapper/crypt*; do
+        if [[ -e "$mapper" ]]; then
+            local name
+            name=$(basename "$mapper")
+            log_warn "Closing stale LUKS mapping: $name"
+            cryptsetup close "$name" 2>/dev/null || true
+        fi
+    done
+
+    # Deactivate LVM volume groups
+    if command -v vgchange &>/dev/null; then
+        vgchange -an 2>/dev/null || true
+    fi
+
+    # Stop existing RAID arrays
+    if command -v mdadm &>/dev/null; then
+        for md in /dev/md/*; do
+            if [[ -b "$md" ]]; then
+                log_warn "Stopping stale RAID array: $md"
+                mdadm --stop "$md" 2>/dev/null || true
+            fi
+        done
+        for md in /dev/md[0-9]*; do
+            if [[ -b "$md" ]]; then
+                log_warn "Stopping stale RAID array: $md"
+                mdadm --stop "$md" 2>/dev/null || true
+            fi
+        done
+        udevadm settle --timeout=5 2>/dev/null || true
+    fi
+
+    log_info "Stale state cleanup complete"
+}
+
+# Wait for a RAID array to become ready after mdadm --create.
+# mdadm --wait can return non-zero for clean/RAID0 arrays that have no resync,
+# so we fall back to mdadm --detail to verify the array is active.
+# Prepare partitions for RAID by zeroing stale superblocks and stopping
+# any auto-assembled arrays. Call AFTER partitioning all disks but BEFORE
+# mdadm --create. Without this, udev auto-assembly can hold partitions busy.
+prepare_raid_partitions() {
+    local partitions=("$@")
+
+    log_info "Preparing ${#partitions[@]} partitions for RAID (clearing signatures, stopping auto-assembled arrays)"
+
+    # Stop any auto-assembled arrays that might be holding partitions busy
+    if command -v mdadm &>/dev/null; then
+        for md in /dev/md/* /dev/md[0-9]*; do
+            if [[ -b "$md" ]]; then
+                log_warn "Stopping auto-assembled array: $md"
+                mdadm --stop "$md" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    udevadm settle --timeout=5 2>/dev/null || true
+
+    # Zero superblocks and wipe signatures on all RAID member partitions
+    for part in "${partitions[@]}"; do
+        if [[ -b "$part" ]]; then
+            log_cmd "wipefs --all $part"
+            wipefs --all "$part" 2>/dev/null || true
+            log_cmd "mdadm --zero-superblock $part"
+            mdadm --zero-superblock "$part" 2>/dev/null || true
+        fi
+    done
+
+    udevadm settle --timeout=5 2>/dev/null || true
+    log_info "RAID partitions prepared"
+}
+
+wait_for_raid_array() {
+    local md_dev="$1"
+
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out after mdadm --create, falling back to sleep"; sleep 2; }
+
+    if ! mdadm --wait "$md_dev" 2>/dev/null; then
+        log_warn "mdadm --wait $md_dev returned non-zero — verifying array with --detail"
+        if ! mdadm --detail "$md_dev" >/dev/null 2>&1; then
+            error_exit "RAID array $md_dev not ready."
+        fi
+        log_info "RAID array $md_dev verified active via --detail"
+    else
+        log_info "RAID array $md_dev is ready"
+    fi
+}
+
 # Setup error trap for partition strategies
 # Call this at the start of each strategy
 setup_partitioning_trap() {
