@@ -751,9 +751,13 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                 let items: Vec<ListItem> = available_disks.iter().enumerate()
                     .map(|(i, disk)| {
                         let is_selected = selected_disks.contains(disk);
-                        let status = if is_selected { "[\u{2713}]" } else { "[ ]" };
-                        let item_text = format!("{} {}", status, disk);
-                        let style = if i == scroll_state.selected_index {
+                        let is_cursor = i == scroll_state.selected_index;
+                        let indicator = if is_cursor { "\u{25b8} " } else { "  " };
+                        let checkbox = if is_selected { "[x]" } else { "[ ]" };
+                        let item_text = format!("{}{} {}", indicator, checkbox, disk);
+                        let style = if is_cursor && is_selected {
+                            Style::default().fg(Colors::SUCCESS).add_modifier(Modifier::BOLD)
+                        } else if is_cursor {
                             Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD)
                         } else if is_selected {
                             Style::default().fg(Colors::SUCCESS)
