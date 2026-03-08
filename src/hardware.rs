@@ -109,7 +109,22 @@ impl HardwareInfo {
     /// either exists or it doesn't).
     pub fn detect() -> Self {
         let firmware = detect_firmware_mode();
-        let network = detect_internet();
+
+        // Network check runs in a background thread with a 3-second deadline
+        // to avoid blocking TUI startup (common in VMs without network).
+        let network = {
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(detect_internet());
+            });
+            match rx.recv_timeout(Duration::from_secs(3)) {
+                Ok(state) => state,
+                Err(_) => {
+                    tracing::warn!("Network detection timed out — defaulting to Offline");
+                    NetworkState::Offline
+                }
+            }
+        };
 
         tracing::info!("Hardware detection: firmware={}, network={}", firmware, network);
 
@@ -162,7 +177,7 @@ pub fn detect_firmware_mode() -> FirmwareMode {
 
 /// Detect network connectivity via TCP connection to archlinux.org.
 ///
-/// Uses `TcpStream::connect_timeout` with a 5-second timeout.
+/// Uses `TcpStream::connect_timeout` with a 2-second timeout.
 /// Connects to port 443 (HTTPS) since it's universally allowed through firewalls.
 ///
 /// # Why TCP instead of ICMP/ping?
@@ -188,7 +203,7 @@ pub fn detect_internet() -> NetworkState {
         }
     };
 
-    let timeout = Duration::from_secs(5);
+    let timeout = Duration::from_secs(2);
 
     match TcpStream::connect_timeout(&addr, timeout) {
         Ok(_stream) => {
@@ -243,7 +258,7 @@ pub fn detect_internet_strict() -> Result<bool> {
         .parse()
         .context("Failed to parse archlinux.org socket address")?;
 
-    let timeout = Duration::from_secs(5);
+    let timeout = Duration::from_secs(2);
 
     match TcpStream::connect_timeout(&addr, timeout) {
         Ok(_stream) => Ok(true),
