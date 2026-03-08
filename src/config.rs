@@ -158,7 +158,6 @@ impl Default for Configuration {
                 ConfigOption::new("Locale", true, "System locale", "en_US.UTF-8"),
                 ConfigOption::new("Keymap", true, "Keyboard layout", "us"),
                 // Disk and Storage (4-18)
-                ConfigOption::new("Disk", true, "Target disk for installation", ""),
                 ConfigOption::new(
                     "Partitioning Strategy",
                     true,
@@ -166,6 +165,7 @@ impl Default for Configuration {
                     "",
                 ),
                 ConfigOption::new("RAID Level", false, "RAID array level", "N/A"),
+                ConfigOption::new("Disk", true, "Target disk for installation", ""),
                 ConfigOption::new("Encryption", false, "Enable disk encryption", "No"),
                 ConfigOption::new(
                     "Encryption Password",
