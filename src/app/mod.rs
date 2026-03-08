@@ -2870,23 +2870,12 @@ impl App {
                         selected: scroll_state.selected_index,
                     }
                 }
-                InputType::DiskSelection { available_disks, scroll_state, .. } => {
-                    ConfigEditState::Selection {
-                        choices: available_disks.clone(),
-                        selected: scroll_state.selected_index,
-                    }
-                }
-                InputType::MultiDiskSelection { available_disks, scroll_state, selected_disks, min_disks, .. } => {
-                    let checked = available_disks.iter().enumerate()
-                        .filter(|(_, d)| selected_disks.contains(d))
-                        .map(|(i, _)| i)
-                        .collect();
-                    ConfigEditState::MultiSelection {
-                        choices: available_disks.clone(),
-                        selected: scroll_state.selected_index,
-                        checked,
-                        min_required: *min_disks,
-                    }
+                // Disk selection dialogs use the popup overlay (render_input_dialog)
+                // rather than the inline right-panel editor. ConfigEditState::None
+                // lets keys flow through to InputHandler::handle_input which already
+                // handles Up/Down/Space/Enter correctly for both single and multi-disk.
+                InputType::DiskSelection { .. } | InputType::MultiDiskSelection { .. } => {
+                    ConfigEditState::None
                 }
                 InputType::PackageSelection {
                     current_input,
@@ -3037,68 +3026,6 @@ impl App {
                                 selected: pos,
                             };
                         }
-                    }
-                    _ => {}
-                }
-            }
-            ConfigEditState::MultiSelection { choices, selected, checked, min_required } => {
-                match key_event.code {
-                    KeyCode::Up => {
-                        let new = selected.saturating_sub(1);
-                        let mut state = self.lock_state();
-                        state.config_edit = ConfigEditState::MultiSelection {
-                            choices, selected: new, checked, min_required,
-                        };
-                    }
-                    KeyCode::Down => {
-                        let max = choices.len().saturating_sub(1);
-                        let new = (selected + 1).min(max);
-                        let mut state = self.lock_state();
-                        state.config_edit = ConfigEditState::MultiSelection {
-                            choices, selected: new, checked, min_required,
-                        };
-                    }
-                    KeyCode::Char(' ') => {
-                        let mut new_checked = checked;
-                        if new_checked.contains(&selected) {
-                            new_checked.retain(|&i| i != selected);
-                        } else {
-                            new_checked.push(selected);
-                        }
-                        // Sync back to InputHandler so its selected_disks stays in sync
-                        if let Some(ref mut dialog) = self.input_handler.current_dialog {
-                            if let InputType::MultiDiskSelection { ref mut selected_disks, ref available_disks, .. } = dialog.input_type {
-                                *selected_disks = new_checked.iter()
-                                    .filter_map(|&i| available_disks.get(i).cloned())
-                                    .collect();
-                            }
-                        }
-                        let mut state = self.lock_state();
-                        state.config_edit = ConfigEditState::MultiSelection {
-                            choices, selected, checked: new_checked, min_required,
-                        };
-                    }
-                    KeyCode::Enter => {
-                        if checked.len() >= min_required {
-                            // Build comma-separated value from checked disk entries
-                            let value: String = checked.iter()
-                                .filter_map(|&i| choices.get(i).cloned())
-                                .collect::<Vec<_>>()
-                                .join(",");
-                            {
-                                let mut state = self.lock_state();
-                                state.config_edit = ConfigEditState::None;
-                            }
-                            self.input_handler.current_dialog = None;
-                            self.update_configuration_value(value)?;
-                        }
-                        // If not enough disks selected, do nothing (user must select more)
-                    }
-                    KeyCode::Esc => {
-                        let mut state = self.lock_state();
-                        state.config_edit = ConfigEditState::None;
-                        drop(state);
-                        self.input_handler.current_dialog = None;
                     }
                     _ => {}
                 }
