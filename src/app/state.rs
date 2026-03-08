@@ -63,16 +63,6 @@ pub enum ConfigEditState {
         choices: Vec<String>,
         selected: usize,
     },
-    /// Multi-select from a list (Space to toggle, Enter to confirm)
-    MultiSelection {
-        choices: Vec<String>,
-        /// Cursor position (highlighted row)
-        selected: usize,
-        /// Indices of checked items
-        checked: Vec<usize>,
-        /// Minimum items required to confirm
-        min_required: usize,
-    },
     /// Text input with cursor
     TextInput {
         value: String,

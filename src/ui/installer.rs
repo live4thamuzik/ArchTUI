@@ -175,9 +175,6 @@ fn render_config_detail(f: &mut Frame, area: Rect, state: &AppState) {
         ConfigEditState::Selection { choices, selected } => {
             render_detail_selection(f, area, state, choices, *selected);
         }
-        ConfigEditState::MultiSelection { choices, selected, checked, min_required } => {
-            render_detail_multi_selection(f, area, choices, *selected, checked, *min_required);
-        }
         ConfigEditState::TextInput { value, cursor } => {
             render_detail_text_input(f, area, state, value, *cursor, false);
         }
@@ -416,104 +413,6 @@ fn render_detail_selection(
             .block(layout_block)
             .wrap(Wrap { trim: false });
         f.render_widget(layout_para, layout_rect);
-    }
-}
-
-/// Multi-selection list with checkboxes (for RAID multi-disk selection)
-fn render_detail_multi_selection(
-    f: &mut Frame,
-    area: Rect,
-    choices: &[String],
-    selected: usize,
-    checked: &[usize],
-    min_required: usize,
-) {
-    let w = area.width.saturating_sub(2) as usize;
-
-    let inner_h = area.height.saturating_sub(2) as usize;
-    let header_lines = 4; // spacer + title + hint + spacer
-    let footer_lines = 2; // spacer + status
-    let visible = inner_h.saturating_sub(header_lines + footer_lines);
-    let offset = selected.saturating_sub(visible.saturating_sub(1));
-    let end = (offset + visible).min(choices.len());
-
-    let mut lines: Vec<ListItem> = vec![
-        ListItem::new(""),
-        ListItem::new(Line::from(Span::styled(
-            "  Select Disks",
-            Style::default()
-                .fg(Colors::SECONDARY)
-                .add_modifier(Modifier::BOLD),
-        ))),
-        ListItem::new(Line::from(Span::styled(
-            "  Space: toggle  Enter: confirm",
-            Style::default().fg(Colors::FG_MUTED),
-        ))),
-        ListItem::new(""),
-    ];
-
-    for (i, choice) in choices.iter().enumerate().skip(offset).take(end - offset) {
-        let is_cursor = i == selected;
-        let is_checked = checked.contains(&i);
-        let checkbox = if is_checked { "[x] " } else { "[ ] " };
-
-        if is_cursor {
-            let text = format!(" \u{25b8} {}{}", checkbox, choice);
-            let padded = format!("{:<width$}", text, width = w);
-            lines.push(ListItem::new(padded).style(
-                Style::default()
-                    .fg(Colors::BG_PRIMARY)
-                    .bg(Colors::SECONDARY)
-                    .add_modifier(Modifier::BOLD),
-            ));
-        } else if is_checked {
-            lines.push(
-                ListItem::new(format!("   {}{}", checkbox, choice))
-                    .style(Style::default().fg(Colors::SUCCESS)),
-            );
-        } else {
-            lines.push(
-                ListItem::new(format!("   {}{}", checkbox, choice))
-                    .style(Style::default().fg(Colors::FG_PRIMARY)),
-            );
-        }
-    }
-
-    // Status line
-    lines.push(ListItem::new(""));
-    let status = if checked.len() < min_required {
-        format!("  {} selected (need at least {})", checked.len(), min_required)
-    } else {
-        format!("  {} selected \u{2713}", checked.len())
-    };
-    let status_color = if checked.len() >= min_required { Colors::SUCCESS } else { Colors::WARNING };
-    lines.push(ListItem::new(Line::from(Span::styled(
-        status,
-        Style::default().fg(status_color),
-    ))));
-
-    let pos = format!("{}/{}", selected + 1, choices.len());
-    let block = panel_active("Disk").title_bottom(
-        Line::from(vec![Span::styled(
-            format!(" {} ", pos),
-            Style::default().fg(Colors::FG_MUTED),
-        )])
-        .alignment(Alignment::Right),
-    );
-
-    let list = List::new(lines).block(block);
-    f.render_widget(list, area);
-
-    if choices.len() + header_lines + footer_lines > inner_h {
-        let mut scrollbar_state = ScrollbarState::new(choices.len()).position(selected);
-        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(None)
-            .end_symbol(None)
-            .track_symbol(Some("\u{2502}"))
-            .thumb_symbol("\u{2588}")
-            .track_style(Style::default().fg(Colors::SCROLLBAR_TRACK))
-            .thumb_style(Style::default().fg(Colors::SCROLLBAR_THUMB));
-        f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
     }
 }
 
