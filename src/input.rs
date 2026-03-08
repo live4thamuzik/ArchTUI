@@ -250,30 +250,25 @@ impl InputDialog {
                     // Toggle selection
                     if let Some(selected_disk) = available_disks.get(scroll_state.selected_index) {
                         if selected_disks.contains(selected_disk) {
+                            tracing::info!(index = scroll_state.selected_index, "Multi-disk: deselected disk");
                             selected_disks.retain(|d| d != selected_disk);
                         } else if selected_disks.len() < *max_disks {
+                            tracing::info!(index = scroll_state.selected_index, count = selected_disks.len() + 1, "Multi-disk: selected disk");
                             selected_disks.push(selected_disk.clone());
                         }
+                    } else {
+                        tracing::warn!(index = scroll_state.selected_index, total = available_disks.len(), "Multi-disk: Space pressed but index out of bounds");
                     }
                 }
                 crossterm::event::KeyCode::Enter => {
-                    // Validate selection
+                    tracing::info!(selected = selected_disks.len(), min = *min_disks, "Multi-disk: Enter pressed");
                     if selected_disks.len() < *min_disks {
-                        // Show error - need more disks
+                        tracing::warn!(selected = selected_disks.len(), min = *min_disks, "Multi-disk: not enough disks, staying in dialog");
                         return InputResult::Continue;
                     }
-
-                    // For RAID strategies, validate disk compatibility
-                    // Note: We'll pass partitioning strategy through the dialog context
-                    // For now, we'll validate based on the number of disks selected
-                    if selected_disks.len() >= 2 {
-                        if let Err(_error) = InputHandler::validate_raid_disks(selected_disks) {
-                            // Show RAID validation error - disks not compatible
-                            return InputResult::Continue;
-                        }
-                    }
-
-                    return InputResult::Confirm(selected_disks.join(","));
+                    let value = selected_disks.join(",");
+                    tracing::info!(value = %value, "Multi-disk: confirming selection");
+                    return InputResult::Confirm(value);
                 }
                 crossterm::event::KeyCode::Esc => {
                     return InputResult::Cancel;
@@ -1645,75 +1640,6 @@ impl InputHandler {
             "Use ↑↓ to navigate, Space to select/deselect, Enter to confirm, Esc to cancel"
                 .to_string(),
         ));
-    }
-
-    /// Validate RAID disk compatibility
-    fn validate_raid_disks(disks: &[String]) -> Result<(), String> {
-        if disks.len() < 2 {
-            return Err("RAID requires at least 2 disks".to_string());
-        }
-
-        // Extract disk paths from the formatted strings
-        let disk_paths: Vec<&str> = disks
-            .iter()
-            .map(|d| d.split(' ').next().unwrap_or(""))
-            .filter(|&d| !d.is_empty())
-            .collect();
-
-        // Check disk sizes for RAID compatibility
-        let mut disk_sizes = Vec::new();
-        for disk in &disk_paths {
-            if let Ok(output) = std::process::Command::new("lsblk")
-                .args(["-d", "-n", "-o", "SIZE", disk])
-                .in_new_process_group()
-                .output()
-            {
-                let size_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                disk_sizes.push(size_str);
-            }
-        }
-
-        // Check if all disks have similar sizes (within 10% tolerance)
-        if disk_sizes.len() >= 2 {
-            let first_size = Self::parse_disk_size(&disk_sizes[0]);
-            for size_str in &disk_sizes[1..] {
-                let size = Self::parse_disk_size(size_str);
-                let tolerance = (first_size as f64 * 0.1) as u64; // 10% tolerance
-                if (size as i64 - first_size as i64).abs() > tolerance as i64 {
-                    return Err(format!(
-                        "RAID disks should be similar sizes. Found: {} vs {}",
-                        disk_sizes[0], size_str
-                    ));
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Parse disk size string to bytes for comparison
-    fn parse_disk_size(size_str: &str) -> u64 {
-        let size_str = size_str.trim();
-        let (number, unit) = if let Some(stripped) = size_str.strip_suffix("G") {
-            (stripped, "G")
-        } else if let Some(stripped) = size_str.strip_suffix("M") {
-            (stripped, "M")
-        } else if let Some(stripped) = size_str.strip_suffix("T") {
-            (stripped, "T")
-        } else {
-            (size_str, "")
-        };
-
-        if let Ok(num) = number.parse::<f64>() {
-            match unit {
-                "T" => (num * 1_000_000_000_000.0) as u64,
-                "G" => (num * 1_000_000_000.0) as u64,
-                "M" => (num * 1_000_000.0) as u64,
-                _ => num as u64,
-            }
-        } else {
-            0
-        }
     }
 
     /// Start the manual partition assignment dialog sequence
