@@ -1104,6 +1104,9 @@ log_partitioning_complete() {
 cleanup_partitioning() {
     log_warn "Cleaning up partitioning state..."
 
+    # Always resume udev exec queue (may have been paused by prepare_raid_partitions)
+    udevadm control --start-exec-queue 2>/dev/null || true
+
     # Unmount in reverse order (most nested first)
     local mount_points=(
         "/mnt/var/log"
@@ -1227,6 +1230,14 @@ prepare_raid_partitions() {
 
     udevadm settle --timeout=5 2>/dev/null || true
 
+    # Pause udev event processing BEFORE wiping — wipefs/zero-superblock trigger
+    # CHANGE events that cause udev to briefly re-open devices. With the exec queue
+    # paused, udev queues events but does NOT process them, keeping devices free
+    # for the upcoming mdadm --create calls. The caller MUST call resume_udev()
+    # after all mdadm --create calls succeed.
+    log_cmd "udevadm control --stop-exec-queue"
+    udevadm control --stop-exec-queue 2>/dev/null || log_warn "Failed to pause udev exec queue"
+
     # Zero superblocks and wipe signatures on all RAID member partitions
     for part in "${partitions[@]}"; do
         if [[ -b "$part" ]]; then
@@ -1237,8 +1248,17 @@ prepare_raid_partitions() {
         fi
     done
 
-    udevadm settle --timeout=5 2>/dev/null || true
-    log_info "RAID partitions prepared"
+    log_info "RAID partitions prepared (udev exec queue paused — call resume_udev after mdadm --create)"
+}
+
+# Resume udev event processing after RAID arrays are created.
+# Call this AFTER all mdadm --create calls succeed — pairs with the
+# --stop-exec-queue in prepare_raid_partitions().
+resume_udev() {
+    log_cmd "udevadm control --start-exec-queue"
+    udevadm control --start-exec-queue 2>/dev/null || log_warn "Failed to resume udev exec queue"
+    udevadm settle --timeout=10 2>/dev/null || { log_warn "udevadm settle timed out after resuming exec queue"; sleep 2; }
+    log_info "udev exec queue resumed and settled"
 }
 
 wait_for_raid_array() {

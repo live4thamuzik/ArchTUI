@@ -94,14 +94,17 @@ execute_raid_luks_partitioning() {
         log_info "Creating XBOOTLDR RAID1 array"
         log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR ${XBOOTLDR_PARTS[*]}"
         mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
-        wait_for_raid_array /dev/md/XBOOTLDR
 
         # Create data RAID array
         log_info "Creating data RAID array"
         log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
         mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
+        # Resume udev event processing now that all arrays are created
+        resume_udev
+
         # Wait for RAID arrays to be ready
+        wait_for_raid_array /dev/md/XBOOTLDR
         wait_for_raid_array /dev/md/DATA
 
         # Format XBOOTLDR
@@ -124,14 +127,17 @@ execute_raid_luks_partitioning() {
         log_info "Creating boot RAID1 array"
         log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT ${BOOT_PARTS[*]}"
         mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/BOOT "${BOOT_PARTS[@]}" || error_exit "Failed to create BOOT RAID array"
-        wait_for_raid_array /dev/md/BOOT
 
         # Create data RAID array
         log_info "Creating data RAID array"
         log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
         mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
+        # Resume udev event processing now that all arrays are created
+        resume_udev
+
         # Wait for RAID arrays to be ready
+        wait_for_raid_array /dev/md/BOOT
         wait_for_raid_array /dev/md/DATA
 
         # Format boot
