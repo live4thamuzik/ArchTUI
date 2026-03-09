@@ -270,7 +270,7 @@ execute_raid_lvm_luks_partitioning() {
     mkdir -p /mnt/etc
     generate_crypttab "/dev/md/DATA" "cryptlvm"
 
-    log_info "RAID + LVM + LUKS partitioning completed successfully"
+    log_partitioning_complete "RAID + LVM + LUKS (ESP + boot RAID1 + encrypted LVM on data RAID)"
 }
 
 # Export the function
