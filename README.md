@@ -2,11 +2,8 @@
 
 A terminal-based interface for installing and administering Arch Linux. Rust TUI frontend, modular Bash backend.
 
-> **This project is under active development and is not stable.**
-> It is incomplete, untested on real hardware in its current state, and will break.
-> **Do not use this on systems you care about.**
-> Testing should be done in virtual machines or disposable environments only.
-> There are no stability guarantees. Interfaces, configuration formats, and behavior are all subject to change without notice.
+> **v1.0.0** — Validated on real hardware. All 10 partitioning strategies (including RAID+LVM+LUKS+Btrfs) install and boot successfully.
+> Testing in virtual machines or disposable environments is still recommended before deploying to systems you care about.
 
 ---
 
@@ -259,7 +256,7 @@ ArchTUI/
 
 ## Building and development
 
-Requires the Rust toolchain (1.74+). On Arch: `sudo pacman -S rust`
+Requires the Rust toolchain (1.85+). On Arch: `sudo pacman -S rust`
 
 ```
 make build          # Release build, copies binary to ./archtui
@@ -296,9 +293,8 @@ The compiled binary requires glibc (dynamically linked, LTO, stripped). The bash
 
 ## Current status
 
-**This project is in active development.**
+**v1.0.0 — Stable release.** Validated on real hardware with all partitioning strategies including the full RAID+LVM+LUKS+Btrfs stack.
 
-What exists and works:
 - TUI framework, navigation, menus, dialogs, embedded PTY terminal
 - Full CLI with subcommands for all 28 tools
 - Typed argument system for all script categories
@@ -310,13 +306,12 @@ What exists and works:
 - Pre-install orchestration (mirror ranking with network awareness)
 - Post-install orchestration (AUR helper, dotfiles — non-fatal)
 - Comprehensive logging (master log, per-script verbose trace, config dump, `log_cmd` before all destructive ops)
-- 338 unit tests passing
-- CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit)
+- Snapshot management (snapper or timeshift) with configurable frequency and retention
+- 524 tests (338 Rust + 186 BATS)
+- CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit + safety linter)
 
-What is incomplete or untested:
-- End-to-end installation has not been validated on real hardware
-- Error recovery paths are not fully exercised
+Known limitations:
 - ALPM integration is feature-gated and lightly tested
-- No release binaries are published
+- Error recovery paths are not fully exercised on all strategy combinations
 
-Do not assume anything works until you have tested it yourself in a disposable environment.
+Test in a disposable environment before deploying to systems you care about.
