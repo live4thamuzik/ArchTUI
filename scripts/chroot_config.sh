@@ -435,8 +435,8 @@ configure_mkinitcpio() {
 
         # Save mdadm configuration
         if command -v mdadm &>/dev/null; then
-            log_cmd "mdadm --detail --scan >> /etc/mdadm.conf"
-            mdadm --detail --scan >> /etc/mdadm.conf 2>/dev/null || log_warn "Failed to write mdadm.conf in chroot"
+            log_cmd "mdadm --detail --scan > /etc/mdadm.conf"
+            mdadm --detail --scan > /etc/mdadm.conf 2>/dev/null || log_warn "Failed to write mdadm.conf in chroot"
         fi
     fi
 
@@ -685,18 +685,37 @@ install_grub() {
             log_warn "GRUB fallback installation failed (non-fatal)"
         }
     else
-        # BIOS installation — extract first disk for RAID (comma-separated INSTALL_DISK)
-        local bios_disk="${INSTALL_DISK%%,*}"
-        if [[ -z "$bios_disk" ]]; then
-            log_error "INSTALL_DISK not set for BIOS GRUB install"
-            return 1
+        # BIOS installation
+        # For RAID: install GRUB on ALL member disks for redundancy
+        # (Arch wiki GRUB#RAID: "run grub-install on both drives")
+        if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
+            IFS=',' read -ra _grub_disks <<< "${INSTALL_DISK:?INSTALL_DISK not set}"
+            for _disk in "${_grub_disks[@]}"; do
+                _disk=$(echo "$_disk" | tr -d '[:space:]')
+                if [[ -b "$_disk" ]]; then
+                    log_info "Installing GRUB for BIOS to RAID member: $_disk"
+                    log_cmd "grub-install --target=i386-pc $_disk --recheck"
+                    grub-install --target=i386-pc "$_disk" --recheck || {
+                        log_error "GRUB installation failed on $_disk"
+                        return 1
+                    }
+                else
+                    log_warn "RAID member $_disk is not a block device — skipping GRUB install"
+                fi
+            done
+        else
+            local bios_disk="${INSTALL_DISK%%,*}"
+            if [[ -z "$bios_disk" ]]; then
+                log_error "INSTALL_DISK not set for BIOS GRUB install"
+                return 1
+            fi
+            log_info "Installing GRUB for BIOS to $bios_disk"
+            log_cmd "grub-install --target=i386-pc $bios_disk --recheck"
+            grub-install --target=i386-pc "$bios_disk" --recheck || {
+                log_error "GRUB installation failed"
+                return 1
+            }
         fi
-        log_info "Installing GRUB for BIOS to $bios_disk"
-        log_cmd "grub-install --target=i386-pc $bios_disk --recheck"
-        grub-install --target=i386-pc "$bios_disk" --recheck || {
-            log_error "GRUB installation failed"
-            return 1
-        }
     fi
 
     log_success "GRUB installed"
@@ -804,6 +823,11 @@ install_systemd_boot() {
         options="$options resume=UUID=${SWAP_UUID}"
     fi
 
+    # RAID0 layout parameter (kernel 5.3.4+, Arch wiki RAID)
+    if [[ "${RAID_LEVEL:-}" == "raid0" ]]; then
+        options="$options raid0.default_layout=2"
+    fi
+
     options="$options quiet"
 
     # Plymouth splash
@@ -907,6 +931,11 @@ _build_kernel_options() {
     # Resume for hibernation
     if [[ "${WANT_SWAP:-no}" == "yes" && -n "${SWAP_UUID:-}" ]]; then
         options="$options resume=UUID=${SWAP_UUID}"
+    fi
+
+    # RAID0 layout parameter (kernel 5.3.4+, Arch wiki RAID)
+    if [[ "${RAID_LEVEL:-}" == "raid0" ]]; then
+        options="$options raid0.default_layout=2"
     fi
 
     options="$options quiet"
@@ -1129,6 +1158,24 @@ configure_grub_settings() {
             log_error "LUKS_UUID not set for encrypted system — GRUB cmdline will be invalid"
             return 1
         fi
+    else
+        # Non-encrypted: explicit root= parameter
+        # For LVM: use /dev/archvg/root device path
+        # For plain/RAID: use ROOT_UUID
+        if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]]; then
+            cmdline="$cmdline root=/dev/archvg/root"
+        else
+            local grub_root_uuid="${ROOT_UUID:-}"
+            if [[ -z "$grub_root_uuid" ]]; then
+                grub_root_uuid=$(findmnt -n -o UUID /) || true
+            fi
+            if [[ -n "$grub_root_uuid" ]]; then
+                cmdline="$cmdline root=UUID=${grub_root_uuid}"
+            else
+                log_error "Cannot determine root UUID for GRUB — system may not boot"
+                return 1
+            fi
+        fi
     fi
 
     # Add Btrfs subvolume rootflags if using Btrfs
@@ -1156,13 +1203,19 @@ configure_grub_settings() {
         log_info "Added nvidia-drm.modeset=1 for NVIDIA DRM KMS"
     fi
 
+    # RAID0 layout parameter (kernel 5.3.4+, Arch wiki RAID)
+    if [[ "${RAID_LEVEL:-}" == "raid0" ]]; then
+        cmdline="$cmdline raid0.default_layout=2"
+        log_info "Added raid0.default_layout=2 for RAID0 (kernel 5.3.4+)"
+    fi
+
     # Update GRUB_CMDLINE_LINUX_DEFAULT
     sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"|" "$grub_default" || log_warn "Failed to update GRUB_CMDLINE_LINUX_DEFAULT"
 
     # Preload GRUB modules for RAID (ensures GRUB can read RAID boot partitions)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
         if ! grep -q "^GRUB_PRELOAD_MODULES=" "$grub_default"; then
-            echo 'GRUB_PRELOAD_MODULES="mdraid1x part_gpt"' >> "$grub_default"
+            echo 'GRUB_PRELOAD_MODULES="mdraid09 mdraid1x part_gpt"' >> "$grub_default"
             log_info "Added GRUB_PRELOAD_MODULES for RAID"
         fi
     fi
