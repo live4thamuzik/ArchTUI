@@ -88,7 +88,10 @@ execute_raid_partitioning() {
     # Create RAID array
     log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md0 ${data_partitions[*]}"
     mdadm --create --run --verbose --level="$raid_level" --raid-devices="${#RAID_DEVICES[@]}" /dev/md0 "${data_partitions[@]}" || error_exit "Failed to create RAID array."
-    
+
+    # Resume udev event processing now that arrays are created
+    resume_udev
+
     # Wait for RAID to be ready
     wait_for_raid_array /dev/md0
     
