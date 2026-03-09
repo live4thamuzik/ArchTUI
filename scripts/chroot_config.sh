@@ -503,6 +503,26 @@ configure_mkinitcpio() {
             fi
         fi
 
+        # Add RAID kernel modules explicitly (autodetect may miss them if live ISO environment differs)
+        if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
+            for rmod in md_mod raid0 raid1 raid456 raid10; do
+                if ! grep -q "$rmod" /etc/mkinitcpio.conf; then
+                    sed -i "s/^MODULES=(\(.*\))/MODULES=(\1 $rmod)/" /etc/mkinitcpio.conf || log_warn "Failed to add $rmod module"
+                    sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
+                fi
+            done
+            log_info "Added RAID modules to mkinitcpio.conf: md_mod raid0 raid1 raid456 raid10"
+        fi
+
+        # Add dm-mod for LVM/LUKS strategies (explicit inclusion)
+        if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
+            if ! grep -q "dm_mod" /etc/mkinitcpio.conf; then
+                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 dm_mod)/' /etc/mkinitcpio.conf || log_warn "Failed to add dm_mod module"
+                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
+                log_info "Added dm_mod module to mkinitcpio.conf"
+            fi
+        fi
+
         # Add GPU modules for early KMS (required for Plymouth + proprietary drivers)
         # Check GPU_DRIVERS env var first, fall back to hardware detection
         local _gpu_drv="${GPU_DRIVERS:-Auto}"
@@ -1138,6 +1158,14 @@ configure_grub_settings() {
 
     # Update GRUB_CMDLINE_LINUX_DEFAULT
     sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$cmdline\"|" "$grub_default" || log_warn "Failed to update GRUB_CMDLINE_LINUX_DEFAULT"
+
+    # Preload GRUB modules for RAID (ensures GRUB can read RAID boot partitions)
+    if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
+        if ! grep -q "^GRUB_PRELOAD_MODULES=" "$grub_default"; then
+            echo 'GRUB_PRELOAD_MODULES="mdraid1x part_gpt"' >> "$grub_default"
+            log_info "Added GRUB_PRELOAD_MODULES for RAID"
+        fi
+    fi
 
     # Enable os-prober if requested OR if other OS was detected during partitioning
     # This ensures dual-boot is properly configured even if user forgot to enable it
