@@ -253,7 +253,7 @@ execute_raid_lvm_partitioning() {
     log_cmd "mdadm --detail --scan > /mnt/etc/mdadm.conf"
     mdadm --detail --scan > /mnt/etc/mdadm.conf || log_warn "Failed to write mdadm.conf"
 
-    log_info "RAID + LVM partitioning completed successfully"
+    log_partitioning_complete "RAID + LVM (ESP + boot RAID1 + LVM on data RAID)"
 }
 
 # Export the function

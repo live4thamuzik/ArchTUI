@@ -212,7 +212,7 @@ execute_raid_luks_partitioning() {
     mkdir -p /mnt/etc
     generate_crypttab "/dev/md/DATA" "cryptroot"
 
-    log_info "RAID + LUKS partitioning completed successfully"
+    log_partitioning_complete "RAID + LUKS (ESP + boot RAID1 + encrypted data RAID)"
 }
 
 # Export the function
