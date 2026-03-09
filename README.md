@@ -1,15 +1,6 @@
 # ArchTUI
 
-A terminal-based interface for installing and administering Arch Linux. Rust TUI frontend, modular Bash backend.
-
-> **v1.0.0** — Validated on real hardware. All 10 partitioning strategies (including RAID+LVM+LUKS+Btrfs) install and boot successfully.
-> Testing in virtual machines or disposable environments is still recommended before deploying to systems you care about.
-
----
-
-## What it is
-
-ArchTUI is a guided installer and system administration toolkit for Arch Linux. The TUI handles configuration, validation, and sequencing. Bash scripts handle execution. The two layers communicate through typed argument structs and environment contracts — Rust decides what to do, Bash does it.
+A guided installer and system administration toolkit for Arch Linux. The TUI handles configuration, validation, and sequencing. Bash scripts handle execution. The two layers communicate through typed argument structs and environment contracts — Rust decides what to do, Bash does it.
 
 It is not a replacement for reading the Arch Wiki or understanding how a manual installation works. If you have never installed Arch by hand, do that first.
 
@@ -22,17 +13,11 @@ It is not a replacement for reading the Arch Wiki or understanding how a manual 
 **System tools** — 28 standalone administration scripts accessible from the TUI or directly via CLI. Disk operations, service management, user/group administration, network configuration, security auditing, initramfs rebuilding, and install log viewing.
 
 ---
-
-## Installation
+A pre-compiled binary (`archtui`) ships in the repo. The Arch live ISO does not have the space or tooling to build from source — the Rust toolchain alone exceeds available ISO memory, and the build also requires `jq`. Clone and run directly. To build from source on a full system:
 
 ```
 git clone https://github.com/live4thamuzik/ArchTUI.git
 cd ArchTUI
-```
-
-A pre-compiled binary (`archtui`) ships in the repo. The Arch live ISO does not have the space or tooling to build from source — the Rust toolchain alone exceeds available ISO memory, and the build also requires `jq`. Clone and run directly. To build from source on a full system:
-
-```
 cargo build --release
 cp target/release/archtui ./
 ```
@@ -50,6 +35,8 @@ make build
 ### TUI mode (default)
 
 ```
+git clone https://github.com/live4thamuzik/ArchTUI.git
+cd ArchTUI
 ./archtui
 ```
 
