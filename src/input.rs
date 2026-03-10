@@ -3,15 +3,15 @@
 //! Handles different types of user input including popups, text input, and selection dialogs.
 
 use crate::config::Package;
-use tracing::{debug, info};
 use crate::process_guard::CommandProcessGroup;
 use crate::types::{
-    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
+    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager,
     EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
     SnapshotFrequency, SnapshotTool, Toggle,
 };
 use ratatui::widgets::ListState;
 use strum::IntoEnumIterator;
+use tracing::{debug, info};
 
 /// Information about a partition
 ///
@@ -250,20 +250,39 @@ impl InputDialog {
                     // Toggle selection
                     if let Some(selected_disk) = available_disks.get(scroll_state.selected_index) {
                         if selected_disks.contains(selected_disk) {
-                            tracing::info!(index = scroll_state.selected_index, "Multi-disk: deselected disk");
+                            tracing::info!(
+                                index = scroll_state.selected_index,
+                                "Multi-disk: deselected disk"
+                            );
                             selected_disks.retain(|d| d != selected_disk);
                         } else if selected_disks.len() < *max_disks {
-                            tracing::info!(index = scroll_state.selected_index, count = selected_disks.len() + 1, "Multi-disk: selected disk");
+                            tracing::info!(
+                                index = scroll_state.selected_index,
+                                count = selected_disks.len() + 1,
+                                "Multi-disk: selected disk"
+                            );
                             selected_disks.push(selected_disk.clone());
                         }
                     } else {
-                        tracing::warn!(index = scroll_state.selected_index, total = available_disks.len(), "Multi-disk: Space pressed but index out of bounds");
+                        tracing::warn!(
+                            index = scroll_state.selected_index,
+                            total = available_disks.len(),
+                            "Multi-disk: Space pressed but index out of bounds"
+                        );
                     }
                 }
                 crossterm::event::KeyCode::Enter => {
-                    tracing::info!(selected = selected_disks.len(), min = *min_disks, "Multi-disk: Enter pressed");
+                    tracing::info!(
+                        selected = selected_disks.len(),
+                        min = *min_disks,
+                        "Multi-disk: Enter pressed"
+                    );
                     if selected_disks.len() < *min_disks {
-                        tracing::warn!(selected = selected_disks.len(), min = *min_disks, "Multi-disk: not enough disks, staying in dialog");
+                        tracing::warn!(
+                            selected = selected_disks.len(),
+                            min = *min_disks,
+                            "Multi-disk: not enough disks, staying in dialog"
+                        );
                         return InputResult::Continue;
                     }
                     let value = selected_disks.join(",");
@@ -335,9 +354,8 @@ impl InputDialog {
                                     let package_name = &selected_result.name;
 
                                     // Toggle selection (exact word match, not substring)
-                                    let is_already_selected = package_list
-                                        .split_whitespace()
-                                        .any(|p| p == package_name);
+                                    let is_already_selected =
+                                        package_list.split_whitespace().any(|p| p == package_name);
                                     if is_already_selected {
                                         // Remove package
                                         let new_list = package_list
@@ -1329,11 +1347,23 @@ impl InputHandler {
             ],
             "Encryption" => AutoToggle::iter().map(|v| v.to_string()).collect(),
             "Root Filesystem" => Filesystem::iter()
-                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs | Filesystem::F2fs))
-                .map(|v| v.to_string()).collect(),
+                .filter(|v| {
+                    matches!(
+                        v,
+                        Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs | Filesystem::F2fs
+                    )
+                })
+                .map(|v| v.to_string())
+                .collect(),
             "Home Filesystem" => Filesystem::iter()
-                .filter(|v| matches!(v, Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs | Filesystem::F2fs))
-                .map(|v| v.to_string()).collect(),
+                .filter(|v| {
+                    matches!(
+                        v,
+                        Filesystem::Ext4 | Filesystem::Xfs | Filesystem::Btrfs | Filesystem::F2fs
+                    )
+                })
+                .map(|v| v.to_string())
+                .collect(),
             "Separate Home Partition" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Swap" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Btrfs Snapshots" => Toggle::iter().map(|v| v.to_string()).collect(),
@@ -1432,6 +1462,7 @@ impl InputHandler {
                 "150GB".to_string(),
                 "200GB".to_string(),
                 "Remaining".to_string(),
+                "Custom".to_string(),
             ],
             "Home Size" => vec![
                 "50GB".to_string(),
@@ -1440,6 +1471,7 @@ impl InputHandler {
                 "500GB".to_string(),
                 "1TB".to_string(),
                 "Remaining".to_string(),
+                "Custom".to_string(),
             ],
             "Snapshot Keep Count" => vec![
                 "3".to_string(),
@@ -1614,7 +1646,9 @@ impl InputHandler {
                     field_name: "error".to_string(),
                     options: vec![format!(
                         "ERROR: Need at least {} disk(s) for {} partitioning, but only {} available",
-                        min_disks, partitioning_strategy, available_disks.len()
+                        min_disks,
+                        partitioning_strategy,
+                        available_disks.len()
                     )],
                     scroll_state: crate::scrolling::ScrollState::new(1, 1),
                 },
@@ -1646,12 +1680,11 @@ impl InputHandler {
     ///
     /// After cfdisk creates partitions, this opens a sequence of selection dialogs
     /// so the user assigns partition roles (root, boot, efi, home, swap).
-    pub fn start_manual_assignment(
-        &mut self,
-        partitions: Vec<(String, String)>,
-        is_uefi: bool,
-    ) {
-        info!(partition_count = partitions.len(), is_uefi, "Starting manual partition assignment");
+    pub fn start_manual_assignment(&mut self, partitions: Vec<(String, String)>, is_uefi: bool) {
+        info!(
+            partition_count = partitions.len(),
+            is_uefi, "Starting manual partition assignment"
+        );
         let assign_state = ManualAssignState {
             partitions: partitions.clone(),
             step: ManualAssignStep::Root,
@@ -1671,11 +1704,7 @@ impl InputHandler {
             .map(|(dev, size)| format!("{} ({})", dev, size))
             .collect();
 
-        self.start_selection(
-            "manual_assign_root".to_string(),
-            options,
-            String::new(),
-        );
+        self.start_selection("manual_assign_root".to_string(), options, String::new());
 
         self.manual_assign_state = Some(assign_state);
     }
@@ -1699,11 +1728,7 @@ impl InputHandler {
                 state.step = ManualAssignStep::RootFs;
 
                 // Filesystem selection for root
-                let fs_options = vec![
-                    "ext4".to_string(),
-                    "btrfs".to_string(),
-                    "xfs".to_string(),
-                ];
+                let fs_options = vec!["ext4".to_string(), "btrfs".to_string(), "xfs".to_string()];
                 self.start_selection(
                     "manual_assign_root_fs".to_string(),
                     fs_options,
@@ -1722,11 +1747,7 @@ impl InputHandler {
                     .filter(|(dev, _)| *dev != state.root)
                     .map(|(dev, size)| format!("{} ({})", dev, size))
                     .collect();
-                self.start_selection(
-                    "manual_assign_boot".to_string(),
-                    options,
-                    String::new(),
-                );
+                self.start_selection("manual_assign_boot".to_string(), options, String::new());
                 None
             }
             ManualAssignStep::Boot => {
@@ -1742,11 +1763,7 @@ impl InputHandler {
                         .filter(|(dev, _)| *dev != state.root && *dev != state.boot)
                         .map(|(dev, size)| format!("{} ({})", dev, size))
                         .collect();
-                    self.start_selection(
-                        "manual_assign_efi".to_string(),
-                        options,
-                        String::new(),
-                    );
+                    self.start_selection("manual_assign_efi".to_string(), options, String::new());
                 } else {
                     // BIOS — skip EFI, go to home
                     state.step = ManualAssignStep::Home;
@@ -1758,11 +1775,7 @@ impl InputHandler {
                         .map(|(dev, size)| format!("{} ({})", dev, size))
                         .collect();
                     options.insert(0, "None (skip)".to_string());
-                    self.start_selection(
-                        "manual_assign_home".to_string(),
-                        options,
-                        String::new(),
-                    );
+                    self.start_selection("manual_assign_home".to_string(), options, String::new());
                 }
                 None
             }
@@ -1779,11 +1792,7 @@ impl InputHandler {
                     .map(|(dev, size)| format!("{} ({})", dev, size))
                     .collect();
                 options.insert(0, "None (skip)".to_string());
-                self.start_selection(
-                    "manual_assign_home".to_string(),
-                    options,
-                    String::new(),
-                );
+                self.start_selection("manual_assign_home".to_string(), options, String::new());
                 None
             }
             ManualAssignStep::Home => {
@@ -1802,21 +1811,14 @@ impl InputHandler {
                         .map(|(dev, size)| format!("{} ({})", dev, size))
                         .collect();
                     options.insert(0, "None (skip)".to_string());
-                    self.start_selection(
-                        "manual_assign_swap".to_string(),
-                        options,
-                        String::new(),
-                    );
+                    self.start_selection("manual_assign_swap".to_string(), options, String::new());
                 } else {
                     state.home = device;
                     state.step = ManualAssignStep::HomeFs;
 
                     // Filesystem selection for home
-                    let fs_options = vec![
-                        "ext4".to_string(),
-                        "btrfs".to_string(),
-                        "xfs".to_string(),
-                    ];
+                    let fs_options =
+                        vec!["ext4".to_string(), "btrfs".to_string(), "xfs".to_string()];
                     self.start_selection(
                         "manual_assign_home_fs".to_string(),
                         fs_options,
@@ -1838,11 +1840,7 @@ impl InputHandler {
                     .map(|(dev, size)| format!("{} ({})", dev, size))
                     .collect();
                 options.insert(0, "None (skip)".to_string());
-                self.start_selection(
-                    "manual_assign_swap".to_string(),
-                    options,
-                    String::new(),
-                );
+                self.start_selection("manual_assign_swap".to_string(), options, String::new());
                 None
             }
             ManualAssignStep::Swap => {
@@ -1997,7 +1995,11 @@ impl InputHandler {
         if boot_mode.to_lowercase() == "uefi" {
             // Check for GPT partition table and ESP partition
             for disk in &disk_paths {
-                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
+                if let Ok(output) = Command::new("fdisk")
+                    .args(["-l", disk])
+                    .in_new_process_group()
+                    .output()
+                {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("GPT") {
                         // Good, GPT partition table
@@ -2009,7 +2011,11 @@ impl InputHandler {
 
             // Check for ESP partition (EF00 type)
             for disk in &disk_paths {
-                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
+                if let Ok(output) = Command::new("fdisk")
+                    .args(["-l", disk])
+                    .in_new_process_group()
+                    .output()
+                {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("EF00") || output_str.contains("EFI System") {
                         has_esp = true;
@@ -2026,7 +2032,11 @@ impl InputHandler {
         } else {
             // BIOS mode - check for MBR or GPT with BIOS Boot Partition
             for disk in &disk_paths {
-                if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
+                if let Ok(output) = Command::new("fdisk")
+                    .args(["-l", disk])
+                    .in_new_process_group()
+                    .output()
+                {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     if output_str.contains("MBR") || output_str.contains("DOS") {
                         has_boot = true; // MBR has boot sector
@@ -2047,7 +2057,11 @@ impl InputHandler {
 
         // Check for root partition (Linux filesystem)
         for disk in &disk_paths {
-            if let Ok(output) = Command::new("fdisk").args(["-l", disk]).in_new_process_group().output() {
+            if let Ok(output) = Command::new("fdisk")
+                .args(["-l", disk])
+                .in_new_process_group()
+                .output()
+            {
                 let output_str = String::from_utf8_lossy(&output.stdout);
                 if output_str.contains("8300") || output_str.contains("Linux filesystem") {
                     has_root = true;
@@ -2100,7 +2114,11 @@ impl InputHandler {
         }
 
         // Get sector size for RAID compatibility
-        if let Ok(output) = Command::new("blockdev").args(["--getss", disk]).in_new_process_group().output() {
+        if let Ok(output) = Command::new("blockdev")
+            .args(["--getss", disk])
+            .in_new_process_group()
+            .output()
+        {
             if let Ok(sector_size) = String::from_utf8_lossy(&output.stdout)
                 .trim()
                 .parse::<u32>()
@@ -2273,7 +2291,11 @@ mod tests {
     #[test]
     fn test_input_handler_text_input() {
         let mut ih = InputHandler::new();
-        ih.start_text_input("Hostname".to_string(), String::new(), "Enter hostname".to_string());
+        ih.start_text_input(
+            "Hostname".to_string(),
+            String::new(),
+            "Enter hostname".to_string(),
+        );
         assert!(ih.is_dialog_active());
     }
 
