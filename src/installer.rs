@@ -22,20 +22,18 @@ use crate::config::Configuration;
 #[cfg(feature = "alpm")]
 use crate::package_manager::PackageManager;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup};
-use crate::script_runner::run_script_safe;
-use crate::script_traits::ScriptArgs;
-use crate::scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
-use crate::scripts::disk::{
-    FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod,
-};
-use crate::scripts::encryption::{LuksCipher, LuksFormatArgs, LuksOpenArgs, SecretFile};
-use crate::scripts::network::{CheckConnectivityArgs, MirrorSortMethod, UpdateMirrorsArgs};
-use crate::scripts::profiles::InstallDotfilesArgs;
-#[cfg(feature = "alpm")]
-use crate::scripts::profiles::EnableServicesArgs;
 use crate::profiles::DotfilesConfig;
 #[cfg(feature = "alpm")]
 use crate::profiles::Profile;
+use crate::script_runner::run_script_safe;
+use crate::script_traits::ScriptArgs;
+use crate::scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
+use crate::scripts::disk::{FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod};
+use crate::scripts::encryption::{LuksCipher, LuksFormatArgs, LuksOpenArgs, SecretFile};
+use crate::scripts::network::{CheckConnectivityArgs, MirrorSortMethod, UpdateMirrorsArgs};
+#[cfg(feature = "alpm")]
+use crate::scripts::profiles::EnableServicesArgs;
+use crate::scripts::profiles::InstallDotfilesArgs;
 use crate::types::Filesystem;
 use anyhow::{Context, Result};
 use std::fs::{self, File, OpenOptions};
@@ -165,7 +163,10 @@ impl Installer {
     ) -> Self {
         let env_vars: std::collections::HashMap<String, String> =
             config.to_env_vars().into_iter().collect();
-        Self { env_vars, app_state }
+        Self {
+            env_vars,
+            app_state,
+        }
     }
 
     /// Start the installation process
@@ -234,7 +235,11 @@ impl Installer {
                     let _ = writeln!(f, "[{}] Log level: {}", now_hms(), log_level);
                     let _ = writeln!(f, "[{}] === Environment Variables ===", now_hms());
                     for (k, v) in &env_vars {
-                        let display_val = if k.contains("PASSWORD") { "********" } else { v.as_str() };
+                        let display_val = if k.contains("PASSWORD") {
+                            "********"
+                        } else {
+                            v.as_str()
+                        };
                         let _ = writeln!(f, "[{}]   {}={}", now_hms(), k, display_val);
                     }
                     let _ = writeln!(f, "[{}] === End Environment Variables ===", now_hms());
@@ -374,7 +379,10 @@ impl Installer {
                         // Log Rust-side state events to master log
                         write_master_log(
                             &log_file,
-                            &format!("[RUST] Progress: {}% - {}", state.installation_progress, msg),
+                            &format!(
+                                "[RUST] Progress: {}% - {}",
+                                state.installation_progress, msg
+                            ),
                         );
                     }
                 }
@@ -396,7 +404,9 @@ impl Installer {
 
                     // SAFETY: poison recovery via into_inner — never panic on mutex
                     let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
-                    state.installer_output.push(format!("ERROR: {}", clean_line));
+                    state
+                        .installer_output
+                        .push(format!("ERROR: {}", clean_line));
 
                     // Keep only last 500 lines
                     if state.installer_output.len() > 500 {
@@ -448,49 +458,55 @@ impl Installer {
             }
 
             match result {
-            Ok(status) => {
-                // SAFETY: poison recovery via into_inner — never panic on mutex
-                let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
-                state.installer_pid = None;
+                Ok(status) => {
+                    // SAFETY: poison recovery via into_inner — never panic on mutex
+                    let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
+                    state.installer_pid = None;
 
-                if status.success() {
-                    state.installation_progress = 100;
-                    state.mode = crate::app::AppMode::Complete;
-                    state.status_message = "Installation completed successfully!".to_string();
+                    if status.success() {
+                        state.installation_progress = 100;
+                        state.mode = crate::app::AppMode::Complete;
+                        state.status_message = "Installation completed successfully!".to_string();
+                        state
+                            .installer_output
+                            .push("Installation completed successfully!".to_string());
+                        write_master_log(
+                            &wait_log,
+                            "[RUST] Installation completed successfully (exit code 0)",
+                        );
+                    } else {
+                        let exit_code = status.code().unwrap_or(-1);
+                        state.status_message =
+                            format!("Installation failed with exit code: {}", exit_code);
+                        state
+                            .installer_output
+                            .push(format!("Installation failed with exit code: {}", exit_code));
+                        state.installer_output.push(format!(
+                            "Check {}/ for full details (master log + verbose trace)",
+                            crate::script_runner::log_dir().display()
+                        ));
+                        state.mode = crate::app::AppMode::Complete;
+                        write_master_log(
+                            &wait_log,
+                            &format!("[RUST] Installation FAILED (exit code {})", exit_code),
+                        );
+                    }
+                }
+                Err(e) => {
+                    // SAFETY: poison recovery via into_inner — never panic on mutex
+                    let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
+                    state.installer_pid = None;
+
                     state
                         .installer_output
-                        .push("Installation completed successfully!".to_string());
-                    write_master_log(&wait_log, "[RUST] Installation completed successfully (exit code 0)");
-                } else {
-                    let exit_code = status.code().unwrap_or(-1);
-                    state.status_message = format!(
-                        "Installation failed with exit code: {}",
-                        exit_code
-                    );
-                    state.installer_output.push(format!(
-                        "Installation failed with exit code: {}",
-                        exit_code
-                    ));
-                    state.installer_output.push(format!(
-                        "Check {}/ for full details (master log + verbose trace)",
-                        crate::script_runner::log_dir().display()
-                    ));
+                        .push(format!("ERROR: Failed to wait for installer: {}", e));
+                    state.status_message = format!("Installation error: {}", e);
                     state.mode = crate::app::AppMode::Complete;
-                    write_master_log(&wait_log, &format!("[RUST] Installation FAILED (exit code {})", exit_code));
+                    write_master_log(
+                        &wait_log,
+                        &format!("[RUST] Installation ERROR: Failed to wait: {}", e),
+                    );
                 }
-            }
-            Err(e) => {
-                // SAFETY: poison recovery via into_inner — never panic on mutex
-                let mut state = app_state.lock().unwrap_or_else(|e| e.into_inner());
-                state.installer_pid = None;
-
-                state
-                    .installer_output
-                    .push(format!("ERROR: Failed to wait for installer: {}", e));
-                state.status_message = format!("Installation error: {}", e);
-                state.mode = crate::app::AppMode::Complete;
-                write_master_log(&wait_log, &format!("[RUST] Installation ERROR: Failed to wait: {}", e));
-            }
             }
         });
 
@@ -591,8 +607,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
             method: WipeMethod::Quick,
             confirm: confirm_wipe,
         };
-        let output = run_script_safe(&wipe_args)
-            .context("Failed to execute disk wipe")?;
+        let output = run_script_safe(&wipe_args).context("Failed to execute disk wipe")?;
         output.ensure_success("Disk wipe")?;
         tracing::info!("Disk wipe completed");
     }
@@ -605,8 +620,8 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
         label: Some("EFI".to_string()),
         force: false,
     };
-    let output = run_script_safe(&format_boot)
-        .context("Failed to execute boot partition format")?;
+    let output =
+        run_script_safe(&format_boot).context("Failed to execute boot partition format")?;
     output.ensure_success("Boot partition format")?;
     tracing::info!("Boot partition formatted");
 
@@ -618,8 +633,8 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
         label: Some("archroot".to_string()),
         force: false,
     };
-    let output = run_script_safe(&format_root)
-        .context("Failed to execute root partition format")?;
+    let output =
+        run_script_safe(&format_root).context("Failed to execute root partition format")?;
     output.ensure_success("Root partition format")?;
     tracing::info!("Root partition formatted");
 
@@ -631,8 +646,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
         mountpoint: layout.target_root.clone(),
         options: None,
     };
-    let output = run_script_safe(&mount_root)
-        .context("Failed to execute root partition mount")?;
+    let output = run_script_safe(&mount_root).context("Failed to execute root partition mount")?;
     output.ensure_success("Root partition mount")?;
     tracing::info!("Root partition mounted");
 
@@ -649,8 +663,7 @@ pub fn prepare_disks(layout: &DiskLayout, wipe: bool, confirm_wipe: bool) -> Res
         mountpoint: boot_mountpoint,
         options: None,
     };
-    let output = run_script_safe(&mount_boot)
-        .context("Failed to execute boot partition mount")?;
+    let output = run_script_safe(&mount_boot).context("Failed to execute boot partition mount")?;
     output.ensure_success("Boot partition mount")?;
     tracing::info!("Boot partition mounted");
 
@@ -736,7 +749,11 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
     std::fs::create_dir_all(&db_path)
         .with_context(|| format!("Failed to create pacman db path: {:?}", db_path))?;
 
-    tracing::info!("Initializing ALPM: root={:?}, db={:?}", target_root, db_path);
+    tracing::info!(
+        "Initializing ALPM: root={:?}, db={:?}",
+        target_root,
+        db_path
+    );
 
     let mut pm = PackageManager::new(target_root, &db_path)
         .context("Failed to initialize ALPM package manager")?;
@@ -753,10 +770,7 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
     }
 
     // CRITICAL: Log exactly what we're installing (Self-Audit: linux-firmware included)
-    tracing::info!(
-        "Installing base packages: {:?}",
-        BASE_PACKAGES
-    );
+    tracing::info!("Installing base packages: {:?}", BASE_PACKAGES);
 
     // Install base packages
     // Fail Fast: Any failure here aborts immediately
@@ -778,11 +792,11 @@ pub fn install_base_system(target_root: &Path) -> Result<()> {
 /// * `target_root` - The mount point of the root partition
 /// * `extra_packages` - Additional packages to install beyond base
 #[allow(dead_code)] // Library API - will be called from main installer flow
-pub fn install_base_system_with_extras(
-    target_root: &Path,
-    extra_packages: &[&str],
-) -> Result<()> {
-    tracing::info!(extra_count = extra_packages.len(), "Installing base system with extra packages");
+pub fn install_base_system_with_extras(target_root: &Path, extra_packages: &[&str]) -> Result<()> {
+    tracing::info!(
+        extra_count = extra_packages.len(),
+        "Installing base system with extra packages"
+    );
 
     // Combine base packages with extras
     let mut all_packages: Vec<&str> = BASE_PACKAGES.to_vec();
@@ -935,8 +949,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     let fstab_args = GenFstabArgs {
         root: config.target_root.clone(),
     };
-    let output = run_script_safe(&fstab_args)
-        .context("Failed to execute fstab generation")?;
+    let output = run_script_safe(&fstab_args).context("Failed to execute fstab generation")?;
     output.ensure_success("Fstab generation")?;
     tracing::info!("Fstab generated successfully");
 
@@ -957,8 +970,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
         timezone: config.timezone.clone(),
         keymap: config.keymap.clone(),
     };
-    let output = run_script_safe(&locale_args)
-        .context("Failed to execute locale configuration")?;
+    let output = run_script_safe(&locale_args).context("Failed to execute locale configuration")?;
     output.ensure_success("Locale configuration")?;
     tracing::info!("Locale configuration complete");
 
@@ -968,7 +980,11 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
     // ========================================================================
 
     // Create main user with sudo access if requested
-    tracing::info!("Creating user: {} (sudo={})", config.username, config.user_sudo);
+    tracing::info!(
+        "Creating user: {} (sudo={})",
+        config.username,
+        config.user_sudo
+    );
     let user_args = UserAddArgs {
         username: config.username.clone(),
         password: Some(config.user_password.clone()),
@@ -987,8 +1003,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
         "BUG: Password found in CLI args! This is a security vulnerability."
     );
 
-    let output = run_script_safe(&user_args)
-        .context("Failed to create user")?;
+    let output = run_script_safe(&user_args).context("Failed to create user")?;
     output.ensure_success("User creation")?;
     tracing::info!(user = %config.username, "User created successfully");
 
@@ -1013,8 +1028,7 @@ pub fn configure_system(config: &SystemConfig) -> Result<()> {
             "BUG: Root password found in CLI args!"
         );
 
-        let output = run_script_safe(&root_args)
-            .context("Failed to set root password")?;
+        let output = run_script_safe(&root_args).context("Failed to set root password")?;
         output.ensure_success("Root password setup")?;
         tracing::info!("Root password configured");
     } else {
@@ -1127,8 +1141,8 @@ pub fn encrypt_partition(
 
     // SECURITY: Create temporary keyfile with password
     // SecretFile ensures cleanup via Drop trait (even on panic)
-    let keyfile = SecretFile::new(&config.password)
-        .context("Failed to create temporary keyfile")?;
+    let keyfile =
+        SecretFile::new(&config.password).context("Failed to create temporary keyfile")?;
 
     tracing::info!("Temporary keyfile created: {:?}", keyfile.path());
 
@@ -1149,8 +1163,7 @@ pub fn encrypt_partition(
     );
 
     tracing::info!("Executing LUKS format on {:?}", device);
-    let output = run_script_safe(&format_args)
-        .context("Failed to execute LUKS format")?;
+    let output = run_script_safe(&format_args).context("Failed to execute LUKS format")?;
     output.ensure_success("LUKS format")?;
     tracing::info!("LUKS format completed successfully");
 
@@ -1162,8 +1175,7 @@ pub fn encrypt_partition(
     };
 
     tracing::info!("Opening LUKS device as {:?}", config.mapper_name);
-    let output = run_script_safe(&open_args)
-        .context("Failed to open LUKS device")?;
+    let output = run_script_safe(&open_args).context("Failed to open LUKS device")?;
     output.ensure_success("LUKS open")?;
 
     // SecretFile is dropped here, securely wiping the keyfile
@@ -1232,8 +1244,7 @@ pub fn install_profile(target_root: &Path, profile: Profile) -> Result<()> {
             root: target_root.to_path_buf(),
         };
 
-        let output = run_script_safe(&enable_args)
-            .context("Failed to enable services")?;
+        let output = run_script_safe(&enable_args).context("Failed to enable services")?;
         output.ensure_success("Enable services")?;
     }
 
@@ -1274,8 +1285,7 @@ pub fn install_dotfiles(config: &DotfilesConfig) -> Result<()> {
         backup: true, // Always backup existing files
     };
 
-    let output = run_script_safe(&args)
-        .context("Failed to install dotfiles")?;
+    let output = run_script_safe(&args).context("Failed to install dotfiles")?;
     output.ensure_success("Dotfiles installation")?;
 
     tracing::info!("Dotfiles installed successfully");
@@ -1307,19 +1317,18 @@ pub fn install_dotfiles(config: &DotfilesConfig) -> Result<()> {
 /// - `Ok(())` - Mirrors updated successfully
 /// - `Err` - Update failed (possibly due to network)
 #[allow(dead_code)] // Library API
-pub fn update_mirrors(
-    country: Option<&str>,
-    limit: u32,
-    sort: MirrorSortMethod,
-) -> Result<()> {
-    tracing::info!("Updating pacman mirrors (country={:?}, limit={}, sort={})",
-               country, limit, sort);
+pub fn update_mirrors(country: Option<&str>, limit: u32, sort: MirrorSortMethod) -> Result<()> {
+    tracing::info!(
+        "Updating pacman mirrors (country={:?}, limit={}, sort={})",
+        country,
+        limit,
+        sort
+    );
 
     // Check network connectivity first
     tracing::info!("Checking network connectivity...");
     let connectivity = CheckConnectivityArgs::default();
-    let output = run_script_safe(&connectivity)
-        .context("Failed to check network connectivity")?;
+    let output = run_script_safe(&connectivity).context("Failed to check network connectivity")?;
 
     if !output.success {
         anyhow::bail!(
@@ -1338,8 +1347,7 @@ pub fn update_mirrors(
     };
 
     tracing::info!("Running reflector to rank mirrors...");
-    let output = run_script_safe(&args)
-        .context("Failed to update mirrors")?;
+    let output = run_script_safe(&args).context("Failed to update mirrors")?;
     output.ensure_success("Mirror update")?;
 
     tracing::info!("Mirrors updated successfully");
@@ -1358,8 +1366,7 @@ pub fn check_network_connectivity() -> Result<bool> {
     tracing::info!("Checking network connectivity...");
 
     let args = CheckConnectivityArgs::default();
-    let output = run_script_safe(&args)
-        .context("Failed to check network connectivity")?;
+    let output = run_script_safe(&args).context("Failed to check network connectivity")?;
 
     Ok(output.success)
 }
@@ -1422,7 +1429,10 @@ mod tests {
 
     #[test]
     fn test_strip_preserves_brackets_in_normal_text() {
-        assert_eq!(strip_ansi_and_cr("[INFO] Phase 5: Installing"), "[INFO] Phase 5: Installing");
+        assert_eq!(
+            strip_ansi_and_cr("[INFO] Phase 5: Installing"),
+            "[INFO] Phase 5: Installing"
+        );
     }
 
     #[test]

@@ -69,9 +69,9 @@ impl Colors {
     pub const NAV_HINT: Color = Color::Rgb(75, 78, 88);
 
     // ── Tool Category Accents ───────────────────────────────────────────
-    pub const CAT_DISK: Color = Color::Rgb(90, 130, 190);    // soft blue
+    pub const CAT_DISK: Color = Color::Rgb(90, 130, 190); // soft blue
     pub const CAT_SYSTEM: Color = Color::Rgb(100, 160, 170); // teal
-    pub const CAT_USER: Color = Color::Rgb(210, 170, 90);    // amber
+    pub const CAT_USER: Color = Color::Rgb(210, 170, 90); // amber
     pub const CAT_NETWORK: Color = Color::Rgb(80, 190, 120); // green
 
     // ── Installation Progress ────────────────────────────────────────────
@@ -206,9 +206,7 @@ impl Styles {
 
     // ── Progress ─────────────────────────────────────────────────────────
     pub fn progress() -> Style {
-        Style::default()
-            .fg(Colors::PROGRESS)
-            .bg(Colors::BG_GAUGE)
+        Style::default().fg(Colors::PROGRESS).bg(Colors::BG_GAUGE)
     }
     pub fn progress_text() -> Style {
         Style::default()

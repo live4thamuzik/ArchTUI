@@ -27,7 +27,7 @@
 
 use crate::config_file::InstallationConfig;
 use crate::types::{Filesystem, PartitionScheme, Toggle};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -42,9 +42,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StorageOp {
     /// Wipe the entire disk (sgdisk --zap-all)
-    WipeDisk {
-        disk: PathBuf,
-    },
+    WipeDisk { disk: PathBuf },
 
     /// Create partitions on the disk (sgdisk)
     /// Generates EFI + root (+ swap partition if applicable)
@@ -57,10 +55,7 @@ pub enum StorageOp {
     },
 
     /// Format a partition with LUKS2 encryption
-    LuksFormat {
-        device: PathBuf,
-        label: String,
-    },
+    LuksFormat { device: PathBuf, label: String },
 
     /// Open (unlock) a LUKS device
     LuksOpen {
@@ -69,15 +64,10 @@ pub enum StorageOp {
     },
 
     /// Create an LVM Physical Volume
-    CreateLvmPv {
-        device: PathBuf,
-    },
+    CreateLvmPv { device: PathBuf },
 
     /// Create an LVM Volume Group
-    CreateLvmVg {
-        vg_name: String,
-        pv_device: PathBuf,
-    },
+    CreateLvmVg { vg_name: String, pv_device: PathBuf },
 
     /// Create an LVM Logical Volume
     CreateLvmLv {
@@ -107,28 +97,69 @@ impl fmt::Display for StorageOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::WipeDisk { disk } => write!(f, "WipeDisk({})", disk.display()),
-            Self::Partition { disk, create_efi, create_swap } => {
-                write!(f, "Partition({}, efi={}, swap={})", disk.display(), create_efi, create_swap)
+            Self::Partition {
+                disk,
+                create_efi,
+                create_swap,
+            } => {
+                write!(
+                    f,
+                    "Partition({}, efi={}, swap={})",
+                    disk.display(),
+                    create_efi,
+                    create_swap
+                )
             }
             Self::LuksFormat { device, label } => {
                 write!(f, "LuksFormat({}, label={})", device.display(), label)
             }
-            Self::LuksOpen { device, mapper_name } => {
-                write!(f, "LuksOpen({} -> /dev/mapper/{})", device.display(), mapper_name)
+            Self::LuksOpen {
+                device,
+                mapper_name,
+            } => {
+                write!(
+                    f,
+                    "LuksOpen({} -> /dev/mapper/{})",
+                    device.display(),
+                    mapper_name
+                )
             }
             Self::CreateLvmPv { device } => write!(f, "CreateLvmPV({})", device.display()),
             Self::CreateLvmVg { vg_name, pv_device } => {
                 write!(f, "CreateLvmVG({} on {})", vg_name, pv_device.display())
             }
-            Self::CreateLvmLv { vg_name, lv_name, size } => {
+            Self::CreateLvmLv {
+                vg_name,
+                lv_name,
+                size,
+            } => {
                 write!(f, "CreateLvmLV({}/{}, size={})", vg_name, lv_name, size)
             }
-            Self::FormatFs { device, filesystem, label } => {
-                write!(f, "FormatFs({}, fs={}, label={:?})", device.display(), filesystem, label)
+            Self::FormatFs {
+                device,
+                filesystem,
+                label,
+            } => {
+                write!(
+                    f,
+                    "FormatFs({}, fs={}, label={:?})",
+                    device.display(),
+                    filesystem,
+                    label
+                )
             }
-            Self::Mount { device, mountpoint, options } => {
-                write!(f, "Mount({} -> {}, opts={:?})",
-                    device.display(), mountpoint.display(), options)
+            Self::Mount {
+                device,
+                mountpoint,
+                options,
+            } => {
+                write!(
+                    f,
+                    "Mount({} -> {}, opts={:?})",
+                    device.display(),
+                    mountpoint.display(),
+                    options
+                )
             }
         }
     }
@@ -152,13 +183,15 @@ pub struct StoragePlan {
 impl StoragePlan {
     /// Returns true if this plan includes destructive operations.
     pub fn is_destructive(&self) -> bool {
-        self.ops.iter().any(|op| matches!(
-            op,
-            StorageOp::WipeDisk { .. }
-                | StorageOp::Partition { .. }
-                | StorageOp::LuksFormat { .. }
-                | StorageOp::FormatFs { .. }
-        ))
+        self.ops.iter().any(|op| {
+            matches!(
+                op,
+                StorageOp::WipeDisk { .. }
+                    | StorageOp::Partition { .. }
+                    | StorageOp::LuksFormat { .. }
+                    | StorageOp::FormatFs { .. }
+            )
+        })
     }
 
     /// Returns a summary of the plan for logging/display.
@@ -220,15 +253,11 @@ pub fn calculate_storage_plan(config: &InstallationConfig) -> Result<StoragePlan
         || config.boot_mode == crate::types::BootMode::Auto;
 
     match strategy {
-        PartitionScheme::AutoSimple => {
-            plan_simple(&disk, root_fs, is_uefi, wants_swap, &swap_size)
-        }
+        PartitionScheme::AutoSimple => plan_simple(&disk, root_fs, is_uefi, wants_swap, &swap_size),
         PartitionScheme::AutoSimpleLuks => {
             plan_simple_luks(&disk, root_fs, is_uefi, wants_swap, &swap_size)
         }
-        PartitionScheme::AutoLvm => {
-            plan_lvm(&disk, root_fs, is_uefi, wants_swap, &swap_size)
-        }
+        PartitionScheme::AutoLvm => plan_lvm(&disk, root_fs, is_uefi, wants_swap, &swap_size),
         PartitionScheme::AutoLuksLvm => {
             plan_luks_lvm(&disk, root_fs, is_uefi, wants_swap, &swap_size)
         }
@@ -279,7 +308,9 @@ fn plan_simple(
     let mut ops = Vec::new();
 
     // Step 1: Wipe disk
-    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
+    ops.push(StorageOp::WipeDisk {
+        disk: disk.to_path_buf(),
+    });
 
     // Step 2: Create partitions
     ops.push(StorageOp::Partition {
@@ -360,7 +391,9 @@ fn plan_simple_luks(
 ) -> Result<StoragePlan> {
     let mut ops = Vec::new();
 
-    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
+    ops.push(StorageOp::WipeDisk {
+        disk: disk.to_path_buf(),
+    });
 
     ops.push(StorageOp::Partition {
         disk: disk.to_path_buf(),
@@ -445,7 +478,9 @@ fn plan_lvm(
     let mut ops = Vec::new();
     let vg_name = "archvg";
 
-    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
+    ops.push(StorageOp::WipeDisk {
+        disk: disk.to_path_buf(),
+    });
 
     ops.push(StorageOp::Partition {
         disk: disk.to_path_buf(),
@@ -467,7 +502,9 @@ fn plan_lvm(
     let lvm_part = partition_path(disk, lvm_part_num);
 
     // LVM: PV → VG → LVs
-    ops.push(StorageOp::CreateLvmPv { device: lvm_part.clone() });
+    ops.push(StorageOp::CreateLvmPv {
+        device: lvm_part.clone(),
+    });
     ops.push(StorageOp::CreateLvmVg {
         vg_name: vg_name.to_string(),
         pv_device: lvm_part,
@@ -550,7 +587,9 @@ fn plan_luks_lvm(
     let mut ops = Vec::new();
     let vg_name = "archvg";
 
-    ops.push(StorageOp::WipeDisk { disk: disk.to_path_buf() });
+    ops.push(StorageOp::WipeDisk {
+        disk: disk.to_path_buf(),
+    });
 
     ops.push(StorageOp::Partition {
         disk: disk.to_path_buf(),
@@ -584,7 +623,9 @@ fn plan_luks_lvm(
     let mapper_device = PathBuf::from("/dev/mapper/cryptlvm");
 
     // LVM on top of LUKS
-    ops.push(StorageOp::CreateLvmPv { device: mapper_device.clone() });
+    ops.push(StorageOp::CreateLvmPv {
+        device: mapper_device.clone(),
+    });
     ops.push(StorageOp::CreateLvmVg {
         vg_name: vg_name.to_string(),
         pv_device: mapper_device,
@@ -704,12 +745,19 @@ mod tests {
         assert!(matches!(&plan.ops[0], StorageOp::WipeDisk { .. }));
 
         // Must have partition step
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::Partition { .. })));
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::Partition { .. }))
+        );
 
         // Must format root
         assert!(plan.ops.iter().any(|op| matches!(
             op,
-            StorageOp::FormatFs { filesystem: Filesystem::Ext4, .. }
+            StorageOp::FormatFs {
+                filesystem: Filesystem::Ext4,
+                ..
+            }
         )));
 
         // Must mount root at /mnt
@@ -731,7 +779,10 @@ mod tests {
         // Must format EFI partition as FAT32
         assert!(plan.ops.iter().any(|op| matches!(
             op,
-            StorageOp::FormatFs { filesystem: Filesystem::Fat32, .. }
+            StorageOp::FormatFs {
+                filesystem: Filesystem::Fat32,
+                ..
+            }
         )));
 
         // Must mount EFI at /mnt/boot
@@ -747,10 +798,18 @@ mod tests {
         let plan = calculate_storage_plan(&config).expect("plan generation failed"); // test: known-good input
 
         // Must have LuksFormat
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::LuksFormat { .. })));
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::LuksFormat { .. }))
+        );
 
         // Must have LuksOpen
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::LuksOpen { .. })));
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::LuksOpen { .. }))
+        );
 
         // Format target must be /dev/mapper/cryptroot
         assert!(plan.ops.iter().any(|op| matches!(
@@ -769,7 +828,11 @@ mod tests {
         let plan = calculate_storage_plan(&config).expect("plan generation failed"); // test: known-good input
 
         // Must have PV creation
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::CreateLvmPv { .. })));
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::CreateLvmPv { .. }))
+        );
 
         // Must have VG creation
         assert!(plan.ops.iter().any(|op| matches!(
@@ -800,13 +863,33 @@ mod tests {
         let plan = calculate_storage_plan(&config).expect("plan generation failed"); // test: known-good input
 
         // Must have LUKS steps
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::LuksFormat { .. })));
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::LuksOpen { .. })));
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::LuksFormat { .. }))
+        );
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::LuksOpen { .. }))
+        );
 
         // Must have LVM steps
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::CreateLvmPv { .. })));
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::CreateLvmVg { .. })));
-        assert!(plan.ops.iter().any(|op| matches!(op, StorageOp::CreateLvmLv { .. })));
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::CreateLvmPv { .. }))
+        );
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::CreateLvmVg { .. }))
+        );
+        assert!(
+            plan.ops
+                .iter()
+                .any(|op| matches!(op, StorageOp::CreateLvmLv { .. }))
+        );
 
         // PV must be on /dev/mapper/cryptlvm (not raw partition)
         assert!(plan.ops.iter().any(|op| matches!(
@@ -931,8 +1014,14 @@ mod tests {
         let config = test_config(PartitionScheme::AutoSimpleLuks, Filesystem::Ext4);
         let plan = calculate_storage_plan(&config).expect("plan generation failed"); // test: known-good input
 
-        let format_idx = plan.ops.iter().position(|op| matches!(op, StorageOp::LuksFormat { .. }));
-        let open_idx = plan.ops.iter().position(|op| matches!(op, StorageOp::LuksOpen { .. }));
+        let format_idx = plan
+            .ops
+            .iter()
+            .position(|op| matches!(op, StorageOp::LuksFormat { .. }));
+        let open_idx = plan
+            .ops
+            .iter()
+            .position(|op| matches!(op, StorageOp::LuksOpen { .. }));
 
         assert!(format_idx.is_some());
         assert!(open_idx.is_some());

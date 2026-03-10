@@ -14,41 +14,57 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 // Re-export process guard functionality for testing
-use archtui::process_guard::{CommandProcessGroup, ChildRegistry};
+use archtui::process_guard::{ChildRegistry, CommandProcessGroup};
 
 #[test]
 fn test_binary_exists() {
     let bin = env!("CARGO_BIN_EXE_archtui");
-    assert!(std::path::Path::new(bin).exists(), "Binary should exist at {}", bin);
+    assert!(
+        std::path::Path::new(bin).exists(),
+        "Binary should exist at {}",
+        bin
+    );
 }
 
 #[test]
 fn test_binary_executable() {
     let bin = env!("CARGO_BIN_EXE_archtui");
-    let metadata = std::fs::metadata(bin)
-        .expect("Should be able to read binary metadata");
-    assert!(metadata.permissions().mode() & 0o111 != 0, "Binary should be executable");
+    let metadata = std::fs::metadata(bin).expect("Should be able to read binary metadata");
+    assert!(
+        metadata.permissions().mode() & 0o111 != 0,
+        "Binary should be executable"
+    );
 }
 
 #[test]
 fn test_required_scripts_exist() {
     let required_scripts = vec![
         "scripts/install.sh",
-        "scripts/install_wrapper.sh", 
+        "scripts/install_wrapper.sh",
         "scripts/utils.sh",
         "scripts/disk_strategies.sh",
         "scripts/chroot_config.sh",
     ];
 
     for script in required_scripts {
-        assert!(std::path::Path::new(script).exists(), "Script {} should exist", script);
+        assert!(
+            std::path::Path::new(script).exists(),
+            "Script {} should exist",
+            script
+        );
     }
 }
 
 #[test]
 fn test_plymouth_themes_exist() {
-    assert!(std::path::Path::new("Source/arch-glow").exists(), "Arch-glow theme should exist");
-    assert!(std::path::Path::new("Source/arch-mac-style").exists(), "Arch-mac-style theme should exist");
+    assert!(
+        std::path::Path::new("Source/arch-glow").exists(),
+        "Arch-glow theme should exist"
+    );
+    assert!(
+        std::path::Path::new("Source/arch-mac-style").exists(),
+        "Arch-mac-style theme should exist"
+    );
 }
 
 #[test]
@@ -56,15 +72,16 @@ fn test_binary_runs_without_crashing() {
     // Test that the binary can start without immediately crashing
     // We use a timeout to prevent hanging
     let bin = env!("CARGO_BIN_EXE_archtui");
-    let output = Command::new("timeout")
-        .args(["5s", bin])
-        .output();
-    
+    let output = Command::new("timeout").args(["5s", bin]).output();
+
     // The binary should either exit cleanly or with a TUI error (expected in non-TTY environments)
     match output {
         Ok(result) => {
             // Exit code 0 or non-zero is fine, as long as it doesn't panic
-            println!("Binary executed successfully, exit code: {:?}", result.status.code());
+            println!(
+                "Binary executed successfully, exit code: {:?}",
+                result.status.code()
+            );
         }
         Err(e) => {
             // If it's a timeout or TUI error, that's expected in test environments
@@ -81,14 +98,23 @@ fn test_binary_runs_without_crashing() {
 fn test_config_structure() {
     // Test that we can load the configuration structure
     use archtui::config::Configuration;
-    
+
     let config = Configuration::default();
-    assert!(!config.options.is_empty(), "Configuration should have options");
-    
+    assert!(
+        !config.options.is_empty(),
+        "Configuration should have options"
+    );
+
     // Check for essential options
     let option_names: Vec<&String> = config.options.iter().map(|opt| &opt.name).collect();
-    assert!(option_names.contains(&&"Disk".to_string()), "Should have Disk option");
-    assert!(option_names.contains(&&"Root Filesystem".to_string()), "Should have Root Filesystem option");
+    assert!(
+        option_names.contains(&&"Disk".to_string()),
+        "Should have Disk option"
+    );
+    assert!(
+        option_names.contains(&&"Root Filesystem".to_string()),
+        "Should have Root Filesystem option"
+    );
 }
 
 /// Test async tool execution with threading and output capture
@@ -101,7 +127,10 @@ fn test_async_tool_execution_with_output_capture() {
     enum TestMessage {
         Stdout(String),
         Stderr(String),
-        Complete { success: bool, exit_code: Option<i32> },
+        Complete {
+            success: bool,
+            exit_code: Option<i32>,
+        },
     }
 
     let (tx, rx) = mpsc::channel::<TestMessage>();
@@ -245,7 +274,8 @@ fn test_async_tool_execution_with_stdin_piping() {
     });
 
     // Wait for output
-    let output = rx.recv_timeout(std::time::Duration::from_secs(5))
+    let output = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
         .expect("Should receive output");
 
     handle.join().expect("Thread should complete");
@@ -294,7 +324,7 @@ fn wait_for_process_death(pid: u32, timeout: Duration) -> bool {
 
 /// Helper: Kill a process and wait for it to die
 fn kill_and_wait(pid: u32) {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
     let _ = kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
     wait_for_process_death(pid, Duration::from_secs(1));
@@ -334,7 +364,7 @@ fn test_death_pact_registry_kills_processes() {
 /// Verifying the process group setup works correctly
 #[test]
 fn test_process_group_setup() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn with in_new_process_group
@@ -361,13 +391,17 @@ fn test_process_group_setup() {
 
     // The result might be Err(ESRCH) if process died before we could check
     // But the process should definitely be dead now
-    assert!(died, "Process should die from group signal. Signal result: {:?}", result);
+    assert!(
+        died,
+        "Process should die from group signal. Signal result: {:?}",
+        result
+    );
 }
 
 /// Test: Process group signal kills entire tree (parent + children)
 #[test]
 fn test_process_group_kills_tree() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn bash that creates a child process, both in same process group
@@ -405,7 +439,7 @@ fn test_process_group_kills_tree() {
 /// verifies the SIGTERM -> SIGKILL ordering)
 #[test]
 fn test_sigterm_causes_graceful_exit() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn a process that will exit cleanly on SIGTERM (default behavior)
@@ -487,7 +521,10 @@ fn test_script_failure_exit_codes() {
         .output()
         .expect("Failed to run bash");
 
-    assert!(!output.status.success(), "Failed command should produce non-zero exit");
+    assert!(
+        !output.status.success(),
+        "Failed command should produce non-zero exit"
+    );
     assert_eq!(output.status.code(), Some(1), "Exit code should be 1");
 }
 
@@ -558,14 +595,17 @@ fn test_installer_pattern_exit_code_handling() {
         let s = app_state.lock().unwrap();
         assert!(!s.success, "Should report failure");
         assert_eq!(s.exit_code, Some(42), "Exit code should be 42");
-        assert!(s.status_message.contains("42"), "Message should contain exit code");
+        assert!(
+            s.status_message.contains("42"),
+            "Message should contain exit code"
+        );
     }
 }
 
 /// Test: Signal termination produces correct exit status
 #[test]
 fn test_signal_termination_exit_status() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     let mut child = Command::new("sleep")
@@ -582,20 +622,27 @@ fn test_signal_termination_exit_status() {
     let status = child.wait().expect("Failed to wait");
 
     // Process killed by signal should not be "success"
-    assert!(!status.success(), "Signal-killed process should not be success");
+    assert!(
+        !status.success(),
+        "Signal-killed process should not be success"
+    );
 
     // On Unix, signal termination gives code = None but we can check signal
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
-        assert_eq!(status.signal(), Some(15), "Should be killed by SIGTERM (15)");
+        assert_eq!(
+            status.signal(),
+            Some(15),
+            "Should be killed by SIGTERM (15)"
+        );
     }
 }
 
 /// Test: Two separate process groups are isolated
 #[test]
 fn test_process_groups_are_isolated() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn two processes in separate groups
@@ -630,7 +677,10 @@ fn test_process_groups_are_isolated() {
     // Cleanup
     kill_and_wait(pid2);
 
-    assert!(child2_alive, "Child2 should be unaffected by child1's death");
+    assert!(
+        child2_alive,
+        "Child2 should be unaffected by child1's death"
+    );
 }
 
 /// Test: PR_SET_PDEATHSIG is set (child dies when immediate parent dies)
@@ -646,5 +696,8 @@ fn test_pdeathsig_set() {
         .output()
         .expect("Failed to run child with pdeathsig");
 
-    assert!(child.status.success(), "Child should run successfully with pdeathsig set");
+    assert!(
+        child.status.success(),
+        "Child should run successfully with pdeathsig set"
+    );
 }

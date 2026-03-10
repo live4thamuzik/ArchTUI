@@ -64,15 +64,9 @@ pub enum ConfigEditState {
         selected: usize,
     },
     /// Text input with cursor
-    TextInput {
-        value: String,
-        cursor: usize,
-    },
+    TextInput { value: String, cursor: usize },
     /// Password input (masked)
-    PasswordInput {
-        value: String,
-        cursor: usize,
-    },
+    PasswordInput { value: String, cursor: usize },
     /// Interactive package selection (search/add/remove/list/done)
     PackageInput {
         packages: Vec<String>,

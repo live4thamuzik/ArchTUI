@@ -36,28 +36,30 @@ pub use config::{ConfigOption, Configuration, Package};
 pub use config_file::InstallationConfig;
 pub use error::ArchTuiError;
 pub use install_state::{InstallStage, InstallTransitionError, InstallerContext};
+pub use installer::{DiskLayout, SystemConfig, configure_system, prepare_disks};
+#[cfg(feature = "alpm")]
+pub use installer::{install_base_system, install_base_system_with_extras};
+#[cfg(feature = "alpm")]
+pub use package_manager::PackageManager;
 pub use process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
+pub use profiles::{DotfilesConfig, Profile};
 pub use script_manifest::{
     EnvRequirement, ManifestError, ManifestRegistry, OptionalEnv, ScriptManifest,
     ValidatedExecution,
 };
-#[cfg(feature = "alpm")]
-pub use package_manager::PackageManager;
-pub use script_runner::{run_script_safe, ScriptOutput};
-pub use script_traits::{disable_dry_run, enable_dry_run, is_dry_run, ScriptArgs};
+pub use script_runner::{ScriptOutput, run_script_safe};
+pub use script_traits::{ScriptArgs, disable_dry_run, enable_dry_run, is_dry_run};
+pub use scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
 pub use scripts::disk::{
     FormatPartitionArgs, MountPartitionArgs, WipeDiskArgs, WipeMethod, WipeMethodError,
 };
-pub use scripts::config::{GenFstabArgs, LocaleArgs, UserAddArgs};
-pub use scripts::encryption::{LuksCipher, LuksCloseArgs, LuksFormatArgs, LuksOpenArgs, SecretFile};
+pub use scripts::encryption::{
+    LuksCipher, LuksCloseArgs, LuksFormatArgs, LuksOpenArgs, SecretFile,
+};
 pub use scripts::network::{CheckConnectivityArgs, MirrorSortMethod, UpdateMirrorsArgs};
 pub use scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
-pub use profiles::{DotfilesConfig, Profile};
-pub use installer::{configure_system, prepare_disks, DiskLayout, SystemConfig};
-#[cfg(feature = "alpm")]
-pub use installer::{install_base_system, install_base_system_with_extras};
 pub use types::{
-    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager, Filesystem,
+    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager, Filesystem,
     GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme, SnapshotFrequency, Toggle,
 };
 
@@ -71,11 +73,11 @@ pub use engine::storage::{StorageOp, StoragePlan, calculate_storage_plan};
 pub use logic::resolver::{resolve_packages, resolve_services};
 
 // Pre-install orchestration
-pub use logic::preinstall::{rank_mirrors, MirrorRankResult, PreinstallConfig, SkipReason};
+pub use logic::preinstall::{MirrorRankResult, PreinstallConfig, SkipReason, rank_mirrors};
 
 // Post-install orchestration
 pub use logic::postinstall::{
-    clone_dotfiles_safe, install_aur_helper_safe, run_postinstall,
-    PostInstallConfig, PostInstallResult,
+    PostInstallConfig, PostInstallResult, clone_dotfiles_safe, install_aur_helper_safe,
+    run_postinstall,
 };
 pub use scripts::user_ops::{CloneDotfilesArgs, InstallAurHelperArgs, UserRunArgs};

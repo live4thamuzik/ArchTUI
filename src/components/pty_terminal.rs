@@ -4,15 +4,15 @@
 
 #![allow(dead_code)]
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use crate::theme::Colors;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
-    Frame,
 };
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -254,7 +254,10 @@ impl PtyTerminal {
     /// Get the exit status if the process has completed
     pub fn exit_status(&self) -> Option<portable_pty::ExitStatus> {
         // SAFETY: poison recovery via into_inner — never panic on mutex
-        self.exit_status.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.exit_status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Resize the PTY

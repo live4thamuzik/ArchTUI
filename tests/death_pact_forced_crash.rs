@@ -27,13 +27,14 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 
 /// Path to the test helper binary (built by cargo)
 fn helper_binary_path() -> String {
     // Try debug first, then release
-    let debug_path = env!("CARGO_MANIFEST_DIR").to_string() + "/target/debug/death_pact_test_helper";
+    let debug_path =
+        env!("CARGO_MANIFEST_DIR").to_string() + "/target/debug/death_pact_test_helper";
     let release_path =
         env!("CARGO_MANIFEST_DIR").to_string() + "/target/release/death_pact_test_helper";
 
@@ -138,7 +139,14 @@ fn test_forced_crash_sigkill_kills_all_children() {
 
     // Spawn the test helper
     let mut helper = Command::new(helper_binary_path())
-        .args(["--mode", "spawn-and-wait", "--pid-file", &pid_file, "--count", "3"])
+        .args([
+            "--mode",
+            "spawn-and-wait",
+            "--pid-file",
+            &pid_file,
+            "--count",
+            "3",
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .stdin(Stdio::null())
@@ -155,15 +163,9 @@ fn test_forced_crash_sigkill_kills_all_children() {
 
     // Read child PIDs
     let child_pids = read_pids_from_file(&pid_file, Duration::from_secs(2));
-    assert!(
-        !child_pids.is_empty(),
-        "No child PIDs found in PID file"
-    );
+    assert!(!child_pids.is_empty(), "No child PIDs found in PID file");
 
-    println!(
-        "Helper PID: {}, Child PIDs: {:?}",
-        helper_pid, child_pids
-    );
+    println!("Helper PID: {}, Child PIDs: {:?}", helper_pid, child_pids);
 
     // Verify all children are alive
     for &pid in &child_pids {
@@ -224,7 +226,14 @@ fn test_forced_crash_panic_kills_all_children() {
 
     // Spawn helper in panic mode
     let mut helper = Command::new(helper_binary_path())
-        .args(["--mode", "spawn-and-panic", "--pid-file", &pid_file, "--count", "2"])
+        .args([
+            "--mode",
+            "spawn-and-panic",
+            "--pid-file",
+            &pid_file,
+            "--count",
+            "2",
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .stdin(Stdio::null())
@@ -341,7 +350,14 @@ fn test_forced_crash_rapid_no_orphans() {
         let _ = fs::remove_file(&pid_file);
 
         let mut helper = Command::new(helper_binary_path())
-            .args(["--mode", "spawn-and-wait", "--pid-file", &pid_file, "--count", "1"])
+            .args([
+                "--mode",
+                "spawn-and-wait",
+                "--pid-file",
+                &pid_file,
+                "--count",
+                "1",
+            ])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .stdin(Stdio::null())
@@ -580,7 +596,9 @@ fn test_doc_why_signal_handlers_required() {
 
     // Read child PID
     let mut child_pid = 0u32;
-    if let Ok(stat) = fs::read_to_string(format!("/proc/{}/task/{}/children", parent_pid, parent_pid)) {
+    if let Ok(stat) =
+        fs::read_to_string(format!("/proc/{}/task/{}/children", parent_pid, parent_pid))
+    {
         // /proc/<pid>/task/<pid>/children lists direct children
         for word in stat.split_whitespace() {
             if let Ok(pid) = word.parse::<u32>() {
@@ -603,7 +621,10 @@ fn test_doc_why_signal_handlers_required() {
         }
     }
 
-    println!("Parent PID: {}, Child (sleep 900) PID: {}", parent_pid, child_pid);
+    println!(
+        "Parent PID: {}, Child (sleep 900) PID: {}",
+        parent_pid, child_pid
+    );
 
     // SIGKILL the parent (bash)
     let _ = kill(Pid::from_raw(parent_pid as i32), Signal::SIGKILL);
@@ -626,7 +647,11 @@ fn test_doc_why_signal_handlers_required() {
     // The assertion here documents expected behavior, not a bug
     println!(
         "DOCUMENTATION: Without signal handlers, child {} - this is why lint rules require trap",
-        if child_survived { "SURVIVED" } else { "died (unexpected)" }
+        if child_survived {
+            "SURVIVED"
+        } else {
+            "died (unexpected)"
+        }
     );
 
     // Note: We don't assert failure here because this documents expected behavior
@@ -646,7 +671,14 @@ fn test_stress_many_children_rapid_crash() {
 
     // Spawn helper with many children
     let mut helper = Command::new(helper_binary_path())
-        .args(["--mode", "spawn-and-wait", "--pid-file", &pid_file, "--count", "10"])
+        .args([
+            "--mode",
+            "spawn-and-wait",
+            "--pid-file",
+            &pid_file,
+            "--count",
+            "10",
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .stdin(Stdio::null())

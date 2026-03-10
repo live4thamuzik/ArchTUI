@@ -393,9 +393,10 @@ impl InstallerContext {
 
         // Get next stage (safe: we checked is_terminal above)
         // SAFETY: next() only returns None for terminal states, which we checked above
-        let next_stage = self.current.next().expect(
-            "INTERNAL ERROR: non-terminal stage returned None from next() - this is a bug",
-        );
+        let next_stage = self
+            .current
+            .next()
+            .expect("INTERNAL ERROR: non-terminal stage returned None from next() - this is a bug");
 
         // Check confirmation for destructive stages
         if next_stage.is_destructive() && !self.destructive_confirmed {
@@ -629,10 +630,7 @@ mod tests {
             InstallStage::PartitioningDisk.to_string(),
             "Partitioning disk"
         );
-        assert_eq!(
-            InstallStage::Completed.to_string(),
-            "Installation complete"
-        );
+        assert_eq!(InstallStage::Completed.to_string(), "Installation complete");
     }
 
     // =========================================================================

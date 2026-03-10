@@ -8,14 +8,14 @@ use super::menus::render_breadcrumb;
 use crate::app::{AppState, ConfigEditState};
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, Borders, List, ListItem, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
+        Block, BorderType, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Wrap,
     },
-    Frame,
 };
 
 /// Active panel block — rounded, teal border, embedded title
@@ -65,7 +65,7 @@ pub fn render_configuration_ui(f: &mut Frame, state: &AppState, area: Rect) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1), // Breadcrumb
-            Constraint::Min(1),   // Content
+            Constraint::Min(1),    // Content
             Constraint::Length(3), // Buttons
         ])
         .split(area);
@@ -125,8 +125,7 @@ fn render_config_options(f: &mut Frame, area: Rect, state: &AppState) {
                         .add_modifier(Modifier::BOLD),
                 )
             } else {
-                ListItem::new(format!("   {}", text))
-                    .style(Style::default().fg(Colors::FG_PRIMARY))
+                ListItem::new(format!("   {}", text)).style(Style::default().fg(Colors::FG_PRIMARY))
             }
         })
         .collect();
@@ -240,10 +239,12 @@ fn render_detail_info(f: &mut Frame, area: Rect, state: &AppState) {
         if !opt.default_value.is_empty() {
             lines.push(Line::from(vec![
                 Span::styled("  Default: ", Style::default().fg(Colors::FG_MUTED)),
-                Span::styled(&opt.default_value, Style::default().fg(Colors::FG_SECONDARY)),
+                Span::styled(
+                    &opt.default_value,
+                    Style::default().fg(Colors::FG_SECONDARY),
+                ),
             ]));
         }
-
 
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
@@ -318,12 +319,14 @@ fn render_detail_selection(
         if is_sel {
             let text = format!(" \u{25b8} {}", choice);
             let padded = format!("{:<width$}", text, width = w);
-            lines.push(ListItem::new(padded).style(
-                Style::default()
-                    .fg(Colors::BG_PRIMARY)
-                    .bg(Colors::SECONDARY)
-                    .add_modifier(Modifier::BOLD),
-            ));
+            lines.push(
+                ListItem::new(padded).style(
+                    Style::default()
+                        .fg(Colors::BG_PRIMARY)
+                        .bg(Colors::SECONDARY)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            );
         } else {
             lines.push(
                 ListItem::new(format!("   {}", choice))
@@ -363,26 +366,23 @@ fn render_detail_selection(
             .disk_layout
             .iter()
             .map(|line| {
-                let style =
-                    if line.contains("NAME") || line.starts_with("  \u{2500}") {
-                        Style::default().fg(Colors::FG_MUTED)
-                    } else if line.contains("Disk model:")
-                        || line.contains("Disklabel type:")
-                        || line.contains("Disk /dev/")
-                    {
-                        Style::default()
-                            .fg(Colors::SECONDARY)
-                            .add_modifier(Modifier::BOLD)
-                    } else if line.contains("Device")
-                        || line.contains("Start")
-                        || line.contains("End")
-                    {
-                        Style::default()
-                            .fg(Colors::PRIMARY)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Colors::FG_PRIMARY)
-                    };
+                let style = if line.contains("NAME") || line.starts_with("  \u{2500}") {
+                    Style::default().fg(Colors::FG_MUTED)
+                } else if line.contains("Disk model:")
+                    || line.contains("Disklabel type:")
+                    || line.contains("Disk /dev/")
+                {
+                    Style::default()
+                        .fg(Colors::SECONDARY)
+                        .add_modifier(Modifier::BOLD)
+                } else if line.contains("Device") || line.contains("Start") || line.contains("End")
+                {
+                    Style::default()
+                        .fg(Colors::PRIMARY)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Colors::FG_PRIMARY)
+                };
                 Line::from(Span::styled(format!(" {}", line), style))
             })
             .collect();
@@ -392,20 +392,14 @@ fn render_detail_selection(
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Colors::BORDER_ACTIVE))
             .title(Line::from(vec![
-                Span::styled(
-                    "\u{2500}",
-                    Style::default().fg(Colors::BORDER_ACTIVE),
-                ),
+                Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_ACTIVE)),
                 Span::styled(
                     " Disk Layout ",
                     Style::default()
                         .fg(Colors::PRIMARY)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    "\u{2500}",
-                    Style::default().fg(Colors::BORDER_ACTIVE),
-                ),
+                Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_ACTIVE)),
             ]))
             .style(Style::default().bg(Colors::BG_PRIMARY));
 
@@ -567,7 +561,7 @@ fn render_detail_package_input(
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1), // Package count
-                Constraint::Min(3),   // Results list
+                Constraint::Min(3),    // Results list
                 Constraint::Length(1), // Hint
             ])
             .split(inner);
@@ -646,10 +640,7 @@ fn render_detail_package_input(
 
         // Hint bar
         let hint = Line::from(vec![
-            Span::styled(
-                "\u{2191}\u{2193}",
-                Style::default().fg(Colors::SECONDARY),
-            ),
+            Span::styled("\u{2191}\u{2193}", Style::default().fg(Colors::SECONDARY)),
             Span::styled(" Browse  ", Style::default().fg(Colors::FG_MUTED)),
             Span::styled("Enter", Style::default().fg(Colors::SECONDARY)),
             Span::styled(" Toggle  ", Style::default().fg(Colors::FG_MUTED)),
@@ -663,7 +654,7 @@ fn render_detail_package_input(
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1), // Package count
-                Constraint::Min(3),   // Output log
+                Constraint::Min(3),    // Output log
                 Constraint::Length(3), // Input box
                 Constraint::Length(1), // Hint
             ])
@@ -882,7 +873,7 @@ pub fn render_installation_ui(f: &mut Frame, state: &AppState, area: Rect) {
             Constraint::Length(3), // Progress bar
             Constraint::Length(1), // Phase steps
             Constraint::Length(1), // Status
-            Constraint::Min(1),   // Output
+            Constraint::Min(1),    // Output
         ])
         .split(area);
 
@@ -896,10 +887,7 @@ pub fn render_installation_ui(f: &mut Frame, state: &AppState, area: Rect) {
         .enumerate()
         .flat_map(|(i, name)| {
             let (icon, style) = if i < current_phase {
-                (
-                    "\u{2713}",
-                    Style::default().fg(Colors::SUCCESS),
-                )
+                ("\u{2713}", Style::default().fg(Colors::SUCCESS))
             } else if i == current_phase {
                 (
                     "\u{25b8}",
@@ -908,10 +896,7 @@ pub fn render_installation_ui(f: &mut Frame, state: &AppState, area: Rect) {
                         .add_modifier(Modifier::BOLD),
                 )
             } else {
-                (
-                    "\u{25cb}",
-                    Style::default().fg(Colors::FG_MUTED),
-                )
+                ("\u{25cb}", Style::default().fg(Colors::FG_MUTED))
             };
             vec![
                 Span::styled(format!(" {}{} ", icon, name), style),
@@ -935,9 +920,7 @@ pub fn render_installation_ui(f: &mut Frame, state: &AppState, area: Rect) {
     let status_line = Paragraph::new(Line::from(vec![
         Span::styled(
             " Status: ",
-            Style::default()
-                .fg(Colors::FG_MUTED)
-                .bg(Colors::BG_PRIMARY),
+            Style::default().fg(Colors::FG_MUTED).bg(Colors::BG_PRIMARY),
         ),
         Span::styled(&state.status_message, status_style),
     ]))
@@ -978,17 +961,17 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
         .direction(Direction::Vertical)
         .constraints(if secure_boot_enabled {
             vec![
-                Constraint::Length(1), // Breadcrumb
-                Constraint::Length(5), // Status banner
+                Constraint::Length(1),  // Breadcrumb
+                Constraint::Length(5),  // Status banner
                 Constraint::Length(10), // Secure Boot reminder
-                Constraint::Min(1),   // Output log
-                Constraint::Length(1), // Hint
+                Constraint::Min(1),     // Output log
+                Constraint::Length(1),  // Hint
             ]
         } else {
             vec![
                 Constraint::Length(1), // Breadcrumb
                 Constraint::Length(5), // Status banner
-                Constraint::Min(1),   // Output log
+                Constraint::Min(1),    // Output log
                 Constraint::Length(1), // Hint
             ]
         })
@@ -1068,7 +1051,9 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
     let output_start = if state.installer_auto_scroll {
         total_lines.saturating_sub(output_visible)
     } else {
-        state.installer_scroll_offset.min(total_lines.saturating_sub(output_visible))
+        state
+            .installer_scroll_offset
+            .min(total_lines.saturating_sub(output_visible))
     };
     let output_end = (output_start + output_visible).min(total_lines);
 
@@ -1131,7 +1116,10 @@ pub fn render_completion_ui(f: &mut Frame, state: &AppState, area: Rect) {
         Span::styled("Q", Style::default().fg(Colors::SECONDARY)),
         Span::styled(" Quit  ", Style::default().fg(Colors::FG_MUTED)),
         Span::styled("Log: ", Style::default().fg(Colors::FG_MUTED)),
-        Span::styled(format!("{}/", crate::script_runner::log_dir().display()), Style::default().fg(Colors::FG_SECONDARY)),
+        Span::styled(
+            format!("{}/", crate::script_runner::log_dir().display()),
+            Style::default().fg(Colors::FG_SECONDARY),
+        ),
     ]);
     let hint_para = Paragraph::new(hint)
         .style(Style::default().bg(Colors::BG_SECONDARY))
@@ -1186,8 +1174,7 @@ pub fn render_dry_run_summary(f: &mut Frame, state: &AppState, area: Rect) {
             })
             .collect()
     } else {
-        vec![ListItem::new("  No actions to perform")
-            .style(Style::default().fg(Colors::FG_MUTED))]
+        vec![ListItem::new("  No actions to perform").style(Style::default().fg(Colors::FG_MUTED))]
     };
 
     let summary_list = List::new(summary_lines);

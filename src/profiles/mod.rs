@@ -828,11 +828,24 @@ impl Profile {
             Profile::Minimal => None,
             Profile::Cosmic => Some("cosmic-greeter"),
             Profile::Gnome => Some("gdm"),
-            Profile::Kde | Profile::Hyprland | Profile::Sway
-            | Profile::Lxqt | Profile::River | Profile::Niri | Profile::Labwc => Some("sddm"),
-            Profile::I3 | Profile::Xfce | Profile::Cinnamon | Profile::Mate
-            | Profile::Budgie | Profile::Deepin | Profile::Bspwm | Profile::Awesome
-            | Profile::Qtile | Profile::Xmonad | Profile::Dwm => Some("lightdm"),
+            Profile::Kde
+            | Profile::Hyprland
+            | Profile::Sway
+            | Profile::Lxqt
+            | Profile::River
+            | Profile::Niri
+            | Profile::Labwc => Some("sddm"),
+            Profile::I3
+            | Profile::Xfce
+            | Profile::Cinnamon
+            | Profile::Mate
+            | Profile::Budgie
+            | Profile::Deepin
+            | Profile::Bspwm
+            | Profile::Awesome
+            | Profile::Qtile
+            | Profile::Xmonad
+            | Profile::Dwm => Some("lightdm"),
             Profile::Lxde => Some("lxdm"),
         }
     }
@@ -849,8 +862,14 @@ impl Profile {
     pub fn is_wayland(&self) -> bool {
         matches!(
             self,
-            Profile::Gnome | Profile::Kde | Profile::Hyprland | Profile::Sway
-            | Profile::Cosmic | Profile::River | Profile::Niri | Profile::Labwc
+            Profile::Gnome
+                | Profile::Kde
+                | Profile::Hyprland
+                | Profile::Sway
+                | Profile::Cosmic
+                | Profile::River
+                | Profile::Niri
+                | Profile::Labwc
         )
     }
 
@@ -858,10 +877,16 @@ impl Profile {
     pub fn is_tiling(&self) -> bool {
         matches!(
             self,
-            Profile::Hyprland | Profile::Sway | Profile::I3
-            | Profile::Bspwm | Profile::Awesome | Profile::Qtile
-            | Profile::River | Profile::Niri | Profile::Xmonad
-            | Profile::Dwm
+            Profile::Hyprland
+                | Profile::Sway
+                | Profile::I3
+                | Profile::Bspwm
+                | Profile::Awesome
+                | Profile::Qtile
+                | Profile::River
+                | Profile::Niri
+                | Profile::Xmonad
+                | Profile::Dwm
         )
     }
 
@@ -869,9 +894,15 @@ impl Profile {
     pub fn is_traditional_de(&self) -> bool {
         matches!(
             self,
-            Profile::Gnome | Profile::Kde | Profile::Xfce
-            | Profile::Cinnamon | Profile::Mate | Profile::Budgie
-            | Profile::Deepin | Profile::Lxde | Profile::Lxqt
+            Profile::Gnome
+                | Profile::Kde
+                | Profile::Xfce
+                | Profile::Cinnamon
+                | Profile::Mate
+                | Profile::Budgie
+                | Profile::Deepin
+                | Profile::Lxde
+                | Profile::Lxqt
         )
     }
 
@@ -912,14 +943,26 @@ impl Profile {
 pub mod gpu_packages {
     /// Nvidia proprietary driver packages (DKMS for all kernel variants).
     pub const NVIDIA: &[&str] = &[
-        "nvidia-dkms", "libglvnd", "nvidia-utils", "opencl-nvidia", "nvidia-settings",
-        "lib32-libglvnd", "lib32-nvidia-utils", "lib32-opencl-nvidia",
+        "nvidia-dkms",
+        "libglvnd",
+        "nvidia-utils",
+        "opencl-nvidia",
+        "nvidia-settings",
+        "lib32-libglvnd",
+        "lib32-nvidia-utils",
+        "lib32-opencl-nvidia",
     ];
 
     /// Nvidia open-source kernel module packages (DKMS-based).
     pub const NVIDIA_OPEN: &[&str] = &[
-        "nvidia-open-dkms", "libglvnd", "nvidia-utils", "opencl-nvidia", "nvidia-settings",
-        "lib32-libglvnd", "lib32-nvidia-utils", "lib32-opencl-nvidia",
+        "nvidia-open-dkms",
+        "libglvnd",
+        "nvidia-utils",
+        "opencl-nvidia",
+        "nvidia-settings",
+        "lib32-libglvnd",
+        "lib32-nvidia-utils",
+        "lib32-opencl-nvidia",
     ];
 
     /// AMD open-source driver packages (mesa-based).

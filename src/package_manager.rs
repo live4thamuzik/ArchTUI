@@ -52,12 +52,8 @@ impl PackageManager {
         let db_path = db_path.as_ref();
 
         // ALPM requires paths as strings
-        let root_str = root
-            .to_str()
-            .context("Root path contains invalid UTF-8")?;
-        let db_path_str = db_path
-            .to_str()
-            .context("DB path contains invalid UTF-8")?;
+        let root_str = root.to_str().context("Root path contains invalid UTF-8")?;
+        let db_path_str = db_path.to_str().context("DB path contains invalid UTF-8")?;
 
         let handle = Alpm::new(root_str, db_path_str).with_context(|| {
             format!(
@@ -86,9 +82,8 @@ impl PackageManager {
         let root = root.as_ref();
         let conf_path = conf_path.as_ref();
 
-        let conf = pacmanconf::Config::from_file(conf_path).with_context(|| {
-            format!("Failed to parse pacman.conf at {}", conf_path.display())
-        })?;
+        let conf = pacmanconf::Config::from_file(conf_path)
+            .with_context(|| format!("Failed to parse pacman.conf at {}", conf_path.display()))?;
 
         let db_path = root.join("var/lib/pacman");
         let mut pm = Self::new(root, &db_path)?;
@@ -188,7 +183,11 @@ impl PackageManager {
             if let Err(e) = add_result {
                 let err_msg = e.to_string();
                 let _ = self.handle.trans_release();
-                anyhow::bail!("Failed to add package to transaction: {}: {}", pkg_name, err_msg);
+                anyhow::bail!(
+                    "Failed to add package to transaction: {}: {}",
+                    pkg_name,
+                    err_msg
+                );
             }
             tracing::info!("Queued for installation: {}", pkg_name);
         }

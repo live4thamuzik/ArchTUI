@@ -4,11 +4,11 @@
 
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
-    Frame,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -86,7 +86,8 @@ impl FileBrowserState {
 
         // Add parent directory entry if not at root
         if let Some(parent) = self.current_dir.parent() {
-            self.entries.push(FileEntry::parent_dir(parent.to_path_buf()));
+            self.entries
+                .push(FileEntry::parent_dir(parent.to_path_buf()));
         }
 
         // Read directory contents
@@ -260,7 +261,11 @@ impl FileBrowser {
         let path_block = Block::default()
             .borders(Borders::ALL)
             .title(" Select Configuration File ")
-            .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(Colors::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
+            )
             .border_style(Style::default().fg(Colors::PRIMARY));
 
         let path_paragraph = Paragraph::new(path_display)
@@ -304,10 +309,7 @@ impl FileBrowser {
 
                 let line = Line::from(vec![
                     Span::styled(format!(" {} ", icon), style),
-                    Span::styled(
-                        format!("{:<40}", entry.name),
-                        style,
-                    ),
+                    Span::styled(format!("{:<40}", entry.name), style),
                     Span::styled(size_str, style),
                 ]);
 

@@ -69,7 +69,10 @@ impl ChildRegistry {
         if self.pids.is_empty() {
             return;
         }
-        tracing::info!("Terminating {} running tool process(es)...", self.pids.len());
+        tracing::info!(
+            "Terminating {} running tool process(es)...",
+            self.pids.len()
+        );
 
         let pids_to_kill: Vec<u32> = self.pids.iter().copied().collect();
         for &pid in &pids_to_kill {
@@ -81,9 +84,11 @@ impl ChildRegistry {
 
         let start = Instant::now();
         while start.elapsed() < grace_period {
-            let still_alive: Vec<u32> = pids_to_kill.iter()
+            let still_alive: Vec<u32> = pids_to_kill
+                .iter()
                 .filter(|&&pid| is_process_alive(pid))
-                .copied().collect();
+                .copied()
+                .collect();
             if still_alive.is_empty() {
                 self.pids.clear();
                 return;
@@ -251,10 +256,7 @@ impl ProcessGuard {
     /// Useful for debugging and tests.
     #[allow(dead_code)] // Test/debug utility
     pub fn child_count(&self) -> usize {
-        self.registry
-            .lock()
-            .map(|r| r.count())
-            .unwrap_or(0)
+        self.registry.lock().map(|r| r.count()).unwrap_or(0)
     }
 }
 
@@ -386,7 +388,7 @@ mod tests {
 
     /// Helper to wait for a process to terminate (reap zombie)
     fn wait_for_process_death(pid: u32, timeout: Duration) -> bool {
-        use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+        use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 
         let start = Instant::now();
         let nix_pid = Pid::from_raw(pid as i32);

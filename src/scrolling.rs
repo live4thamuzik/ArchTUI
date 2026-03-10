@@ -62,7 +62,9 @@ impl ScrollState {
 
     /// Move selection down by one page
     pub fn page_down(&mut self) {
-        if self.total_items == 0 { return; }
+        if self.total_items == 0 {
+            return;
+        }
         let max_index = self.total_items - 1;
         let jump_size = self.visible_items.saturating_sub(1);
         self.selected_index = (self.selected_index + jump_size).min(max_index);

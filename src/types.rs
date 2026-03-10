@@ -7,8 +7,19 @@ use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumString};
 
 /// Boot firmware mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum BootMode {
     #[default]
@@ -21,8 +32,19 @@ pub enum BootMode {
 }
 
 /// Filesystem type for partitions
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum Filesystem {
     #[default]
@@ -44,8 +66,19 @@ pub enum Filesystem {
 }
 
 /// Disk partitioning strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum PartitionScheme {
     #[default]
     #[strum(serialize = "auto_simple")]
@@ -97,8 +130,19 @@ impl PartitionScheme {
 }
 
 /// Desktop environment selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum DesktopEnvironment {
     #[default]
@@ -156,8 +200,19 @@ impl DesktopEnvironment {
 }
 
 /// Display manager selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum DisplayManager {
     #[default]
@@ -180,8 +235,19 @@ pub enum DisplayManager {
 }
 
 /// Bootloader selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum Bootloader {
     #[default]
@@ -206,8 +272,19 @@ impl Bootloader {
 }
 
 /// AUR helper selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum AurHelper {
     #[strum(serialize = "paru")]
@@ -222,8 +299,19 @@ pub enum AurHelper {
 }
 
 /// Linux kernel selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum Kernel {
     #[default]
     #[strum(serialize = "linux")]
@@ -237,8 +325,19 @@ pub enum Kernel {
 }
 
 /// GPU driver selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum GpuDriver {
     #[default]
     #[strum(serialize = "Auto")]
@@ -258,8 +357,19 @@ pub enum GpuDriver {
 }
 
 /// Generic Yes/No toggle for boolean-like options
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum Toggle {
     #[strum(serialize = "Yes")]
     Yes,
@@ -278,17 +388,24 @@ impl Toggle {
 
 impl From<bool> for Toggle {
     fn from(value: bool) -> Self {
-        if value {
-            Self::Yes
-        } else {
-            Self::No
-        }
+        if value { Self::Yes } else { Self::No }
     }
 }
 
 /// Auto/Yes/No option for fields like Encryption that support auto-detection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum AutoToggle {
     #[default]
     #[strum(serialize = "Auto")]
@@ -300,8 +417,19 @@ pub enum AutoToggle {
 }
 
 /// Encryption key type for LUKS
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum EncryptionKeyType {
     #[default]
     #[strum(serialize = "Password")]
@@ -315,8 +443,19 @@ pub enum EncryptionKeyType {
 /// Plymouth theme selection
 /// Stock themes ship with the plymouth package.
 /// arch-glow and arch-mac-style are custom themes bundled in Source/.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum PlymouthTheme {
     #[default]
     #[strum(serialize = "bgrt")]
@@ -344,8 +483,19 @@ pub enum PlymouthTheme {
 }
 
 /// GRUB theme selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 pub enum GrubTheme {
     #[default]
     #[strum(serialize = "PolyDark")]
@@ -361,8 +511,19 @@ pub enum GrubTheme {
 }
 
 /// Btrfs snapshot tool selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum SnapshotTool {
     #[strum(serialize = "snapper")]
@@ -375,8 +536,19 @@ pub enum SnapshotTool {
 }
 
 /// Btrfs snapshot frequency
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[derive(Display, EnumString, EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum SnapshotFrequency {
     #[strum(serialize = "hourly")]

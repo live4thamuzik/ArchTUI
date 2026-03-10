@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use crate::script_traits::{shell_safe, ScriptArgs};
+use crate::script_traits::{ScriptArgs, shell_safe};
 use crate::types::AurHelper;
 
 // ============================================================================

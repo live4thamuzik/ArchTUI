@@ -20,7 +20,10 @@ use std::sync::{Arc, Mutex};
 #[test]
 fn test_configuration_default_creates_valid_options() {
     let config = Configuration::default();
-    assert!(!config.options.is_empty(), "Default config should have options");
+    assert!(
+        !config.options.is_empty(),
+        "Default config should have options"
+    );
 }
 
 #[test]
@@ -58,7 +61,8 @@ fn test_configuration_to_env_vars() {
     // Check for expected env var keys
     let keys: Vec<&String> = env_vars.keys().collect();
     assert!(
-        keys.iter().any(|k| k.contains("INSTALL") || k.contains("DISK") || k.contains("HOSTNAME")),
+        keys.iter()
+            .any(|k| k.contains("INSTALL") || k.contains("DISK") || k.contains("HOSTNAME")),
         "Should contain installation-related env vars"
     );
 }
@@ -202,7 +206,11 @@ fn test_mode_transition_to_complete() {
 fn test_progress_from_output_line() {
     // Test the pattern used in installer to update progress from output
     let test_cases = vec![
-        ("Starting Arch Linux installation", 10, "Installation started"),
+        (
+            "Starting Arch Linux installation",
+            10,
+            "Installation started",
+        ),
         ("Preparing system", 15, "Preparing system"),
         ("Starting disk partitioning", 25, "Partitioning disk"),
         ("Installing base system", 40, "Installing base system"),
@@ -263,7 +271,9 @@ fn test_error_in_output_pattern() {
     {
         let mut state = app_state.lock().unwrap();
         state.mode = AppMode::Installation;
-        state.installer_output.push("ERROR: Disk not found".to_string());
+        state
+            .installer_output
+            .push("ERROR: Disk not found".to_string());
     }
 
     {

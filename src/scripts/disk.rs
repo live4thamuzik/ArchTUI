@@ -818,7 +818,10 @@ mod tests {
         let cli_args = args.to_cli_args();
 
         // CRITICAL: Must be "--disk" not "--device"
-        assert_eq!(cli_args[0], "--disk", "First arg must be --disk, not --device");
+        assert_eq!(
+            cli_args[0], "--disk",
+            "First arg must be --disk, not --device"
+        );
         assert_eq!(cli_args[1], "/dev/sda");
         assert_eq!(cli_args[2], "--method");
         assert_eq!(cli_args[3], "quick");
@@ -878,7 +881,10 @@ mod tests {
 
         // Old invalid values that were in the TUI
         assert!("zero".parse::<WipeMethod>().is_err(), "zero is not valid");
-        assert!("random".parse::<WipeMethod>().is_err(), "random is not valid");
+        assert!(
+            "random".parse::<WipeMethod>().is_err(),
+            "random is not valid"
+        );
     }
 
     #[test]
@@ -933,7 +939,10 @@ mod tests {
         };
 
         let cli_args = args.to_cli_args();
-        assert_eq!(cli_args[3], "fat32", "Filesystem::Fat32 must map to 'fat32'");
+        assert_eq!(
+            cli_args[3], "fat32",
+            "Filesystem::Fat32 must map to 'fat32'"
+        );
         assert_eq!(cli_args[4], "--label");
         assert_eq!(cli_args[5], "EFI");
     }
@@ -1071,13 +1080,31 @@ mod tests {
     fn test_partition_type_from_str() {
         assert_eq!("EF00".parse::<PartitionType>().unwrap(), PartitionType::Efi);
         assert_eq!("EFI".parse::<PartitionType>().unwrap(), PartitionType::Efi);
-        assert_eq!("EFI System".parse::<PartitionType>().unwrap(), PartitionType::Efi);
-        assert_eq!("8300".parse::<PartitionType>().unwrap(), PartitionType::Linux);
-        assert_eq!("Linux".parse::<PartitionType>().unwrap(), PartitionType::Linux);
-        assert_eq!("Swap".parse::<PartitionType>().unwrap(), PartitionType::Swap);
+        assert_eq!(
+            "EFI System".parse::<PartitionType>().unwrap(),
+            PartitionType::Efi
+        );
+        assert_eq!(
+            "8300".parse::<PartitionType>().unwrap(),
+            PartitionType::Linux
+        );
+        assert_eq!(
+            "Linux".parse::<PartitionType>().unwrap(),
+            PartitionType::Linux
+        );
+        assert_eq!(
+            "Swap".parse::<PartitionType>().unwrap(),
+            PartitionType::Swap
+        );
         assert_eq!("LVM".parse::<PartitionType>().unwrap(), PartitionType::Lvm);
-        assert_eq!("LUKS".parse::<PartitionType>().unwrap(), PartitionType::Luks);
-        assert_eq!("BIOS Boot".parse::<PartitionType>().unwrap(), PartitionType::BiosBoot);
+        assert_eq!(
+            "LUKS".parse::<PartitionType>().unwrap(),
+            PartitionType::Luks
+        );
+        assert_eq!(
+            "BIOS Boot".parse::<PartitionType>().unwrap(),
+            PartitionType::BiosBoot
+        );
     }
 
     #[test]
@@ -1133,7 +1160,14 @@ mod tests {
         let cli = args.to_cli_args();
         assert_eq!(
             cli,
-            vec!["--device", "/dev/sda", "--action", "create-table", "--table-type", "gpt"]
+            vec![
+                "--device",
+                "/dev/sda",
+                "--action",
+                "create-table",
+                "--table-type",
+                "gpt"
+            ]
         );
         let env = args.get_env_vars();
         assert_eq!(env[0].0, "CONFIRM_MANUAL_PARTITION");
@@ -1235,7 +1269,14 @@ mod tests {
         let cli = args.to_cli_args();
         assert_eq!(
             cli,
-            vec!["--device", "/dev/sda", "--action", "delete-partition", "--number", "3"]
+            vec![
+                "--device",
+                "/dev/sda",
+                "--action",
+                "delete-partition",
+                "--number",
+                "3"
+            ]
         );
         let env = args.get_env_vars();
         assert_eq!(env[0].0, "CONFIRM_MANUAL_PARTITION");

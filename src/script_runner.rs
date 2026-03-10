@@ -24,11 +24,11 @@
 //! produces realistic output for validation.
 
 use crate::process_guard::{ChildRegistry, CommandProcessGroup};
-use crate::script_traits::{is_dry_run, ScriptArgs};
-use anyhow::{bail, Context, Result};
-use tracing::{info, warn};
+use crate::script_traits::{ScriptArgs, is_dry_run};
+use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use tracing::{info, warn};
 
 /// Resolve the log directory.
 /// Priority: ARCHTUI_LOG_DIR env > /var/log/archtui (if writable) > $XDG_STATE_HOME/archtui > ~/.local/state/archtui
@@ -131,13 +131,17 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     // Validate script exists before attempting execution
     if !Path::new(&script_path).exists() {
         warn!("Script not found: {}", script_path);
-        bail!("Script not found: {}. Ensure scripts/tools/ directory is accessible.", script_name);
+        bail!(
+            "Script not found: {}. Ensure scripts/tools/ directory is accessible.",
+            script_name
+        );
     }
 
     let cli_args = args.to_cli_args();
     let env_vars = args.get_env_vars();
 
-    args.validate().map_err(|e| anyhow::anyhow!("Argument validation failed: {}", e))?;
+    args.validate()
+        .map_err(|e| anyhow::anyhow!("Argument validation failed: {}", e))?;
     tracing::debug!(script = %script_name, "Argument validation passed");
 
     // Log exact command and environment for transparency
@@ -165,12 +169,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
             format!("{} ", env_display.join(" "))
         };
 
-        let would_execute = format!(
-            "{}bash {} {}",
-            env_prefix,
-            script_path,
-            cli_args.join(" ")
-        );
+        let would_execute = format!("{}bash {} {}", env_prefix, script_path, cli_args.join(" "));
 
         info!("[DRY RUN] Would execute: {}", would_execute);
 
@@ -331,7 +330,11 @@ mod tests {
 
         // Verify no actual password values leak
         for entry in &redacted {
-            assert!(!entry.contains("s3cret"), "Password value leaked: {}", entry);
+            assert!(
+                !entry.contains("s3cret"),
+                "Password value leaked: {}",
+                entry
+            );
             assert!(!entry.contains("r00t"), "Password value leaked: {}", entry);
             assert!(!entry.contains("luk$"), "Password value leaked: {}", entry);
         }

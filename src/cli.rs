@@ -402,12 +402,8 @@ mod tests {
 
     #[test]
     fn test_cli_install_with_config() {
-        let result = Cli::try_parse_from([
-            "archtui",
-            "install",
-            "--config",
-            "/path/to/config.json",
-        ]);
+        let result =
+            Cli::try_parse_from(["archtui", "install", "--config", "/path/to/config.json"]);
         assert!(result.is_ok());
         // SAFETY: asserted Ok above
         let cli = result.unwrap();
@@ -421,11 +417,7 @@ mod tests {
 
     #[test]
     fn test_cli_validate_command() {
-        let result = Cli::try_parse_from([
-            "archtui",
-            "validate",
-            "/path/to/config.json",
-        ]);
+        let result = Cli::try_parse_from(["archtui", "validate", "/path/to/config.json"]);
         assert!(result.is_ok());
         // SAFETY: asserted Ok above
         let cli = result.unwrap();
@@ -469,27 +461,15 @@ mod tests {
 
     #[test]
     fn test_cli_user_add_tool() {
-        let result = Cli::try_parse_from([
-            "archtui",
-            "tools",
-            "user",
-            "add",
-            "--username",
-            "testuser",
-        ]);
+        let result =
+            Cli::try_parse_from(["archtui", "tools", "user", "add", "--username", "testuser"]);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_cli_network_test_tool() {
-        let result = Cli::try_parse_from([
-            "archtui",
-            "tools",
-            "network",
-            "test",
-            "--action",
-            "ping",
-        ]);
+        let result =
+            Cli::try_parse_from(["archtui", "tools", "network", "test", "--action", "ping"]);
         assert!(result.is_ok());
     }
 }

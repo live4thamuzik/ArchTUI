@@ -166,7 +166,10 @@ pub fn rank_mirrors(config: &PreinstallConfig) -> MirrorRankResult {
             }
         }
         Err(e) => {
-            let msg = format!("reflector failed to execute: {} — using default mirrorlist", e);
+            let msg = format!(
+                "reflector failed to execute: {} — using default mirrorlist",
+                e
+            );
             tracing::warn!("{}", msg);
             MirrorRankResult::Failed(msg)
         }

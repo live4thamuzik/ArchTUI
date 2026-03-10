@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::types::{
-    AurHelper, AutoToggle, Bootloader, BootMode, DesktopEnvironment, DisplayManager,
+    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager,
     EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
     SnapshotFrequency, SnapshotTool, Toggle,
 };
@@ -233,18 +233,28 @@ impl InstallationConfig {
             anyhow::bail!("Hostname must be specified");
         }
         if hostname.len() > 63 {
-            tracing::error!(field = "hostname", len = hostname.len(), "Hostname exceeds 63 chars");
+            tracing::error!(
+                field = "hostname",
+                len = hostname.len(),
+                "Hostname exceeds 63 chars"
+            );
             anyhow::bail!("Hostname must be at most 63 characters long (RFC 1123)");
         }
         if let Some(first_char) = hostname.chars().next() {
             if !first_char.is_ascii_alphanumeric() {
-                tracing::error!(field = "hostname", "Hostname must start with a letter or digit (RFC 1123)");
+                tracing::error!(
+                    field = "hostname",
+                    "Hostname must start with a letter or digit (RFC 1123)"
+                );
                 anyhow::bail!("Hostname must start with a letter or digit (RFC 1123)");
             }
         }
         if let Some(last_char) = hostname.chars().last() {
             if !last_char.is_ascii_alphanumeric() {
-                tracing::error!(field = "hostname", "Hostname must end with a letter or digit (RFC 1123)");
+                tracing::error!(
+                    field = "hostname",
+                    "Hostname must end with a letter or digit (RFC 1123)"
+                );
                 anyhow::bail!("Hostname must end with a letter or digit (RFC 1123)");
             }
         }
@@ -263,12 +273,19 @@ impl InstallationConfig {
             anyhow::bail!("Username must be specified");
         }
         if username.len() < 3 || username.len() > 32 {
-            tracing::error!(field = "username", len = username.len(), "Username length out of range");
+            tracing::error!(
+                field = "username",
+                len = username.len(),
+                "Username length out of range"
+            );
             anyhow::bail!("Username must be 3-32 characters long");
         }
         if let Some(first_char) = username.chars().next() {
             if !first_char.is_ascii_lowercase() {
-                tracing::error!(field = "username", "Username must start with lowercase letter");
+                tracing::error!(
+                    field = "username",
+                    "Username must start with lowercase letter"
+                );
                 anyhow::bail!("Username must start with a lowercase letter");
             }
         }
@@ -282,20 +299,32 @@ impl InstallationConfig {
 
         // Validate passwords (non-empty, no whitespace) — ROE §8.1: never log password values
         if self.user_password.trim().is_empty() {
-            tracing::error!(field = "user_password", "User password is empty (value redacted)");
+            tracing::error!(
+                field = "user_password",
+                "User password is empty (value redacted)"
+            );
             anyhow::bail!("User password must be specified");
         }
         if self.user_password.contains(char::is_whitespace) {
-            tracing::error!(field = "user_password", "User password contains whitespace (value redacted)");
+            tracing::error!(
+                field = "user_password",
+                "User password contains whitespace (value redacted)"
+            );
             anyhow::bail!("User password cannot contain whitespace");
         }
 
         if self.root_password.trim().is_empty() {
-            tracing::error!(field = "root_password", "Root password is empty (value redacted)");
+            tracing::error!(
+                field = "root_password",
+                "Root password is empty (value redacted)"
+            );
             anyhow::bail!("Root password must be specified");
         }
         if self.root_password.contains(char::is_whitespace) {
-            tracing::error!(field = "root_password", "Root password contains whitespace (value redacted)");
+            tracing::error!(
+                field = "root_password",
+                "Root password contains whitespace (value redacted)"
+            );
             anyhow::bail!("Root password cannot contain whitespace");
         }
 
@@ -303,7 +332,10 @@ impl InstallationConfig {
         let needs_encryption =
             self.encryption == AutoToggle::Yes || self.partitioning_strategy.uses_encryption();
         if needs_encryption && self.encryption_password.trim().is_empty() {
-            tracing::error!(field = "encryption_password", "Encryption password required but empty (value redacted)");
+            tracing::error!(
+                field = "encryption_password",
+                "Encryption password required but empty (value redacted)"
+            );
             anyhow::bail!("Encryption password must be specified when encryption is enabled");
         }
 
@@ -311,14 +343,20 @@ impl InstallationConfig {
         if self.git_repository == Toggle::Yes {
             let url = self.git_repository_url.trim();
             if url.is_empty() {
-                tracing::error!(field = "git_repository_url", "Git repository URL required but empty");
-                anyhow::bail!("Git repository URL must be specified when Git Repository is enabled");
+                tracing::error!(
+                    field = "git_repository_url",
+                    "Git repository URL required but empty"
+                );
+                anyhow::bail!(
+                    "Git repository URL must be specified when Git Repository is enabled"
+                );
             }
             if !url.starts_with("http://") && !url.starts_with("https://") {
-                tracing::error!(field = "git_repository_url", "URL must start with http:// or https://");
-                anyhow::bail!(
-                    "Git repository URL must start with http:// or https://"
+                tracing::error!(
+                    field = "git_repository_url",
+                    "URL must start with http:// or https://"
                 );
+                anyhow::bail!("Git repository URL must start with http:// or https://");
             }
         }
 
@@ -401,9 +439,7 @@ impl InstallationConfig {
             disk = %self.install_disk,
             "Exporting configuration to environment variables"
         );
-        let sanitize = |s: String| -> String {
-            if s == "N/A" { String::new() } else { s }
-        };
+        let sanitize = |s: String| -> String { if s == "N/A" { String::new() } else { s } };
         vec![
             ("BOOT_MODE".to_string(), self.boot_mode.to_string()),
             ("SECURE_BOOT".to_string(), self.secure_boot.to_string()),
@@ -443,10 +479,7 @@ impl InstallationConfig {
                 "BTRFS_KEEP_COUNT".to_string(),
                 self.btrfs_keep_count.to_string(),
             ),
-            (
-                "SNAPSHOT_TOOL".to_string(),
-                self.snapshot_tool.to_string(),
-            ),
+            ("SNAPSHOT_TOOL".to_string(), self.snapshot_tool.to_string()),
             ("TIMEZONE_REGION".to_string(), self.timezone_region.clone()),
             ("TIMEZONE".to_string(), self.timezone.clone()),
             ("LOCALE".to_string(), self.locale.clone()),
@@ -596,7 +629,11 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             partitioning_strategy: parse_or_default(&get_value("Partitioning Strategy")),
             raid_level: {
                 let v = get_value("RAID Level");
-                if v == "N/A" || v.is_empty() { "raid1".to_string() } else { v }
+                if v == "N/A" || v.is_empty() {
+                    "raid1".to_string()
+                } else {
+                    v
+                }
             },
             root_filesystem: parse_or_default(&get_value("Root Filesystem")),
             home_filesystem: parse_or_default(&get_value("Home Filesystem")),
@@ -809,8 +846,14 @@ mod tests {
         assert_eq!(loaded.hostname, original.hostname);
         assert_eq!(loaded.username, original.username);
         // Passwords are redacted on save (ROE §8.1) — they should be empty after roundtrip
-        assert_eq!(loaded.user_password, "", "Passwords must be redacted on save");
-        assert_eq!(loaded.root_password, "", "Passwords must be redacted on save");
+        assert_eq!(
+            loaded.user_password, "",
+            "Passwords must be redacted on save"
+        );
+        assert_eq!(
+            loaded.root_password, "",
+            "Passwords must be redacted on save"
+        );
         assert_eq!(loaded.kernel, original.kernel);
         assert_eq!(loaded.bootloader, original.bootloader);
         assert_eq!(loaded.desktop_environment, original.desktop_environment);
@@ -926,7 +969,12 @@ mod tests {
         config.username = "1user".to_string();
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("start with a lowercase letter"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("start with a lowercase letter")
+        );
     }
 
     #[test]
@@ -983,21 +1031,13 @@ mod tests {
         // Test valid schemes (https:// and http:// only — git:// is unencrypted, ssh:// rejected by bash)
         for scheme in &["https://", "http://"] {
             config.git_repository_url = format!("{}example.com/repo.git", scheme);
-            assert!(
-                config.validate().is_ok(),
-                "Should accept {} URLs",
-                scheme
-            );
+            assert!(config.validate().is_ok(), "Should accept {} URLs", scheme);
         }
 
         // git:// and ssh:// should be rejected (unencrypted / not supported by install_dotfiles.sh)
         for scheme in &["git://", "ssh://"] {
             config.git_repository_url = format!("{}example.com/repo.git", scheme);
-            assert!(
-                config.validate().is_err(),
-                "Should reject {} URLs",
-                scheme
-            );
+            assert!(config.validate().is_err(), "Should reject {} URLs", scheme);
         }
     }
 
@@ -1034,7 +1074,11 @@ mod tests {
         config.boot_mode = BootMode::Bios;
 
         // UEFI-only bootloaders must be rejected on BIOS
-        for bl in &[Bootloader::SystemdBoot, Bootloader::Refind, Bootloader::Efistub] {
+        for bl in &[
+            Bootloader::SystemdBoot,
+            Bootloader::Refind,
+            Bootloader::Efistub,
+        ] {
             config.bootloader = *bl;
             assert!(
                 config.validate().is_err(),
@@ -1083,20 +1127,12 @@ mod tests {
     fn test_all_filesystem_types_serialize() {
         use std::str::FromStr;
 
-        let filesystems = vec![
-            Filesystem::Ext4,
-            Filesystem::Btrfs,
-            Filesystem::Xfs,
-        ];
+        let filesystems = vec![Filesystem::Ext4, Filesystem::Btrfs, Filesystem::Xfs];
 
         for fs in filesystems {
             let serialized = fs.to_string();
             let deserialized = Filesystem::from_str(&serialized);
-            assert!(
-                deserialized.is_ok(),
-                "Filesystem {:?} should roundtrip",
-                fs
-            );
+            assert!(deserialized.is_ok(), "Filesystem {:?} should roundtrip", fs);
             assert_eq!(deserialized.unwrap(), fs);
         }
     }
@@ -1105,19 +1141,12 @@ mod tests {
     fn test_all_bootloaders_serialize() {
         use std::str::FromStr;
 
-        let bootloaders = vec![
-            Bootloader::Grub,
-            Bootloader::SystemdBoot,
-        ];
+        let bootloaders = vec![Bootloader::Grub, Bootloader::SystemdBoot];
 
         for bl in bootloaders {
             let serialized = bl.to_string();
             let deserialized = Bootloader::from_str(&serialized);
-            assert!(
-                deserialized.is_ok(),
-                "Bootloader {:?} should roundtrip",
-                bl
-            );
+            assert!(deserialized.is_ok(), "Bootloader {:?} should roundtrip", bl);
             assert_eq!(deserialized.unwrap(), bl);
         }
     }
@@ -1148,8 +1177,7 @@ mod tests {
 
         // Should serialize and deserialize correctly
         let json = serde_json::to_string(&config).expect("Should serialize");
-        let loaded: InstallationConfig =
-            serde_json::from_str(&json).expect("Should deserialize");
+        let loaded: InstallationConfig = serde_json::from_str(&json).expect("Should deserialize");
 
         assert_eq!(loaded.user_password, config.user_password);
         assert_eq!(loaded.root_password, config.root_password);
@@ -1185,7 +1213,10 @@ mod tests {
         config.additional_packages = String::new();
         config.additional_aur_packages = String::new();
 
-        assert!(config.validate().is_ok(), "Empty package lists should be valid");
+        assert!(
+            config.validate().is_ok(),
+            "Empty package lists should be valid"
+        );
 
         let json = serde_json::to_string(&config).expect("Should serialize");
         let loaded: InstallationConfig = serde_json::from_str(&json).expect("Should deserialize");
@@ -1203,7 +1234,10 @@ mod tests {
         config.user_password = "pass".to_string();
         config.root_password = "root".to_string();
 
-        assert!(config.validate().is_err(), "Whitespace-only hostname should be invalid");
+        assert!(
+            config.validate().is_err(),
+            "Whitespace-only hostname should be invalid"
+        );
     }
 
     #[test]
@@ -1215,7 +1249,10 @@ mod tests {
         config.user_password = "pass".to_string();
         config.root_password = "root".to_string();
 
-        assert!(config.validate().is_err(), "Whitespace-only username should be invalid");
+        assert!(
+            config.validate().is_err(),
+            "Whitespace-only username should be invalid"
+        );
     }
 
     #[test]
@@ -1228,7 +1265,10 @@ mod tests {
         config.user_password = "pass".to_string();
         config.root_password = "root".to_string();
 
-        assert!(config.validate().is_err(), "Hostname > 63 chars should be invalid");
+        assert!(
+            config.validate().is_err(),
+            "Hostname > 63 chars should be invalid"
+        );
     }
 
     #[test]
@@ -1241,7 +1281,10 @@ mod tests {
         config.user_password = "pass".to_string();
         config.root_password = "root".to_string();
 
-        assert!(config.validate().is_ok(), "Hostname of 32 chars should be valid");
+        assert!(
+            config.validate().is_ok(),
+            "Hostname of 32 chars should be valid"
+        );
     }
 
     #[test]
@@ -1285,7 +1328,10 @@ mod tests {
         let result: Result<InstallationConfig, _> = serde_json::from_str(&json_str);
         // Note: This test documents current behavior. If we add deny_unknown_fields,
         // this test should be updated.
-        assert!(result.is_ok(), "Unknown fields should be ignored for forward compatibility");
+        assert!(
+            result.is_ok(),
+            "Unknown fields should be ignored for forward compatibility"
+        );
     }
 
     #[test]
@@ -1337,8 +1383,7 @@ mod tests {
         config.root_password = "root".to_string();
 
         // Pretty print JSON
-        let pretty_json =
-            serde_json::to_string_pretty(&config).expect("Should pretty serialize");
+        let pretty_json = serde_json::to_string_pretty(&config).expect("Should pretty serialize");
 
         // Should parse back correctly
         let loaded: InstallationConfig =

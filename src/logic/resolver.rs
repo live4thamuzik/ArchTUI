@@ -26,9 +26,7 @@
 #![allow(dead_code)]
 
 use crate::config_file::InstallationConfig;
-use crate::profiles::{
-    gpu_packages, kernel_packages, bootloader_packages, Profile, BASE_PACKAGES,
-};
+use crate::profiles::{BASE_PACKAGES, Profile, bootloader_packages, gpu_packages, kernel_packages};
 use crate::types::*;
 
 // ============================================================================
@@ -587,27 +585,66 @@ mod tests {
 
     #[test]
     fn test_desktop_to_profile_mapping() {
-        assert_eq!(desktop_to_profile(DesktopEnvironment::None), Profile::Minimal);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Gnome), Profile::Gnome);
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::None),
+            Profile::Minimal
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Gnome),
+            Profile::Gnome
+        );
         assert_eq!(desktop_to_profile(DesktopEnvironment::Kde), Profile::Kde);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Hyprland), Profile::Hyprland);
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Hyprland),
+            Profile::Hyprland
+        );
         assert_eq!(desktop_to_profile(DesktopEnvironment::Sway), Profile::Sway);
         assert_eq!(desktop_to_profile(DesktopEnvironment::I3), Profile::I3);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Xfce), Profile::Xfce);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Cinnamon), Profile::Cinnamon);
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Cinnamon),
+            Profile::Cinnamon
+        );
         assert_eq!(desktop_to_profile(DesktopEnvironment::Mate), Profile::Mate);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Budgie), Profile::Budgie);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Cosmic), Profile::Cosmic);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Deepin), Profile::Deepin);
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Budgie),
+            Profile::Budgie
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Cosmic),
+            Profile::Cosmic
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Deepin),
+            Profile::Deepin
+        );
         assert_eq!(desktop_to_profile(DesktopEnvironment::Lxde), Profile::Lxde);
         assert_eq!(desktop_to_profile(DesktopEnvironment::Lxqt), Profile::Lxqt);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Bspwm), Profile::Bspwm);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Awesome), Profile::Awesome);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Qtile), Profile::Qtile);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::River), Profile::River);
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Bspwm),
+            Profile::Bspwm
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Awesome),
+            Profile::Awesome
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Qtile),
+            Profile::Qtile
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::River),
+            Profile::River
+        );
         assert_eq!(desktop_to_profile(DesktopEnvironment::Niri), Profile::Niri);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Labwc), Profile::Labwc);
-        assert_eq!(desktop_to_profile(DesktopEnvironment::Xmonad), Profile::Xmonad);
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Labwc),
+            Profile::Labwc
+        );
+        assert_eq!(
+            desktop_to_profile(DesktopEnvironment::Xmonad),
+            Profile::Xmonad
+        );
         assert_eq!(desktop_to_profile(DesktopEnvironment::Dwm), Profile::Dwm);
     }
 
@@ -619,13 +656,27 @@ mod tests {
     fn test_resolve_packages_all_desktop_environments() {
         // Every DE variant must produce a non-empty package list without panicking
         let des = [
-            DesktopEnvironment::None, DesktopEnvironment::Gnome, DesktopEnvironment::Kde,
-            DesktopEnvironment::Hyprland, DesktopEnvironment::Sway, DesktopEnvironment::I3,
-            DesktopEnvironment::Xfce, DesktopEnvironment::Cinnamon, DesktopEnvironment::Mate,
-            DesktopEnvironment::Budgie, DesktopEnvironment::Cosmic, DesktopEnvironment::Deepin,
-            DesktopEnvironment::Lxde, DesktopEnvironment::Lxqt, DesktopEnvironment::Bspwm,
-            DesktopEnvironment::Awesome, DesktopEnvironment::Qtile, DesktopEnvironment::River,
-            DesktopEnvironment::Niri, DesktopEnvironment::Labwc, DesktopEnvironment::Xmonad,
+            DesktopEnvironment::None,
+            DesktopEnvironment::Gnome,
+            DesktopEnvironment::Kde,
+            DesktopEnvironment::Hyprland,
+            DesktopEnvironment::Sway,
+            DesktopEnvironment::I3,
+            DesktopEnvironment::Xfce,
+            DesktopEnvironment::Cinnamon,
+            DesktopEnvironment::Mate,
+            DesktopEnvironment::Budgie,
+            DesktopEnvironment::Cosmic,
+            DesktopEnvironment::Deepin,
+            DesktopEnvironment::Lxde,
+            DesktopEnvironment::Lxqt,
+            DesktopEnvironment::Bspwm,
+            DesktopEnvironment::Awesome,
+            DesktopEnvironment::Qtile,
+            DesktopEnvironment::River,
+            DesktopEnvironment::Niri,
+            DesktopEnvironment::Labwc,
+            DesktopEnvironment::Xmonad,
         ];
         for de in &des {
             let mut config = test_config();
@@ -653,13 +704,27 @@ mod tests {
     #[test]
     fn test_resolve_services_all_desktop_environments() {
         let des = [
-            DesktopEnvironment::None, DesktopEnvironment::Gnome, DesktopEnvironment::Kde,
-            DesktopEnvironment::Hyprland, DesktopEnvironment::Sway, DesktopEnvironment::I3,
-            DesktopEnvironment::Xfce, DesktopEnvironment::Cinnamon, DesktopEnvironment::Mate,
-            DesktopEnvironment::Budgie, DesktopEnvironment::Cosmic, DesktopEnvironment::Deepin,
-            DesktopEnvironment::Lxde, DesktopEnvironment::Lxqt, DesktopEnvironment::Bspwm,
-            DesktopEnvironment::Awesome, DesktopEnvironment::Qtile, DesktopEnvironment::River,
-            DesktopEnvironment::Niri, DesktopEnvironment::Labwc, DesktopEnvironment::Xmonad,
+            DesktopEnvironment::None,
+            DesktopEnvironment::Gnome,
+            DesktopEnvironment::Kde,
+            DesktopEnvironment::Hyprland,
+            DesktopEnvironment::Sway,
+            DesktopEnvironment::I3,
+            DesktopEnvironment::Xfce,
+            DesktopEnvironment::Cinnamon,
+            DesktopEnvironment::Mate,
+            DesktopEnvironment::Budgie,
+            DesktopEnvironment::Cosmic,
+            DesktopEnvironment::Deepin,
+            DesktopEnvironment::Lxde,
+            DesktopEnvironment::Lxqt,
+            DesktopEnvironment::Bspwm,
+            DesktopEnvironment::Awesome,
+            DesktopEnvironment::Qtile,
+            DesktopEnvironment::River,
+            DesktopEnvironment::Niri,
+            DesktopEnvironment::Labwc,
+            DesktopEnvironment::Xmonad,
         ];
         for de in &des {
             let mut config = test_config();
@@ -703,7 +768,11 @@ mod tests {
                 );
             }
             // All bootloaders must still have base packages
-            assert!(packages.contains(&"base".to_string()), "{:?} must include base", bl);
+            assert!(
+                packages.contains(&"base".to_string()),
+                "{:?} must include base",
+                bl
+            );
         }
     }
 
@@ -715,8 +784,8 @@ mod tests {
             (GpuDriver::Amd, Some("mesa")),
             (GpuDriver::Intel, Some("mesa")),
             (GpuDriver::Nouveau, Some("mesa")),
-            (GpuDriver::None, None),  // no GPU packages
-            (GpuDriver::Auto, None),  // auto-detected at runtime
+            (GpuDriver::None, None), // no GPU packages
+            (GpuDriver::Auto, None), // auto-detected at runtime
         ];
         for (gpu, expected_pkg) in &gpus {
             let mut config = test_config();
@@ -731,7 +800,11 @@ mod tests {
                 );
             }
             // All GPU configs must still have base packages
-            assert!(packages.contains(&"base".to_string()), "{:?} must include base", gpu);
+            assert!(
+                packages.contains(&"base".to_string()),
+                "{:?} must include base",
+                gpu
+            );
         }
     }
 
@@ -745,7 +818,10 @@ mod tests {
             (PartitionScheme::AutoRaid, vec!["mdadm"]),
             (PartitionScheme::AutoRaidLuks, vec!["cryptsetup", "mdadm"]),
             (PartitionScheme::AutoRaidLvm, vec!["lvm2", "mdadm"]),
-            (PartitionScheme::AutoRaidLvmLuks, vec!["cryptsetup", "lvm2", "mdadm"]),
+            (
+                PartitionScheme::AutoRaidLvmLuks,
+                vec!["cryptsetup", "lvm2", "mdadm"],
+            ),
             (PartitionScheme::Manual, vec![]),
             (PartitionScheme::PreMounted, vec![]),
         ];

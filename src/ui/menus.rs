@@ -8,14 +8,14 @@ use super::descriptions;
 use crate::app::AppState;
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, Borders, List, ListItem, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Wrap,
+        Block, BorderType, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Wrap,
     },
-    Frame,
 };
 
 // =============================================================================
@@ -31,7 +31,9 @@ fn panel_active<'a>(title: &'a str, position: Option<&'a str>) -> Block<'a> {
             Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_ACTIVE)),
             Span::styled(
                 format!(" {} ", title),
-                Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Colors::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_ACTIVE)),
         ]))
@@ -39,12 +41,13 @@ fn panel_active<'a>(title: &'a str, position: Option<&'a str>) -> Block<'a> {
         .style(Style::default().bg(Colors::BG_PRIMARY));
 
     if let Some(pos) = position {
-        block = block.title_bottom(Line::from(vec![
-            Span::styled(
+        block = block.title_bottom(
+            Line::from(vec![Span::styled(
                 format!(" {} ", pos),
                 Style::default().fg(Colors::FG_MUTED),
-            ),
-        ]).alignment(Alignment::Right));
+            )])
+            .alignment(Alignment::Right),
+        );
     }
     block
 }
@@ -66,12 +69,13 @@ fn panel_active_accent<'a>(title: &'a str, position: Option<&'a str>, accent: Co
         .style(Style::default().bg(Colors::BG_PRIMARY));
 
     if let Some(pos) = position {
-        block = block.title_bottom(Line::from(vec![
-            Span::styled(
+        block = block.title_bottom(
+            Line::from(vec![Span::styled(
                 format!(" {} ", pos),
                 Style::default().fg(Colors::FG_MUTED),
-            ),
-        ]).alignment(Alignment::Right));
+            )])
+            .alignment(Alignment::Right),
+        );
     }
     block
 }
@@ -85,7 +89,9 @@ fn panel_inactive(title: &str) -> Block<'_> {
             Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_INACTIVE)),
             Span::styled(
                 format!(" {} ", title),
-                Style::default().fg(Colors::FG_SECONDARY).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Colors::FG_SECONDARY)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_INACTIVE)),
         ]))
@@ -141,12 +147,21 @@ fn split_pane(area: Rect) -> (Rect, Rect) {
 
 /// Header bar: single line with app name + screen breadcrumb
 pub fn render_breadcrumb(f: &mut Frame, area: Rect, breadcrumb: &[&str]) {
-    let mut spans = vec![
-        Span::styled(" ArchTUI", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
-    ];
+    let mut spans = vec![Span::styled(
+        " ArchTUI",
+        Style::default()
+            .fg(Colors::PRIMARY)
+            .add_modifier(Modifier::BOLD),
+    )];
     for part in breadcrumb {
-        spans.push(Span::styled(" \u{203a} ", Style::default().fg(Colors::FG_MUTED)));
-        spans.push(Span::styled(*part, Style::default().fg(Colors::FG_SECONDARY)));
+        spans.push(Span::styled(
+            " \u{203a} ",
+            Style::default().fg(Colors::FG_MUTED),
+        ));
+        spans.push(Span::styled(
+            *part,
+            Style::default().fg(Colors::FG_SECONDARY),
+        ));
     }
 
     let line = Line::from(spans);
@@ -192,75 +207,149 @@ pub fn render_main_menu(f: &mut Frame, state: &AppState, area: Rect) {
     let info_lines = match sel {
         0 => vec![
             Line::from(""),
-            Line::from(Span::styled("  Guided Installer", Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                "  Guided Installer",
+                Style::default()
+                    .fg(Colors::SECONDARY)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(""),
-            Line::from(Span::styled("  Step-by-step interactive installation", Style::default().fg(Colors::FG_PRIMARY))),
-            Line::from(Span::styled("  of Arch Linux. Recommended for users", Style::default().fg(Colors::FG_PRIMARY))),
-            Line::from(Span::styled("  new to Arch.", Style::default().fg(Colors::FG_PRIMARY))),
+            Line::from(Span::styled(
+                "  Step-by-step interactive installation",
+                Style::default().fg(Colors::FG_PRIMARY),
+            )),
+            Line::from(Span::styled(
+                "  of Arch Linux. Recommended for users",
+                Style::default().fg(Colors::FG_PRIMARY),
+            )),
+            Line::from(Span::styled(
+                "  new to Arch.",
+                Style::default().fg(Colors::FG_PRIMARY),
+            )),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  \u{2713} ", Style::default().fg(Colors::SUCCESS)),
-                Span::styled("Disk partitioning & formatting", Style::default().fg(Colors::FG_SECONDARY)),
+                Span::styled(
+                    "Disk partitioning & formatting",
+                    Style::default().fg(Colors::FG_SECONDARY),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{2713} ", Style::default().fg(Colors::SUCCESS)),
-                Span::styled("Bootloader installation", Style::default().fg(Colors::FG_SECONDARY)),
+                Span::styled(
+                    "Bootloader installation",
+                    Style::default().fg(Colors::FG_SECONDARY),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{2713} ", Style::default().fg(Colors::SUCCESS)),
-                Span::styled("User account creation", Style::default().fg(Colors::FG_SECONDARY)),
+                Span::styled(
+                    "User account creation",
+                    Style::default().fg(Colors::FG_SECONDARY),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{2713} ", Style::default().fg(Colors::SUCCESS)),
-                Span::styled("Desktop environment setup", Style::default().fg(Colors::FG_SECONDARY)),
+                Span::styled(
+                    "Desktop environment setup",
+                    Style::default().fg(Colors::FG_SECONDARY),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{2713} ", Style::default().fg(Colors::SUCCESS)),
-                Span::styled("Custom package selection", Style::default().fg(Colors::FG_SECONDARY)),
+                Span::styled(
+                    "Custom package selection",
+                    Style::default().fg(Colors::FG_SECONDARY),
+                ),
             ]),
         ],
         1 => vec![
             Line::from(""),
-            Line::from(Span::styled("  Automated Install", Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                "  Automated Install",
+                Style::default()
+                    .fg(Colors::SECONDARY)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(""),
-            Line::from(Span::styled("  Run an unattended installation from a", Style::default().fg(Colors::FG_PRIMARY))),
-            Line::from(Span::styled("  TOML or JSON configuration file.", Style::default().fg(Colors::FG_PRIMARY))),
+            Line::from(Span::styled(
+                "  Run an unattended installation from a",
+                Style::default().fg(Colors::FG_PRIMARY),
+            )),
+            Line::from(Span::styled(
+                "  TOML or JSON configuration file.",
+                Style::default().fg(Colors::FG_PRIMARY),
+            )),
             Line::from(""),
-            Line::from(Span::styled("  Great for reproducible deployments", Style::default().fg(Colors::FG_SECONDARY))),
-            Line::from(Span::styled("  across multiple machines.", Style::default().fg(Colors::FG_SECONDARY))),
+            Line::from(Span::styled(
+                "  Great for reproducible deployments",
+                Style::default().fg(Colors::FG_SECONDARY),
+            )),
+            Line::from(Span::styled(
+                "  across multiple machines.",
+                Style::default().fg(Colors::FG_SECONDARY),
+            )),
         ],
         2 => vec![
             Line::from(""),
-            Line::from(Span::styled("  Arch Linux Tools", Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                "  Arch Linux Tools",
+                Style::default()
+                    .fg(Colors::SECONDARY)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(""),
-            Line::from(Span::styled("  System repair and administration tools.", Style::default().fg(Colors::FG_PRIMARY))),
+            Line::from(Span::styled(
+                "  System repair and administration tools.",
+                Style::default().fg(Colors::FG_PRIMARY),
+            )),
             Line::from(""),
             Line::from(vec![
                 Span::styled("  \u{25cf} ", Style::default().fg(Colors::PRIMARY)),
                 Span::styled("Disk Tools   ", Style::default().fg(Colors::FG_PRIMARY)),
-                Span::styled("partition, format, wipe, LUKS", Style::default().fg(Colors::FG_MUTED)),
+                Span::styled(
+                    "partition, format, wipe, LUKS",
+                    Style::default().fg(Colors::FG_MUTED),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{25cf} ", Style::default().fg(Colors::PRIMARY)),
                 Span::styled("System Tools ", Style::default().fg(Colors::FG_PRIMARY)),
-                Span::styled("bootloader, fstab, chroot", Style::default().fg(Colors::FG_MUTED)),
+                Span::styled(
+                    "bootloader, fstab, chroot",
+                    Style::default().fg(Colors::FG_MUTED),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{25cf} ", Style::default().fg(Colors::PRIMARY)),
                 Span::styled("User Tools   ", Style::default().fg(Colors::FG_PRIMARY)),
-                Span::styled("accounts, SSH, security", Style::default().fg(Colors::FG_MUTED)),
+                Span::styled(
+                    "accounts, SSH, security",
+                    Style::default().fg(Colors::FG_MUTED),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("  \u{25cf} ", Style::default().fg(Colors::PRIMARY)),
                 Span::styled("Network Tools", Style::default().fg(Colors::FG_PRIMARY)),
-                Span::styled(" config, firewall, mirrors", Style::default().fg(Colors::FG_MUTED)),
+                Span::styled(
+                    " config, firewall, mirrors",
+                    Style::default().fg(Colors::FG_MUTED),
+                ),
             ]),
         ],
         _ => vec![
             Line::from(""),
-            Line::from(Span::styled("  Quit", Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled(
+                "  Quit",
+                Style::default()
+                    .fg(Colors::SECONDARY)
+                    .add_modifier(Modifier::BOLD),
+            )),
             Line::from(""),
-            Line::from(Span::styled("  Exit ArchTUI.", Style::default().fg(Colors::FG_SECONDARY))),
+            Line::from(Span::styled(
+                "  Exit ArchTUI.",
+                Style::default().fg(Colors::FG_SECONDARY),
+            )),
         ],
     };
 
@@ -361,7 +450,9 @@ fn render_category_menu(
 
 pub fn render_disk_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
     render_category_menu(
-        f, state, area,
+        f,
+        state,
+        area,
         &["Tools", "Disk"],
         "Disk Tools",
         Some(Colors::CAT_DISK),
@@ -380,7 +471,9 @@ pub fn render_disk_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
 
 pub fn render_system_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
     render_category_menu(
-        f, state, area,
+        f,
+        state,
+        area,
         &["Tools", "System"],
         "System Tools",
         Some(Colors::CAT_SYSTEM),
@@ -402,7 +495,9 @@ pub fn render_system_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
 
 pub fn render_user_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
     render_category_menu(
-        f, state, area,
+        f,
+        state,
+        area,
         &["Tools", "User"],
         "User Tools",
         Some(Colors::CAT_USER),
@@ -422,7 +517,9 @@ pub fn render_user_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
 
 pub fn render_network_tools_menu(f: &mut Frame, state: &AppState, area: Rect) {
     render_category_menu(
-        f, state, area,
+        f,
+        state,
+        area,
         &["Tools", "Network"],
         "Network Tools",
         Some(Colors::CAT_NETWORK),

@@ -66,8 +66,14 @@ impl ConfigOption {
                 // Case-insensitive per RFC — uppercase is accepted and lowercased at install time
                 !value.is_empty()
                     && value.len() <= 63
-                    && value.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
-                    && value.chars().last().is_some_and(|c| c.is_ascii_alphanumeric())
+                    && value
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_alphanumeric())
+                    && value
+                        .chars()
+                        .last()
+                        .is_some_and(|c| c.is_ascii_alphanumeric())
                     && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
             }
             "Username" => {
@@ -75,7 +81,9 @@ impl ConfigOption {
                 value.len() >= 3
                     && value.len() <= 32
                     && value.chars().next().is_some_and(|c| c.is_ascii_lowercase())
-                    && value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                    && value
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
             }
             "User Password" | "Root Password" => {
                 let value = self.get_value();
@@ -86,8 +94,7 @@ impl ConfigOption {
                 let value = self.get_value();
                 let trimmed = value.trim();
                 // DD#37/DD#44: https-only policy (matches config_file.rs)
-                trimmed.is_empty()
-                    || trimmed.starts_with("https://")
+                trimmed.is_empty() || trimmed.starts_with("https://")
             }
             _ => true, // Default: any non-empty value is valid
         };
@@ -109,22 +116,26 @@ impl ConfigOption {
                 Some(format!("{} is required", self.name))
             } else {
                 match self.name.as_str() {
-                    "Hostname" => {
-                        Some(format!("{} must be 1-63 alphanumeric characters and hyphens (no leading/trailing hyphens)", self.name))
-                    }
-                    "Username" => {
-                        Some(format!("{} must be 3-32 lowercase characters starting with a letter (lowercase letters, digits, underscores)", self.name))
-                    }
-                    "User Password" | "Root Password" => {
-                        Some(format!("{} cannot be empty or contain whitespace", self.name))
-                    }
-                    "Disk" => {
-                        Some(format!("{} must be a valid device path (e.g., /dev/sda)", self.name))
-                    }
+                    "Hostname" => Some(format!(
+                        "{} must be 1-63 alphanumeric characters and hyphens (no leading/trailing hyphens)",
+                        self.name
+                    )),
+                    "Username" => Some(format!(
+                        "{} must be 3-32 lowercase characters starting with a letter (lowercase letters, digits, underscores)",
+                        self.name
+                    )),
+                    "User Password" | "Root Password" => Some(format!(
+                        "{} cannot be empty or contain whitespace",
+                        self.name
+                    )),
+                    "Disk" => Some(format!(
+                        "{} must be a valid device path (e.g., /dev/sda)",
+                        self.name
+                    )),
                     "Git Repository URL" => {
                         Some(format!("{} must be a valid https:// URL", self.name))
                     }
-                    _ => Some(format!("{} has an invalid value", self.name))
+                    _ => Some(format!("{} has an invalid value", self.name)),
                 }
             }
         } else {
@@ -180,30 +191,25 @@ impl Default for Configuration {
                     "Create separate /home partition",
                     "No",
                 ),
-                ConfigOption::new(
-                    "Home Filesystem",
-                    false,
-                    "Home partition filesystem",
-                    "N/A",
-                ),
+                ConfigOption::new("Home Filesystem", false, "Home partition filesystem", "N/A"),
                 ConfigOption::new("Swap", false, "Enable swap partition", "No"),
                 ConfigOption::new("Swap Size", false, "Swap partition size", "N/A"),
                 ConfigOption::new("Root Size", false, "Root partition size", "N/A"),
                 ConfigOption::new("Home Size", false, "Home partition size", "N/A"),
                 ConfigOption::new("Btrfs Snapshots", false, "Enable Btrfs snapshots", "No"),
-                ConfigOption::new(
-                    "Snapshot Frequency",
-                    false,
-                    "Snapshot frequency",
-                    "N/A",
-                ),
+                ConfigOption::new("Snapshot Frequency", false, "Snapshot frequency", "N/A"),
                 ConfigOption::new(
                     "Snapshot Keep Count",
                     false,
                     "Number of snapshots to keep",
                     "N/A",
                 ),
-                ConfigOption::new("Snapshot Tool", false, "Snapshot tool (snapper/timeshift)", "none"),
+                ConfigOption::new(
+                    "Snapshot Tool",
+                    false,
+                    "Snapshot tool (snapper/timeshift)",
+                    "none",
+                ),
                 // Time and Location (19-21)
                 ConfigOption::new("Timezone Region", true, "Timezone region", "America"),
                 ConfigOption::new("Timezone", true, "Timezone city", "New_York"),
@@ -354,7 +360,10 @@ impl Configuration {
             env_vars.insert(env_name.to_string(), value);
         }
 
-        info!(count = env_vars.len(), "Built environment variable map from TUI config");
+        info!(
+            count = env_vars.len(),
+            "Built environment variable map from TUI config"
+        );
         env_vars
     }
 

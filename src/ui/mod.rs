@@ -127,7 +127,10 @@ impl std::fmt::Debug for WizardData {
             .field("username", &self.username)
             .field("password", &self.password.as_ref().map(|_| "********"))
             .field("user_sudo", &self.user_sudo)
-            .field("root_password", &self.root_password.as_ref().map(|_| "********"))
+            .field(
+                "root_password",
+                &self.root_password.as_ref().map(|_| "********"),
+            )
             .field("extra_packages", &self.extra_packages)
             .field("dry_run", &self.dry_run)
             .finish()
@@ -178,8 +181,8 @@ use crate::components::keybindings::KeybindingContext;
 use crate::components::pty_terminal::PtyTerminal;
 use crate::input::InputHandler;
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     Frame,
+    layout::{Constraint, Direction, Layout},
 };
 
 // Re-export HeaderRenderer for compatibility with code that references it

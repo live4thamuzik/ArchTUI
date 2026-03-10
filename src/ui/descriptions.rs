@@ -325,10 +325,7 @@ fn partition_disk_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ⚠️  ", Styles::error()),
-            Span::styled(
-                "Warning: Partition changes are permanent",
-                Styles::error(),
-            ),
+            Span::styled("Warning: Partition changes are permanent", Styles::error()),
         ]),
     ]
 }
@@ -336,10 +333,7 @@ fn partition_disk_description() -> Vec<Line<'static>> {
 fn format_partition_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Format Partition",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Format Partition", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Format a partition with a filesystem.",
@@ -465,10 +459,7 @@ fn check_disk_health_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ℹ️  ", Styles::info()),
-            Span::styled(
-                "Safe to run - does not modify disk",
-                Styles::info(),
-            ),
+            Span::styled("Safe to run - does not modify disk", Styles::info()),
         ]),
     ]
 }
@@ -512,10 +503,7 @@ fn mount_unmount_description() -> Vec<Line<'static>> {
                     .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                " Mount root (/) first, then others",
-                Styles::info(),
-            ),
+            Span::styled(" Mount root (/) first, then others", Styles::info()),
         ]),
     ]
 }
@@ -548,10 +536,7 @@ fn install_bootloader_description() -> Vec<Line<'static>> {
             Styles::text_secondary(),
         )]),
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Requirements:",
-            Styles::title(),
-        )]),
+        Line::from(vec![Span::styled("  Requirements:", Styles::title())]),
         Line::from(vec![Span::styled(
             "  • Root partition mounted at /mnt",
             Styles::text_secondary(),
@@ -562,10 +547,7 @@ fn install_bootloader_description() -> Vec<Line<'static>> {
 fn generate_fstab_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Generate fstab",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Generate fstab", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Generate /etc/fstab for automatic mounting.",
@@ -598,10 +580,7 @@ fn generate_fstab_description() -> Vec<Line<'static>> {
                     .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                " Mount all partitions before generating",
-                Styles::info(),
-            ),
+            Span::styled(" Mount all partitions before generating", Styles::info()),
         ]),
     ]
 }
@@ -645,10 +624,7 @@ fn chroot_description() -> Vec<Line<'static>> {
                     .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                " Type 'exit' or press Ctrl+D",
-                Styles::info(),
-            ),
+            Span::styled(" Type 'exit' or press Ctrl+D", Styles::info()),
         ]),
     ]
 }
@@ -656,10 +632,7 @@ fn chroot_description() -> Vec<Line<'static>> {
 fn manage_services_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Manage Services",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Manage Services", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Enable or disable systemd services.",
@@ -729,10 +702,7 @@ fn system_info_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ℹ️  ", Styles::info()),
-            Span::styled(
-                "Read-only - no changes made",
-                Styles::info(),
-            ),
+            Span::styled("Read-only - no changes made", Styles::info()),
         ]),
     ]
 }
@@ -740,10 +710,7 @@ fn system_info_description() -> Vec<Line<'static>> {
 fn add_user_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Add User",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Add User", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Create a new user account.",
@@ -776,10 +743,7 @@ fn add_user_description() -> Vec<Line<'static>> {
                     .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                " Add to 'wheel' for sudo access",
-                Styles::info(),
-            ),
+            Span::styled(" Add to 'wheel' for sudo access", Styles::info()),
         ]),
     ]
 }
@@ -787,10 +751,7 @@ fn add_user_description() -> Vec<Line<'static>> {
 fn reset_password_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Reset Password",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Reset Password", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Reset or change a user's password.",
@@ -814,10 +775,7 @@ fn reset_password_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ⚠️  ", Styles::warning()),
-            Span::styled(
-                "Requires root/sudo privileges",
-                Styles::warning(),
-            ),
+            Span::styled("Requires root/sudo privileges", Styles::warning()),
         ]),
     ]
 }
@@ -825,10 +783,7 @@ fn reset_password_description() -> Vec<Line<'static>> {
 fn manage_groups_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Manage Groups",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Manage Groups", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Add or remove users from system groups.",
@@ -863,10 +818,7 @@ fn manage_groups_description() -> Vec<Line<'static>> {
 fn configure_ssh_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Configure SSH",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Configure SSH", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Set up SSH keys and server configuration.",
@@ -894,10 +846,7 @@ fn configure_ssh_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  🔐 ", Styles::success()),
-            Span::styled(
-                "Key-based auth is more secure",
-                Styles::success(),
-            ),
+            Span::styled("Key-based auth is more secure", Styles::success()),
         ]),
     ]
 }
@@ -905,10 +854,7 @@ fn configure_ssh_description() -> Vec<Line<'static>> {
 fn security_audit_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Security Audit",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Security Audit", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Check system security settings.",
@@ -940,10 +886,7 @@ fn security_audit_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ℹ️  ", Styles::info()),
-            Span::styled(
-                "Read-only - suggests improvements",
-                Styles::info(),
-            ),
+            Span::styled("Read-only - suggests improvements", Styles::info()),
         ]),
     ]
 }
@@ -1025,10 +968,7 @@ fn test_connectivity_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ℹ️  ", Styles::info()),
-            Span::styled(
-                "Helps identify network problems",
-                Styles::info(),
-            ),
+            Span::styled("Helps identify network problems", Styles::info()),
         ]),
     ]
 }
@@ -1036,10 +976,7 @@ fn test_connectivity_description() -> Vec<Line<'static>> {
 fn firewall_rules_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Firewall Rules",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Firewall Rules", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Configure firewall rules.",
@@ -1067,10 +1004,7 @@ fn firewall_rules_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ⚠️  ", Styles::warning()),
-            Span::styled(
-                "Incorrect rules may lock you out!",
-                Styles::warning(),
-            ),
+            Span::styled("Incorrect rules may lock you out!", Styles::warning()),
         ]),
     ]
 }
@@ -1113,10 +1047,7 @@ fn network_info_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ℹ️  ", Styles::info()),
-            Span::styled(
-                "Read-only - no changes made",
-                Styles::info(),
-            ),
+            Span::styled("Read-only - no changes made", Styles::info()),
         ]),
     ]
 }
@@ -1124,10 +1055,7 @@ fn network_info_description() -> Vec<Line<'static>> {
 fn luks_encryption_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  LUKS Encryption",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  LUKS Encryption", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Encrypt partitions with LUKS2 for full-disk encryption.",
@@ -1168,10 +1096,7 @@ fn luks_encryption_description() -> Vec<Line<'static>> {
 fn enable_services_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Enable Services",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Enable Services", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Enable systemd services in a chroot environment.",
@@ -1322,10 +1247,7 @@ fn view_install_logs_description() -> Vec<Line<'static>> {
 fn install_dotfiles_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Install Dotfiles",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Install Dotfiles", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Clone a dotfiles repository for a user.",
@@ -1364,10 +1286,7 @@ fn install_dotfiles_description() -> Vec<Line<'static>> {
 fn run_as_user_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Run As User",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Run As User", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Execute a command as a non-root user in chroot.",
@@ -1403,10 +1322,7 @@ fn run_as_user_description() -> Vec<Line<'static>> {
 fn update_mirrors_description() -> Vec<Line<'static>> {
     vec![
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  Update Mirrors",
-            Styles::category(),
-        )]),
+        Line::from(vec![Span::styled("  Update Mirrors", Styles::category())]),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Update pacman mirrorlist using reflector.",
@@ -1434,10 +1350,7 @@ fn update_mirrors_description() -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("  ⚠️  ", Styles::warning()),
-            Span::styled(
-                "Overwrites /etc/pacman.d/mirrorlist",
-                Styles::warning(),
-            ),
+            Span::styled("Overwrites /etc/pacman.d/mirrorlist", Styles::warning()),
         ]),
     ]
 }

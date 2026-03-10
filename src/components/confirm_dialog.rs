@@ -4,13 +4,13 @@
 
 #![allow(dead_code)]
 
-use crate::theme::{Styles, Theme, Severity, UiText};
+use crate::theme::{Severity, Styles, Theme, UiText};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Frame,
 };
 
 /// Severity level for the confirmation dialog
@@ -45,7 +45,12 @@ pub struct ConfirmDialogState {
 
 impl ConfirmDialogState {
     /// Create a new confirmation dialog
-    pub fn new(title: &str, message: &str, severity: ConfirmSeverity, confirm_action: &str) -> Self {
+    pub fn new(
+        title: &str,
+        message: &str,
+        severity: ConfirmSeverity,
+        confirm_action: &str,
+    ) -> Self {
         Self {
             title: title.to_string(),
             message: message.to_string(),
@@ -76,17 +81,17 @@ impl ConfirmDialogState {
 
     /// Select No/Cancel
     pub fn select_no(&mut self) {
-        self.selected = 0;  // No is on left (button_chunks[0])
+        self.selected = 0; // No is on left (button_chunks[0])
     }
 
     /// Select Yes/Confirm
     pub fn select_yes(&mut self) {
-        self.selected = 1;  // Yes is on right (button_chunks[1])
+        self.selected = 1; // Yes is on right (button_chunks[1])
     }
 
     /// Check if Yes is selected
     pub fn is_confirmed(&self) -> bool {
-        self.selected == 1  // Yes is on right (selected == 1)
+        self.selected == 1 // Yes is on right (selected == 1)
     }
 }
 
@@ -123,7 +128,11 @@ impl ConfirmDialog {
         let block = Block::default()
             .borders(Borders::ALL)
             .title(format!(" {} {} ", icon, state.title))
-            .title_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
+            .title_style(
+                Style::default()
+                    .fg(border_color)
+                    .add_modifier(Modifier::BOLD),
+            )
             .border_style(Style::default().fg(border_color))
             .style(Styles::panel_bg_danger());
 
@@ -135,9 +144,9 @@ impl ConfirmDialog {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3),  // Message
-                Constraint::Min(1),     // Details
-                Constraint::Length(3),  // Buttons
+                Constraint::Length(3), // Message
+                Constraint::Min(1),    // Details
+                Constraint::Length(3), // Buttons
             ])
             .split(inner);
 
@@ -152,16 +161,18 @@ impl ConfirmDialog {
 
         // Render details
         if !state.details.is_empty() {
-            let detail_lines: Vec<Line> = state.details
+            let detail_lines: Vec<Line> = state
+                .details
                 .iter()
-                .map(|d| Line::from(vec![
-                    Span::styled("  • ", Styles::text_muted()),
-                    Span::styled(d.clone(), Styles::text_secondary()),
-                ]))
+                .map(|d| {
+                    Line::from(vec![
+                        Span::styled("  • ", Styles::text_muted()),
+                        Span::styled(d.clone(), Styles::text_secondary()),
+                    ])
+                })
                 .collect();
 
-            let details = Paragraph::new(detail_lines)
-                .wrap(Wrap { trim: true });
+            let details = Paragraph::new(detail_lines).wrap(Wrap { trim: true });
             f.render_widget(details, chunks[1]);
         }
 
@@ -169,10 +180,7 @@ impl ConfirmDialog {
         let button_area = chunks[2];
         let button_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ])
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(button_area);
 
         // No/Cancel button (LEFT) - standard UX: cancel on left

@@ -59,7 +59,9 @@ pub fn is_dry_run() -> bool {
 ///
 /// Rejects characters that could enable shell injection attacks.
 pub fn shell_safe(s: &str) -> bool {
-    !s.contains([';', '|', '`', '$', '(', ')', '{', '}', '>', '<', '\n', '\r', '\0'])
+    !s.contains([
+        ';', '|', '`', '$', '(', ')', '{', '}', '>', '<', '\n', '\r', '\0',
+    ])
 }
 
 /// Trait for typed script arguments.
