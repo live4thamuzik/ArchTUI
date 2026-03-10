@@ -3316,8 +3316,11 @@ impl App {
             ];
             if !predefined.contains(&value.as_str()) {
                 let trimmed = value.trim();
+                // UTF-8 safe: find byte offset of first non-digit via char_indices
                 let digit_end = trimmed
-                    .find(|c: char| !c.is_ascii_digit())
+                    .char_indices()
+                    .find(|(_, c)| !c.is_ascii_digit())
+                    .map(|(i, _)| i)
                     .unwrap_or(trimmed.len());
                 let digits = &trimmed[..digit_end];
                 let unit = trimmed[digit_end..].trim().to_uppercase();
@@ -3343,9 +3346,18 @@ impl App {
                     }
                 };
 
-                // Normalize and recurse with cleaned value
                 let normalized = format!("{}{}", digits, normalized_unit);
-                return self.update_configuration_value(normalized);
+                // Apply normalized value directly instead of recursing
+                let value = normalized;
+                // Fall through to the config assignment below
+                let mut state = self.lock_state();
+                if current_step < state.config.options.len() {
+                    state.config.options[current_step].value = value.clone();
+                    state.status_message = format!("Set {} to: {}", option_name, value);
+                }
+                drop(state);
+                self.handle_dependent_options(&option_name, &value)?;
+                return Ok(());
             }
         }
 
@@ -3378,8 +3390,11 @@ impl App {
                             .unwrap_or("");
 
                         if partitioning_strategy == "manual" {
-                            // For manual partitioning, show confirmation dialog
-                            drop(state); // Release the lock
+                            // Save disk selection before launching cfdisk dialog
+                            let joined = disk_paths.join(",");
+                            state.config.options[current_step].value = joined.clone();
+                            state.status_message = format!("Set Disk to: {}", joined);
+                            drop(state);
                             self.input_handler
                                 .start_manual_partitioning_confirmation(&disk_paths);
                             return Ok(());
@@ -3405,6 +3420,9 @@ impl App {
                             .unwrap_or("");
 
                         if partitioning_strategy == "manual" {
+                            // Save disk selection before launching cfdisk dialog
+                            state.config.options[current_step].value = disk_path.clone();
+                            state.status_message = format!("Set Disk to: {}", disk_path);
                             drop(state);
                             self.input_handler
                                 .start_manual_partitioning_confirmation(&[disk_path]);

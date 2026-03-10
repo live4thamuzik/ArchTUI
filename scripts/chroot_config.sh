@@ -1309,7 +1309,10 @@ WINEOF
     # https://wiki.archlinux.org/title/GRUB#Secure_Boot
     if [[ "${SECURE_BOOT:-No}" == "Yes" ]]; then
         if ! grep -q "^GRUB_DISABLE_SHIM_LOCK=y" "$grub_default"; then
-            echo "GRUB_DISABLE_SHIM_LOCK=y" >> "$grub_default"
+            echo "GRUB_DISABLE_SHIM_LOCK=y" >> "$grub_default" || {
+                log_error "Failed to write GRUB_DISABLE_SHIM_LOCK to $grub_default"
+                return 1
+            }
             log_info "Disabled GRUB shim_lock for sbctl Secure Boot"
         fi
     fi
