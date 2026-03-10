@@ -15,8 +15,7 @@ pub use state::{
 };
 
 use crate::components::confirm_dialog::{
-    start_install_confirm, ConfirmDialogState,
-    ConfirmSeverity,
+    ConfirmDialogState, ConfirmSeverity, start_install_confirm,
 };
 use crate::components::floating_window::FloatingOutputState;
 use crate::components::keybindings::KeybindingContext;
@@ -28,14 +27,18 @@ use crate::input::{InputHandler, InputType};
 use crate::installer::Installer;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup, ProcessGuard};
 use crate::script_manifest::ManifestRegistry;
-use crate::script_traits::{is_dry_run, shell_safe, ScriptArgs};
+use crate::script_traits::{ScriptArgs, is_dry_run, shell_safe};
 use crate::scripts::config::{GenFstabArgs, UserAddArgs};
 use crate::scripts::disk::{
     AddPartitionArgs, CheckDiskHealthArgs, CreateTableArgs, DeletePartitionArgs,
     FormatPartitionArgs, ManualPartitionArgs, WipeDiskArgs, WipeMethod,
 };
-use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
-use crate::scripts::network::{MirrorSortMethod, NetworkDiagnosticsArgs, TestNetworkArgs, UpdateMirrorsArgs};
+use crate::scripts::encryption::{
+    LuksCipher, LuksCloseArgs, LuksFormatArgs, LuksOpenArgs, SecretFile,
+};
+use crate::scripts::network::{
+    MirrorSortMethod, NetworkDiagnosticsArgs, TestNetworkArgs, UpdateMirrorsArgs,
+};
 use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
 use crate::scripts::system::{BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs};
 use crate::scripts::user::{GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs};
@@ -43,8 +46,7 @@ use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
 use crate::types::{AurHelper, DesktopEnvironment};
 use crate::ui::UiRenderer;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-use tracing::{debug, info};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -52,6 +54,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use tracing::{debug, info};
 
 /// Messages sent from tool execution threads to the main UI thread
 #[derive(Debug)]
@@ -61,7 +64,10 @@ pub enum ToolMessage {
     /// A line of stderr output
     Stderr(String),
     /// Tool execution completed successfully
-    Complete { success: bool, exit_code: Option<i32> },
+    Complete {
+        success: bool,
+        exit_code: Option<i32>,
+    },
     /// Tool execution failed to start
     Error(String),
 }
@@ -128,12 +134,10 @@ impl App {
     /// poisoning, never panic." If the mutex is poisoned (a thread panicked
     /// while holding the lock), the guard is recovered via `into_inner()`.
     fn lock_state(&self) -> std::sync::MutexGuard<'_, AppState> {
-        self.state
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::warn!("Mutex was poisoned, recovering state");
-                e.into_inner()
-            })
+        self.state.lock().unwrap_or_else(|e| {
+            tracing::warn!("Mutex was poisoned, recovering state");
+            e.into_inner()
+        })
     }
 
     /// Create a new application instance
@@ -153,7 +157,11 @@ impl App {
         let mut manifest_registry = ManifestRegistry::with_core_manifests();
         let manifest_dir = crate::script_runner::scripts_base_dir().join("manifests");
         if let Err(e) = manifest_registry.load_from_directory(&manifest_dir) {
-            tracing::warn!("Failed to load manifests from {}: {}", manifest_dir.display(), e);
+            tracing::warn!(
+                "Failed to load manifests from {}: {}",
+                manifest_dir.display(),
+                e
+            );
         } else {
             info!("Script manifests loaded successfully");
         }
@@ -189,13 +197,17 @@ impl App {
 
     /// Toggle help overlay visibility
     pub fn toggle_help(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             state.help_visible = !state.help_visible;
         }
     }
 
     /// Load a configuration file and show confirmation dialog to start installation
-    fn load_config_file(&mut self, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    fn load_config_file(
+        &mut self,
+        path: &std::path::Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::config_file::InstallationConfig;
 
         // Clear file browser state first
@@ -274,7 +286,7 @@ impl App {
         tool_name: &str,
         return_mode: AppMode,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::components::pty_terminal::{spawn_or_fallback, PtySpawnResult};
+        use crate::components::pty_terminal::{PtySpawnResult, spawn_or_fallback};
 
         // Get terminal size
         let (cols, rows) = crossterm::terminal::size()?;
@@ -312,10 +324,7 @@ impl App {
         use std::process::Command;
 
         // Temporarily leave alternate screen
-        crossterm::execute!(
-            std::io::stdout(),
-            crossterm::terminal::LeaveAlternateScreen
-        )?;
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::LeaveAlternateScreen)?;
         crossterm::terminal::disable_raw_mode()?;
 
         // Run the command (Death Pact: process group isolation prevents orphaned children)
@@ -323,10 +332,7 @@ impl App {
 
         // Return to alternate screen
         crossterm::terminal::enable_raw_mode()?;
-        crossterm::execute!(
-            std::io::stdout(),
-            crossterm::terminal::EnterAlternateScreen
-        )?;
+        crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
 
         // Check status and return to appropriate mode
         match status {
@@ -360,7 +366,10 @@ impl App {
         // Check if cfdisk exit should loop back to disk layout
         let pending_device = {
             let state = self.lock_state();
-            let tool_name = state.embedded_terminal.as_ref().map(|t| t.tool_name.clone());
+            let tool_name = state
+                .embedded_terminal
+                .as_ref()
+                .map(|t| t.tool_name.clone());
             if tool_name.as_deref() == Some("manual_partition") {
                 state.pending_tool_device.clone()
             } else {
@@ -463,7 +472,12 @@ impl App {
                     let status_msg = if success {
                         "Tool completed successfully".to_string()
                     } else {
-                        format!("Tool failed with exit code: {}", exit_code.map(|c| c.to_string()).unwrap_or_else(|| "killed by signal".to_string()))
+                        format!(
+                            "Tool failed with exit code: {}",
+                            exit_code
+                                .map(|c| c.to_string())
+                                .unwrap_or_else(|| "killed by signal".to_string())
+                        )
                     };
                     state.status_message = status_msg.clone();
                     state.current_tool = None;
@@ -477,7 +491,9 @@ impl App {
                         } else {
                             floating.append_line(format!(
                                 "❌ Tool failed with exit code: {}",
-                                exit_code.map(|c| c.to_string()).unwrap_or_else(|| "killed by signal".to_string())
+                                exit_code
+                                    .map(|c| c.to_string())
+                                    .unwrap_or_else(|| "killed by signal".to_string())
                             ));
                         }
                         floating.append_line(String::new());
@@ -588,8 +604,13 @@ impl App {
                         state.installer_visible_height = output_inner;
                     }
                 }
-                self.ui_renderer
-                    .render_with_context(f, &state, &mut self.input_handler, &self.keybinding_context, self.pty_terminal.as_mut());
+                self.ui_renderer.render_with_context(
+                    f,
+                    &state,
+                    &mut self.input_handler,
+                    &self.keybinding_context,
+                    self.pty_terminal.as_mut(),
+                );
             })?;
             if render_poisoned {
                 return Err("Fatal error: Mutex poisoned, cannot continue".into());
@@ -645,9 +666,7 @@ impl App {
         }
 
         // Handle inline config editor input (redesigned right-panel editing)
-        if current_mode == AppMode::GuidedInstaller
-            && self.handle_config_edit_input(key_event)?
-        {
+        if current_mode == AppMode::GuidedInstaller && self.handle_config_edit_input(key_event)? {
             return Ok(false);
         }
 
@@ -677,7 +696,11 @@ impl App {
                         }
                         "manual_partition" | "format_partition" | "wipe_disk" => {
                             // All three disk tools: show layout first, then proceed to action
-                            let device = value.split_whitespace().next().unwrap_or(&value).to_string();
+                            let device = value
+                                .split_whitespace()
+                                .next()
+                                .unwrap_or(&value)
+                                .to_string();
                             {
                                 let mut state = self.lock_state();
                                 state.pending_tool_device = Some(device.clone());
@@ -695,37 +718,25 @@ impl App {
                         let mut state = self.lock_state();
                         state.manual_partition_map = Some(map);
                         state.status_message =
-                            "Partition assignments complete. Ready to install."
-                                .to_string();
+                            "Partition assignments complete. Ready to install.".to_string();
                     } else {
                         // More steps remain — update status hint
                         if let Some(ref assign) = self.input_handler.manual_assign_state {
                             let hint = match assign.step {
-                                crate::input::ManualAssignStep::Root => {
-                                    "Select ROOT partition"
-                                }
-                                crate::input::ManualAssignStep::RootFs => {
-                                    "Select ROOT filesystem"
-                                }
-                                crate::input::ManualAssignStep::Boot => {
-                                    "Select BOOT partition"
-                                }
-                                crate::input::ManualAssignStep::Efi => {
-                                    "Select EFI partition"
-                                }
+                                crate::input::ManualAssignStep::Root => "Select ROOT partition",
+                                crate::input::ManualAssignStep::RootFs => "Select ROOT filesystem",
+                                crate::input::ManualAssignStep::Boot => "Select BOOT partition",
+                                crate::input::ManualAssignStep::Efi => "Select EFI partition",
                                 crate::input::ManualAssignStep::Home => {
                                     "Select HOME partition (or skip)"
                                 }
-                                crate::input::ManualAssignStep::HomeFs => {
-                                    "Select HOME filesystem"
-                                }
+                                crate::input::ManualAssignStep::HomeFs => "Select HOME filesystem",
                                 crate::input::ManualAssignStep::Swap => {
                                     "Select SWAP partition (or skip)"
                                 }
                             };
                             let mut state = self.lock_state();
-                            state.status_message =
-                                format!("Assign partitions: {}", hint);
+                            state.status_message = format!("Assign partitions: {}", hint);
                         }
                     }
                     return Ok(false);
@@ -736,7 +747,8 @@ impl App {
                     let is_secure_boot = {
                         let state = self.lock_state();
                         state.config_scroll.selected_index < state.config.options.len()
-                            && state.config.options[state.config_scroll.selected_index].name == "Secure Boot"
+                            && state.config.options[state.config_scroll.selected_index].name
+                                == "Secure Boot"
                     };
                     if is_secure_boot {
                         let options = InputHandler::get_predefined_options("Secure Boot");
@@ -822,7 +834,9 @@ impl App {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
                         // Estimate visible height: 70% of terminal height - 4 (borders+footer)
-                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let term_h = crossterm::terminal::size()
+                            .map(|(_, h)| h as usize)
+                            .unwrap_or(40);
                         let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
                         if output.auto_scroll {
                             // Snap offset to actual bottom before scrolling up
@@ -835,7 +849,9 @@ impl App {
                 KeyCode::Down => {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
-                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let term_h = crossterm::terminal::size()
+                            .map(|(_, h)| h as usize)
+                            .unwrap_or(40);
                         let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
                         let max_offset = output.content.len().saturating_sub(visible_h);
                         if output.scroll_offset < max_offset {
@@ -849,7 +865,9 @@ impl App {
                 KeyCode::PageUp => {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
-                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let term_h = crossterm::terminal::size()
+                            .map(|(_, h)| h as usize)
+                            .unwrap_or(40);
                         let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
                         if output.auto_scroll {
                             output.auto_scroll = false;
@@ -861,7 +879,9 @@ impl App {
                 KeyCode::PageDown => {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
-                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let term_h = crossterm::terminal::size()
+                            .map(|(_, h)| h as usize)
+                            .unwrap_or(40);
                         let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
                         let max_offset = output.content.len().saturating_sub(visible_h);
                         output.scroll_offset = (output.scroll_offset + visible_h).min(max_offset);
@@ -881,7 +901,9 @@ impl App {
                     let mut state = self.lock_state();
                     if let Some(ref mut output) = state.floating_output {
                         output.auto_scroll = true;
-                        let term_h = crossterm::terminal::size().map(|(_, h)| h as usize).unwrap_or(40);
+                        let term_h = crossterm::terminal::size()
+                            .map(|(_, h)| h as usize)
+                            .unwrap_or(40);
                         let visible_h = ((term_h * 70) / 100).saturating_sub(4).max(1);
                         output.scroll_offset = output.content.len().saturating_sub(visible_h);
                     }
@@ -943,8 +965,11 @@ impl App {
                         // Toggle between No (0) and Yes (1)
                         let old_selected = dialog.selected;
                         dialog.selected = if dialog.selected == 0 { 1 } else { 0 };
-                        tracing::debug!("ConfirmDialog toggle: {} -> {} (0=No/left, 1=Yes/right)",
-                            old_selected, dialog.selected);
+                        tracing::debug!(
+                            "ConfirmDialog toggle: {} -> {} (0=No/left, 1=Yes/right)",
+                            old_selected,
+                            dialog.selected
+                        );
                     }
                     KeyCode::Enter => {
                         // SECURITY FIX: Use is_confirmed() method to get correct selection
@@ -953,8 +978,12 @@ impl App {
                         let action = dialog.confirm_action.clone();
                         let data = dialog.action_data.clone();
 
-                        tracing::info!("ConfirmDialog Enter: selected={}, is_confirmed={}, action={}",
-                            dialog.selected, confirmed, action);
+                        tracing::info!(
+                            "ConfirmDialog Enter: selected={}, is_confirmed={}, action={}",
+                            dialog.selected,
+                            confirmed,
+                            action
+                        );
 
                         // Clear dialog and restore previous mode
                         state.confirm_dialog = None;
@@ -990,7 +1019,10 @@ impl App {
 
         // Handle Left/Right/Tab for button toggle in GuidedInstaller mode
         if current_mode == AppMode::GuidedInstaller
-            && matches!(key_event.code, KeyCode::Left | KeyCode::Right | KeyCode::Tab)
+            && matches!(
+                key_event.code,
+                KeyCode::Left | KeyCode::Right | KeyCode::Tab
+            )
         {
             let mut state = self.lock_state();
             if state.config_scroll.selected_index == state.config.options.len() {
@@ -1012,8 +1044,12 @@ impl App {
         // Guard: Q during active installation requires confirmation via B/Escape, not bare Q
         if current_mode == AppMode::Installation {
             match key_event.code {
-                KeyCode::Up => { self.navigate_up(); }
-                KeyCode::Down => { self.navigate_down(); }
+                KeyCode::Up => {
+                    self.navigate_up();
+                }
+                KeyCode::Down => {
+                    self.navigate_down();
+                }
                 KeyCode::Char('b') | KeyCode::Char('B') | KeyCode::Esc => {
                     self.handle_back_key()?;
                 }
@@ -1072,7 +1108,8 @@ impl App {
 
     /// Navigate to previous option
     fn navigate_up(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match state.mode {
                 AppMode::MainMenu => {
                     if state.main_menu_selection > 0 {
@@ -1101,12 +1138,13 @@ impl App {
                 AppMode::Installation | AppMode::Complete => {
                     // Snapshot current position when switching from auto to manual
                     if state.installer_auto_scroll {
-                        state.installer_scroll_offset =
-                            state.installer_output.len().saturating_sub(state.installer_visible_height);
+                        state.installer_scroll_offset = state
+                            .installer_output
+                            .len()
+                            .saturating_sub(state.installer_visible_height);
                     }
                     state.installer_auto_scroll = false;
-                    state.installer_scroll_offset =
-                        state.installer_scroll_offset.saturating_sub(1);
+                    state.installer_scroll_offset = state.installer_scroll_offset.saturating_sub(1);
                 }
                 AppMode::DryRunSummary => {
                     state.dry_run_scroll_offset = state.dry_run_scroll_offset.saturating_sub(1);
@@ -1118,7 +1156,8 @@ impl App {
 
     /// Navigate to next option
     fn navigate_down(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match state.mode {
                 AppMode::MainMenu => {
                     if state.main_menu_selection < 3 {
@@ -1167,7 +1206,9 @@ impl App {
                     state.config_scroll.move_down();
                 }
                 AppMode::Installation | AppMode::Complete => {
-                    let max_offset = state.installer_output.len()
+                    let max_offset = state
+                        .installer_output
+                        .len()
                         .saturating_sub(state.installer_visible_height);
                     if state.installer_scroll_offset < max_offset {
                         state.installer_scroll_offset += 1;
@@ -1191,7 +1232,8 @@ impl App {
 
     /// Page up in configuration list or installer output
     fn page_up(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match state.mode {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.page_up();
@@ -1213,7 +1255,8 @@ impl App {
 
     /// Page down in configuration list or installer output
     fn page_down(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match state.mode {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.page_down();
@@ -1234,7 +1277,8 @@ impl App {
 
     /// Move to first configuration option or top of installer output
     fn move_to_first(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match state.mode {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_to_first();
@@ -1250,7 +1294,8 @@ impl App {
 
     /// Move to last configuration option or bottom of installer output
     fn move_to_last(&self) {
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match state.mode {
                 AppMode::GuidedInstaller => {
                     state.config_scroll.move_to_last();
@@ -1258,8 +1303,7 @@ impl App {
                 AppMode::Installation | AppMode::Complete => {
                     state.installer_auto_scroll = true;
                     let vh = state.installer_visible_height;
-                    state.installer_scroll_offset =
-                        state.installer_output.len().saturating_sub(vh);
+                    state.installer_scroll_offset = state.installer_output.len().saturating_sub(vh);
                 }
                 _ => {}
             }
@@ -1368,8 +1412,12 @@ impl App {
                             efi_path: None,
                         };
                         self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "install bootloader", sa.is_destructive(), true,
+                            sa.script_name(),
+                            sa.to_cli_args(),
+                            sa.get_env_vars(),
+                            "install bootloader",
+                            sa.is_destructive(),
+                            true,
                         )?;
                     }
                 }
@@ -1386,15 +1434,21 @@ impl App {
                 if let Some(data) = data {
                     match serde_json::from_str::<serde_json::Value>(&data) {
                         Ok(pending) => {
-                            let script_name = pending["script_name"].as_str().unwrap_or("").to_string();
+                            let script_name =
+                                pending["script_name"].as_str().unwrap_or("").to_string();
                             if script_name.is_empty() {
                                 let mut state = self.lock_state();
-                                state.status_message = "Error: missing script name in confirmed action".to_string();
+                                state.status_message =
+                                    "Error: missing script name in confirmed action".to_string();
                                 return Ok(());
                             }
                             let cli_args: Vec<String> = pending["cli_args"]
                                 .as_array()
-                                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                .map(|a| {
+                                    a.iter()
+                                        .filter_map(|v| v.as_str().map(String::from))
+                                        .collect()
+                                })
                                 .unwrap_or_default();
                             let env_vars: Vec<(String, String)> = pending["env_vars"]
                                 .as_array()
@@ -1402,12 +1456,18 @@ impl App {
                                     a.iter()
                                         .filter_map(|v| {
                                             let arr = v.as_array()?;
-                                            Some((arr.first()?.as_str()?.to_string(), arr.get(1)?.as_str()?.to_string()))
+                                            Some((
+                                                arr.first()?.as_str()?.to_string(),
+                                                arr.get(1)?.as_str()?.to_string(),
+                                            ))
                                         })
                                         .collect()
                                 })
                                 .unwrap_or_default();
-                            let display_name = pending["display_name"].as_str().unwrap_or("tool").to_string();
+                            let display_name = pending["display_name"]
+                                .as_str()
+                                .unwrap_or("tool")
+                                .to_string();
 
                             let script_path = crate::script_runner::scripts_base_dir()
                                 .join("tools")
@@ -1420,7 +1480,11 @@ impl App {
                                 state.floating_output = Some(FloatingOutputState {
                                     title: format!("Running: {}", display_name),
                                     content: vec![
-                                        format!("Executing: {} {}", script_path, cli_args.join(" ")),
+                                        format!(
+                                            "Executing: {} {}",
+                                            script_path,
+                                            cli_args.join(" ")
+                                        ),
                                         String::new(),
                                     ],
                                     scroll_offset: 0,
@@ -1439,12 +1503,14 @@ impl App {
                         }
                         Err(e) => {
                             let mut state = self.lock_state();
-                            state.status_message = format!("Internal error: failed to parse tool data: {}", e);
+                            state.status_message =
+                                format!("Internal error: failed to parse tool data: {}", e);
                         }
                     }
                 } else {
                     let mut state = self.lock_state();
-                    state.status_message = "Error: no action data for confirmed tool execution".to_string();
+                    state.status_message =
+                        "Error: no action data for confirmed tool execution".to_string();
                 }
             }
             _ => {
@@ -1600,8 +1666,7 @@ impl App {
                         let mut state = self.lock_state();
                         state.current_tool = Some("manual_partition".to_string());
                         state.status_message =
-                            "Select disk to partition (Enter to select, Esc to cancel)"
-                                .to_string();
+                            "Select disk to partition (Enter to select, Esc to cancel)".to_string();
                     }
                     1 => {
                         // Format Partition - Use disk selection dialog
@@ -1662,8 +1727,12 @@ impl App {
                         // System Information - no parameters needed
                         let sa = SystemInfoArgs { detailed: true };
                         self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "system info", sa.is_destructive(), true,
+                            sa.script_name(),
+                            sa.to_cli_args(),
+                            sa.get_env_vars(),
+                            "system info",
+                            sa.is_destructive(),
+                            true,
                         )?;
                     }
                     5 => {
@@ -1757,13 +1826,18 @@ impl App {
 
     /// Handle guided installer enter (original logic)
     fn handle_guided_installer_enter(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let (should_open_input, should_start_installation, should_test_config, should_export_config) = {
+        let (
+            should_open_input,
+            should_start_installation,
+            should_test_config,
+            should_export_config,
+        ) = {
             let state = self.lock_state();
             if state.config_scroll.selected_index == state.config.options.len() {
                 match state.installer_button_selection {
-                    0 => (false, false, true, false),  // Test Config
-                    1 => (false, false, false, true),   // Export Config
-                    _ => (false, true, false, false),   // Start Install
+                    0 => (false, false, true, false), // Test Config
+                    1 => (false, false, false, true), // Export Config
+                    _ => (false, true, false, false), // Start Install
                 }
             } else {
                 (true, false, false, false) // Open input dialog
@@ -1861,10 +1935,16 @@ impl App {
                 // NOTE: tool names must match what create_tool_dialog() and execute_tool() set
                 if let Some(tool_name) = &state.current_tool {
                     match tool_name.as_str() {
-                        "format_partition" | "wipe_disk" | "health" | "mount"
-                        | "manual_partition" | "encrypt_device"
-                        | "partition_create_table" | "partition_add"
-                        | "partition_delete" | "partition_action_menu" => {
+                        "format_partition"
+                        | "wipe_disk"
+                        | "health"
+                        | "mount"
+                        | "manual_partition"
+                        | "encrypt_device"
+                        | "partition_create_table"
+                        | "partition_add"
+                        | "partition_delete"
+                        | "partition_action_menu" => {
                             state.pending_tool_device = None;
                             state.set_mode(AppMode::DiskTools);
                             state.tools_menu_selection = 0;
@@ -1877,15 +1957,16 @@ impl App {
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
-                        "add_user" | "reset_password" | "manage_groups"
-                        | "configure_ssh" | "security_audit" | "install_dotfiles"
-                        | "run_as_user" => {
+                        "add_user" | "reset_password" | "manage_groups" | "configure_ssh"
+                        | "security_audit" | "install_dotfiles" | "run_as_user" => {
                             state.set_mode(AppMode::UserTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
-                        "configure_network" | "configure_firewall"
-                        | "test_network" | "network_diagnostics"
+                        "configure_network"
+                        | "configure_firewall"
+                        | "test_network"
+                        | "network_diagnostics"
                         | "update_mirrors" => {
                             state.set_mode(AppMode::NetworkTools);
                             state.tools_menu_selection = 0;
@@ -2177,10 +2258,18 @@ impl App {
         summary.push("=== Configuration Values ===".to_string());
         for option in &config.options {
             let display_value = if option.name.contains("Password") {
-                if option.value.is_empty() { "(not set)".to_string() } else { "********".to_string() }
+                if option.value.is_empty() {
+                    "(not set)".to_string()
+                } else {
+                    "********".to_string()
+                }
             } else {
                 let val = option.get_value();
-                if val.is_empty() { "(not set)".to_string() } else { val }
+                if val.is_empty() {
+                    "(not set)".to_string()
+                } else {
+                    val
+                }
             };
             let status = if option.required && option.value.trim().is_empty() {
                 "[REQUIRED - MISSING]"
@@ -2232,7 +2321,10 @@ impl App {
                         summary.push(format!("  Swap:  {}", map.swap));
                     }
                 } else {
-                    summary.push("  [NOT ASSIGNED] — select Disk to run cfdisk and assign partitions".to_string());
+                    summary.push(
+                        "  [NOT ASSIGNED] — select Disk to run cfdisk and assign partitions"
+                            .to_string(),
+                    );
                 }
             }
         }
@@ -2260,24 +2352,24 @@ impl App {
             Ok(()) => {
                 info!("Exported config to: {}", export_path.display());
                 let mut state = self.lock_state();
-                state.status_message =
-                    format!("Config exported to {}", export_path.display());
-                state.floating_output = Some(crate::components::floating_window::FloatingOutputState {
-                    title: "Configuration Exported".to_string(),
-                    content: vec![
-                        format!("Saved to: {}", export_path.display()),
-                        String::new(),
-                        "Use this file with:".to_string(),
-                        format!("  archtui install --config {}", export_path.display()),
-                        String::new(),
-                        "Press Enter or Esc to dismiss".to_string(),
-                    ],
-                    scroll_offset: 0,
-                    auto_scroll: false,
-                    complete: true,
-                    progress: None,
-                    status: "Export complete".to_string(),
-                });
+                state.status_message = format!("Config exported to {}", export_path.display());
+                state.floating_output =
+                    Some(crate::components::floating_window::FloatingOutputState {
+                        title: "Configuration Exported".to_string(),
+                        content: vec![
+                            format!("Saved to: {}", export_path.display()),
+                            String::new(),
+                            "Use this file with:".to_string(),
+                            format!("  archtui install --config {}", export_path.display()),
+                            String::new(),
+                            "Press Enter or Esc to dismiss".to_string(),
+                        ],
+                        scroll_offset: 0,
+                        auto_scroll: false,
+                        complete: true,
+                        progress: None,
+                        status: "Export complete".to_string(),
+                    });
                 state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
                 state.set_mode(AppMode::FloatingOutput);
             }
@@ -2396,7 +2488,10 @@ impl App {
         }
 
         // Create installer from file config and start
-        self.installer = Some(Installer::from_file_config(&file_config, Arc::clone(&self.state)));
+        self.installer = Some(Installer::from_file_config(
+            &file_config,
+            Arc::clone(&self.state),
+        ));
 
         if let Some(ref mut installer) = self.installer {
             installer.start()?;
@@ -2455,7 +2550,10 @@ impl App {
             "Encryption" => {
                 let partitioning_strategy = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default()
@@ -2472,7 +2570,10 @@ impl App {
             "Swap Size" => {
                 let swap_enabled = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Swap")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2490,11 +2591,17 @@ impl App {
             "Root Size" => {
                 let (home_enabled, strategy) = {
                     let state = self.lock_state();
-                    let home = state.config.options.iter()
+                    let home = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Separate Home Partition")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
-                    let strat = state.config.options.iter()
+                    let strat = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default();
@@ -2513,7 +2620,10 @@ impl App {
             "Home Size" => {
                 let home_enabled = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Separate Home Partition")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2525,17 +2635,24 @@ impl App {
                 } else {
                     let mut state = self.lock_state();
                     state.status_message =
-                        "Home size is only configurable when separate home partition is enabled.".to_string();
+                        "Home size is only configurable when separate home partition is enabled."
+                            .to_string();
                 }
             }
             "Snapshot Tool" => {
                 let (is_btrfs, snapshots_enabled) = {
                     let state = self.lock_state();
-                    let btrfs = state.config.options.iter()
+                    let btrfs = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Root Filesystem")
                         .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false);
-                    let snapshots = state.config.options.iter()
+                    let snapshots = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Btrfs Snapshots")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
@@ -2560,15 +2677,24 @@ impl App {
             "Snapshot Frequency" | "Snapshot Keep Count" => {
                 let (is_btrfs, snapshots_enabled, is_snapper) = {
                     let state = self.lock_state();
-                    let btrfs = state.config.options.iter()
+                    let btrfs = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Root Filesystem")
                         .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false);
-                    let snapshots = state.config.options.iter()
+                    let snapshots = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Btrfs Snapshots")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
-                    let snapper = state.config.options.iter()
+                    let snapper = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Snapshot Tool")
                         .map(|opt| opt.get_value().to_lowercase() == "snapper")
                         .unwrap_or(false);
@@ -2599,11 +2725,17 @@ impl App {
             "GRUB Theme" | "GRUB Theme Selection" => {
                 let (is_grub, themes_enabled) = {
                     let state = self.lock_state();
-                    let grub = state.config.options.iter()
+                    let grub = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Bootloader")
                         .map(|opt| opt.get_value().to_lowercase() == "grub")
                         .unwrap_or(false);
-                    let themes = state.config.options.iter()
+                    let themes = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "GRUB Theme")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false);
@@ -2628,7 +2760,10 @@ impl App {
             "Git Repository URL" => {
                 let git_enabled = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Git Repository")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2645,7 +2780,10 @@ impl App {
             }
             "Disk" => {
                 let state = self.lock_state();
-                let partitioning_strategy = state.config.options.iter()
+                let partitioning_strategy = state
+                    .config
+                    .options
+                    .iter()
                     .find(|opt| opt.name == "Partitioning Strategy")
                     .map(|opt| opt.get_value())
                     .unwrap_or_default();
@@ -2669,7 +2807,10 @@ impl App {
             "Encryption Password" => {
                 let encryption_enabled = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Encryption")
                         .map(|opt| opt.get_value().to_lowercase() != "no")
                         .unwrap_or(false)
@@ -2699,7 +2840,10 @@ impl App {
             "Timezone" => {
                 let timezone_region = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Timezone Region")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default()
@@ -2720,7 +2864,10 @@ impl App {
             "Plymouth Theme" => {
                 let plymouth_enabled = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Plymouth")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2732,14 +2879,16 @@ impl App {
                 } else {
                     let mut state = self.lock_state();
                     state.status_message =
-                        "Plymouth theme can only be selected when Plymouth is enabled."
-                            .to_string();
+                        "Plymouth theme can only be selected when Plymouth is enabled.".to_string();
                 }
             }
             "OS Prober" => {
                 let is_grub = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Bootloader")
                         .map(|opt| opt.get_value().to_lowercase() == "grub")
                         .unwrap_or(false)
@@ -2757,7 +2906,10 @@ impl App {
             "Home Filesystem" => {
                 let home_enabled = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Separate Home Partition")
                         .map(|opt| opt.get_value().to_lowercase() == "yes")
                         .unwrap_or(false)
@@ -2776,7 +2928,10 @@ impl App {
             "Separate Home Partition" => {
                 let is_plain_raid = {
                     let state = self.lock_state();
-                    let strat = state.config.options.iter()
+                    let strat = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value())
                         .unwrap_or_default();
@@ -2786,8 +2941,7 @@ impl App {
                 if is_plain_raid {
                     let mut state = self.lock_state();
                     state.status_message =
-                        "Separate home not available for RAID without LVM."
-                            .to_string();
+                        "Separate home not available for RAID without LVM.".to_string();
                 } else {
                     let options = InputHandler::get_predefined_options(&option.name);
                     self.set_inline_selection(options, option.get_value());
@@ -2796,7 +2950,10 @@ impl App {
             "Btrfs Snapshots" => {
                 let is_btrfs = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Root Filesystem")
                         .map(|opt| opt.get_value().to_lowercase() == "btrfs")
                         .unwrap_or(false)
@@ -2814,7 +2971,10 @@ impl App {
             "RAID Level" => {
                 let is_raid = {
                     let state = self.lock_state();
-                    state.config.options.iter()
+                    state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Partitioning Strategy")
                         .map(|opt| opt.get_value().contains("raid"))
                         .unwrap_or(false)
@@ -2826,13 +2986,17 @@ impl App {
                 } else {
                     let mut state = self.lock_state();
                     state.status_message =
-                        "RAID Level is only available for RAID partitioning strategies.".to_string();
+                        "RAID Level is only available for RAID partitioning strategies."
+                            .to_string();
                 }
             }
             "AUR Helper" => {
                 let de_requires_aur = {
                     let state = self.lock_state();
-                    let de_value = state.config.options.iter()
+                    let de_value = state
+                        .config
+                        .options
+                        .iter()
                         .find(|opt| opt.name == "Desktop Environment")
                         .map(|opt| opt.get_value().to_string())
                         .unwrap_or_default();
@@ -2864,12 +3028,14 @@ impl App {
     fn sync_config_edit_from_input(&mut self) {
         let edit_state = match &self.input_handler.current_dialog {
             Some(dialog) => match &dialog.input_type {
-                InputType::Selection { options, scroll_state, .. } => {
-                    ConfigEditState::Selection {
-                        choices: options.clone(),
-                        selected: scroll_state.selected_index,
-                    }
-                }
+                InputType::Selection {
+                    options,
+                    scroll_state,
+                    ..
+                } => ConfigEditState::Selection {
+                    choices: options.clone(),
+                    selected: scroll_state.selected_index,
+                },
                 // Disk selection dialogs use the popup overlay (render_input_dialog)
                 // rather than the inline right-panel editor. ConfigEditState::None
                 // lets keys flow through to InputHandler::handle_input which already
@@ -2890,24 +3056,33 @@ impl App {
                     let packages: Vec<String> = if package_list.is_empty() {
                         Vec::new()
                     } else {
-                        package_list.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+                        package_list
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
                     };
                     ConfigEditState::PackageInput {
                         packages,
                         current_input: current_input.clone(),
                         output_lines: output_lines.clone(),
                         is_pacman: *is_pacman,
-                        search_results: search_results.iter().map(|p| PackageResult {
-                            repo: p.repo.clone(),
-                            name: p.name.clone(),
-                            version: p.version.clone(),
-                            description: p.description.clone(),
-                        }).collect(),
+                        search_results: search_results
+                            .iter()
+                            .map(|p| PackageResult {
+                                repo: p.repo.clone(),
+                                name: p.name.clone(),
+                                version: p.version.clone(),
+                                description: p.description.clone(),
+                            })
+                            .collect(),
                         results_selected: list_state.selected().unwrap_or(0),
                         show_search_results: *show_search_results,
                     }
                 }
-                InputType::Warning { .. } | InputType::TextInput { .. } | InputType::PasswordInput { .. } => ConfigEditState::None,
+                InputType::Warning { .. }
+                | InputType::TextInput { .. }
+                | InputType::PasswordInput { .. } => ConfigEditState::None,
             },
             None => ConfigEditState::None,
         };
@@ -3123,6 +3298,57 @@ impl App {
             )
         };
 
+        // Handle "Custom" selection for size options — switch to text input
+        if value == "Custom" && (option_name == "Root Size" || option_name == "Home Size") {
+            self.set_inline_text_input(String::new());
+            let mut state = self.lock_state();
+            state.status_message = format!(
+                "Enter custom {} (e.g. 2048MB, 120GB, 2TB)",
+                option_name.to_lowercase()
+            );
+            return Ok(());
+        }
+
+        // Validate custom size input for Root Size / Home Size
+        if (option_name == "Root Size" || option_name == "Home Size") && value != "Remaining" {
+            let predefined = [
+                "30GB", "50GB", "80GB", "100GB", "150GB", "200GB", "500GB", "1TB",
+            ];
+            if !predefined.contains(&value.as_str()) {
+                let trimmed = value.trim();
+                let digit_end = trimmed
+                    .find(|c: char| !c.is_ascii_digit())
+                    .unwrap_or(trimmed.len());
+                let digits = &trimmed[..digit_end];
+                let unit = trimmed[digit_end..].trim().to_uppercase();
+
+                if digits.is_empty() || digits.parse::<u64>().unwrap_or(0) == 0 {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "Invalid size — enter a number with MB, GB, or TB (e.g. 2048MB, 120GB, 2TB)"
+                            .to_string();
+                    return Ok(());
+                }
+
+                let normalized_unit = match unit.as_str() {
+                    "M" | "MB" | "MIB" => "MB",
+                    "G" | "GB" | "" => "GB",
+                    "T" | "TB" => "TB",
+                    _ => {
+                        let mut state = self.lock_state();
+                        state.status_message =
+                            "Invalid unit — use MB, GB, or TB (e.g. 2048MB, 120GB, 2TB)"
+                                .to_string();
+                        return Ok(());
+                    }
+                };
+
+                // Normalize and recurse with cleaned value
+                let normalized = format!("{}{}", digits, normalized_unit);
+                return self.update_configuration_value(normalized);
+            }
+        }
+
         // Update the configuration value
         {
             let mut state = self.lock_state();
@@ -3163,11 +3389,29 @@ impl App {
                         }
                     } else {
                         // Single disk selection - extract just the device path from "/dev/sda (128G)" -> "/dev/sda"
-                        value
+                        let disk_path = value
                             .split_whitespace()
                             .next()
                             .unwrap_or(&value)
-                            .to_string()
+                            .to_string();
+
+                        // Check if this is manual partitioning (single disk)
+                        let partitioning_strategy = state
+                            .config
+                            .options
+                            .iter()
+                            .find(|opt| opt.name == "Partitioning Strategy")
+                            .map(|opt| opt.value.as_str())
+                            .unwrap_or("");
+
+                        if partitioning_strategy == "manual" {
+                            drop(state);
+                            self.input_handler
+                                .start_manual_partitioning_confirmation(&[disk_path]);
+                            return Ok(());
+                        }
+
+                        disk_path
                     }
                 } else {
                     value.clone()
@@ -3204,7 +3448,8 @@ impl App {
 
                 // Launch partitioning tool
                 if let Err(e) = self.input_handler.launch_partitioning_tool(&disk_paths) {
-                    { let mut state = self.lock_state();
+                    {
+                        let mut state = self.lock_state();
                         state.status_message = format!("Partitioning failed: {}", e);
                         return Ok(());
                     }
@@ -3234,8 +3479,8 @@ impl App {
                             .iter()
                             .map(|p| (p.name.clone(), p.size.clone()))
                             .collect();
-                        let is_uefi = boot_mode.to_lowercase() == "uefi"
-                            || self.is_uefi_supported();
+                        let is_uefi =
+                            boot_mode.to_lowercase() == "uefi" || self.is_uefi_supported();
 
                         self.input_handler
                             .start_manual_assignment(partitions, is_uefi);
@@ -3245,9 +3490,8 @@ impl App {
                             "Assign partitions: select ROOT partition".to_string();
                     }
                     Err(e) => {
-                        { let mut state = self.lock_state();
-                            state.status_message = format!("Partitioning validation failed: {}", e);
-                        }
+                        let mut state = self.lock_state();
+                        state.status_message = format!("Partitioning validation failed: {}", e);
                     }
                 }
             }
@@ -3280,7 +3524,8 @@ impl App {
 
         // Move to next step
         {
-            { let mut state = self.lock_state();
+            {
+                let mut state = self.lock_state();
                 if state.config_scroll.selected_index < state.config.options.len() - 1 {
                     let next_index = state.config_scroll.selected_index + 1;
                     state.config_scroll.set_selected(next_index);
@@ -3306,8 +3551,14 @@ impl App {
             };
 
             {
-                { let mut state = self.lock_state();
-                    if let Some(enc_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption") {
+                {
+                    let mut state = self.lock_state();
+                    if let Some(enc_opt) = state
+                        .config
+                        .options
+                        .iter_mut()
+                        .find(|opt| opt.name == "Encryption")
+                    {
                         enc_opt.value = encryption_value.to_string();
                         state.status_message = format!(
                             "Auto-set Encryption to: {} (based on partitioning strategy)",
@@ -3316,19 +3567,39 @@ impl App {
                     }
                     // Mark encryption password and key type as N/A when encryption is disabled, clear when enabled
                     if encryption_value == "No" {
-                        if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
+                        if let Some(pass_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Password")
+                        {
                             pass_opt.value = "N/A".to_string();
                         }
-                        if let Some(key_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Key Type") {
+                        if let Some(key_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Key Type")
+                        {
                             key_opt.value = "N/A".to_string();
                         }
                     } else {
-                        if let Some(pass_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Password") {
+                        if let Some(pass_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Password")
+                        {
                             if pass_opt.value == "N/A" {
                                 pass_opt.value = String::new();
                             }
                         }
-                        if let Some(key_opt) = state.config.options.iter_mut().find(|opt| opt.name == "Encryption Key Type") {
+                        if let Some(key_opt) = state
+                            .config
+                            .options
+                            .iter_mut()
+                            .find(|opt| opt.name == "Encryption Key Type")
+                        {
                             if key_opt.value == "N/A" {
                                 key_opt.value = "Password".to_string();
                             }
@@ -3350,8 +3621,8 @@ impl App {
         let display_manager = match desktop_env {
             "gnome" => "gdm",
             "kde" | "hyprland" | "sway" | "lxqt" | "river" | "niri" | "labwc" => "sddm",
-            "i3" | "xfce" | "cinnamon" | "mate" | "budgie" | "deepin"
-            | "bspwm" | "awesome" | "qtile" | "xmonad" | "dwm" => "lightdm",
+            "i3" | "xfce" | "cinnamon" | "mate" | "budgie" | "deepin" | "bspwm" | "awesome"
+            | "qtile" | "xmonad" | "dwm" => "lightdm",
             "lxde" => "lxdm",
             "cosmic" => "cosmic-greeter",
             "none" => "none",
@@ -3360,7 +3631,8 @@ impl App {
 
         let de: DesktopEnvironment = desktop_env.parse().unwrap_or_default();
 
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             // Auto-set display manager
             if !display_manager.is_empty() {
                 if let Some(dm_opt) = state
@@ -3407,7 +3679,8 @@ impl App {
         value: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         debug!(option = %option_name, value = %value, "Handling dependent option cascades");
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             match option_name {
                 "Swap" => {
                     if value.to_lowercase() == "no" {
@@ -3502,15 +3775,18 @@ impl App {
                     // Pre-mounted: disable all disk/filesystem/encryption options
                     if value == "pre_mounted" {
                         for name in &[
-                            "Disk", "Root Filesystem", "Home Filesystem",
-                            "Root Size", "Home Size", "Encryption", "Encryption Password",
-                            "Encryption Key Type", "RAID Level",
+                            "Disk",
+                            "Root Filesystem",
+                            "Home Filesystem",
+                            "Root Size",
+                            "Home Size",
+                            "Encryption",
+                            "Encryption Password",
+                            "Encryption Key Type",
+                            "RAID Level",
                         ] {
-                            if let Some(opt) = state
-                                .config
-                                .options
-                                .iter_mut()
-                                .find(|o| o.name == *name)
+                            if let Some(opt) =
+                                state.config.options.iter_mut().find(|o| o.name == *name)
                             {
                                 opt.value = "N/A".to_string();
                             }
@@ -3549,11 +3825,8 @@ impl App {
                             root_opt.value = "Remaining".to_string();
                         }
                         for name in &["Home Size", "Home Filesystem"] {
-                            if let Some(opt) = state
-                                .config
-                                .options
-                                .iter_mut()
-                                .find(|o| o.name == *name)
+                            if let Some(opt) =
+                                state.config.options.iter_mut().find(|o| o.name == *name)
                             {
                                 opt.value = "N/A".to_string();
                             }
@@ -3614,11 +3887,8 @@ impl App {
                             "Snapshot Keep Count",
                             "Snapshot Tool",
                         ] {
-                            if let Some(opt) = state
-                                .config
-                                .options
-                                .iter_mut()
-                                .find(|o| o.name == *name)
+                            if let Some(opt) =
+                                state.config.options.iter_mut().find(|o| o.name == *name)
                             {
                                 opt.value = if *name == "Btrfs Snapshots" {
                                     "No".to_string()
@@ -3886,7 +4156,8 @@ impl App {
         height: u16,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Update scroll state with new visible height
-        { let mut state = self.lock_state();
+        {
+            let mut state = self.lock_state();
             if state.mode == AppMode::GuidedInstaller {
                 // Calculate available height for config list
                 // Header(7) + Title(3) + Instructions(3) + Start Button(3) = 16 lines reserved
@@ -4618,10 +4889,16 @@ impl App {
                 // Go back to appropriate tool menu
                 if let Some(tool_name) = current_tool {
                     match tool_name.as_str() {
-                        "format_partition" | "wipe_disk" | "health" | "mount"
-                        | "manual_partition" | "encrypt_device"
-                        | "partition_create_table" | "partition_add"
-                        | "partition_delete" | "partition_action_menu" => {
+                        "format_partition"
+                        | "wipe_disk"
+                        | "health"
+                        | "mount"
+                        | "manual_partition"
+                        | "encrypt_device"
+                        | "partition_create_table"
+                        | "partition_add"
+                        | "partition_delete"
+                        | "partition_action_menu" => {
                             state.pending_tool_device = None;
                             state.set_mode(AppMode::DiskTools);
                             state.tools_menu_selection = 0;
@@ -4634,15 +4911,16 @@ impl App {
                             state.tools_menu_selection = 0;
                             state.status_message = "System & Boot Tools".to_string();
                         }
-                        "add_user" | "reset_password" | "manage_groups"
-                        | "configure_ssh" | "security_audit" | "install_dotfiles"
-                        | "run_as_user" => {
+                        "add_user" | "reset_password" | "manage_groups" | "configure_ssh"
+                        | "security_audit" | "install_dotfiles" | "run_as_user" => {
                             state.set_mode(AppMode::UserTools);
                             state.tools_menu_selection = 0;
                             state.status_message = "User & Security Tools".to_string();
                         }
-                        "configure_network" | "configure_firewall"
-                        | "test_network" | "network_diagnostics"
+                        "configure_network"
+                        | "configure_firewall"
+                        | "test_network"
+                        | "network_diagnostics"
                         | "update_mirrors" => {
                             state.set_mode(AppMode::NetworkTools);
                             state.tools_menu_selection = 0;
@@ -4668,11 +4946,14 @@ impl App {
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
                     if idx < dialog.parameters.len() && idx < dialog.param_values.len() {
-                        if let ToolParameter::Selection(ref options, _) = dialog.parameters[idx].param_type {
+                        if let ToolParameter::Selection(ref options, _) =
+                            dialog.parameters[idx].param_type
+                        {
                             if !options.is_empty() {
                                 // Find current selection index
                                 let current_val = &dialog.param_values[idx];
-                                let current_idx = options.iter().position(|o| o == current_val).unwrap_or(0);
+                                let current_idx =
+                                    options.iter().position(|o| o == current_val).unwrap_or(0);
                                 let new_idx = if key_event.code == KeyCode::Right {
                                     (current_idx + 1) % options.len()
                                 } else {
@@ -4689,8 +4970,12 @@ impl App {
                 let mut state = self.lock_state();
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
-                    if idx < dialog.parameters.len() && idx < dialog.param_values.len()
-                        && !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _))
+                    if idx < dialog.parameters.len()
+                        && idx < dialog.param_values.len()
+                        && !matches!(
+                            dialog.parameters[idx].param_type,
+                            ToolParameter::Selection(_, _)
+                        )
                     {
                         dialog.param_values[idx].push(c);
                     }
@@ -4701,8 +4986,12 @@ impl App {
                 let mut state = self.lock_state();
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
-                    if idx < dialog.parameters.len() && idx < dialog.param_values.len()
-                        && !matches!(dialog.parameters[idx].param_type, ToolParameter::Selection(_, _))
+                    if idx < dialog.parameters.len()
+                        && idx < dialog.param_values.len()
+                        && !matches!(
+                            dialog.parameters[idx].param_type,
+                            ToolParameter::Selection(_, _)
+                        )
                     {
                         dialog.param_values[idx].pop();
                     }
@@ -4795,8 +5084,12 @@ impl App {
         let mut cli_args = sa.to_cli_args();
         cli_args.push("--detailed".to_string());
         self.execute_via_script_args(
-            sa.script_name(), cli_args, sa.get_env_vars(),
-            "check disk health", sa.is_destructive(), true,
+            sa.script_name(),
+            cli_args,
+            sa.get_env_vars(),
+            "check disk health",
+            sa.is_destructive(),
+            true,
         )
     }
 
@@ -4835,10 +5128,7 @@ impl App {
             let mut child = match child_result {
                 Ok(c) => c,
                 Err(e) => {
-                    let _ = tx.send(ToolMessage::Error(format!(
-                        "Failed to start script: {}",
-                        e
-                    )));
+                    let _ = tx.send(ToolMessage::Error(format!("Failed to start script: {}", e)));
                     return;
                 }
             };
@@ -4919,14 +5209,15 @@ impl App {
     fn show_disk_layout(&mut self, device: &str) {
         // Run lsblk synchronously
         let lsblk_output = Command::new("lsblk")
-            .args(["-o", "NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS,PTTYPE", device])
+            .args([
+                "-o",
+                "NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS,PTTYPE",
+                device,
+            ])
             .in_new_process_group()
             .output();
 
-        let mut lines = vec![
-            format!("  Disk Layout: {}", device),
-            String::new(),
-        ];
+        let mut lines = vec![format!("  Disk Layout: {}", device), String::new()];
 
         match lsblk_output {
             Ok(output) => {
@@ -5145,9 +5436,17 @@ impl App {
                 .join(script_name)
                 .to_string_lossy()
                 .to_string();
-            let env_display: Vec<String> = env_vars.iter().map(|(k,v)| format!("{}={}", k, v)).collect();
-            let env_prefix = if env_display.is_empty() { String::new() } else { format!("{} ", env_display.join(" ")) };
-            let would_execute = format!("{}bash {} {}", env_prefix, script_path, cli_args.join(" "));
+            let env_display: Vec<String> = env_vars
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect();
+            let env_prefix = if env_display.is_empty() {
+                String::new()
+            } else {
+                format!("{} ", env_display.join(" "))
+            };
+            let would_execute =
+                format!("{}bash {} {}", env_prefix, script_path, cli_args.join(" "));
 
             let mut state = self.lock_state();
             state.tool_dialog = None;
@@ -5188,7 +5487,10 @@ impl App {
             });
 
             let title = format!("Confirm: {}", display_name);
-            let message = format!("This will execute {} which modifies system state. Continue?", display_name);
+            let message = format!(
+                "This will execute {} which modifies system state. Continue?",
+                display_name
+            );
             let detail1 = format!("Script: scripts/tools/{}", script_name);
             let detail2 = format!("Args: {}", cli_args.join(" "));
             let action_data = pending.to_string();
@@ -5196,8 +5498,7 @@ impl App {
             let mut state = self.lock_state();
             // Use the ToolDialog's parent menu as the return target, not ToolDialog itself
             // (tool_dialog is cleared below, so returning to ToolDialog mode leaves a ghost state)
-            let return_mode = state.pre_dialog_mode.take()
-                .unwrap_or_else(|| state.mode);
+            let return_mode = state.pre_dialog_mode.take().unwrap_or_else(|| state.mode);
             state.pre_dialog_mode = Some(return_mode);
             state.tool_dialog = None;
             state.current_tool = None;
@@ -5222,12 +5523,19 @@ impl App {
         if let Some(manifest) = self.manifest_registry.get(&manifest_key) {
             tracing::debug!("Manifest found for {}: v{}", script_name, manifest.version);
         } else if is_destructive {
-            tracing::error!("BLOCKED: No manifest found for destructive script: {}", script_name);
+            tracing::error!(
+                "BLOCKED: No manifest found for destructive script: {}",
+                script_name
+            );
             let mut state = self.lock_state();
-            state.status_message = format!("Error: no manifest for destructive script {}", script_name);
+            state.status_message =
+                format!("Error: no manifest for destructive script {}", script_name);
             return Ok(());
         } else {
-            tracing::warn!("No manifest found for script: {} (non-destructive, allowing)", script_name);
+            tracing::warn!(
+                "No manifest found for script: {} (non-destructive, allowing)",
+                script_name
+            );
         }
 
         // Set up floating output window
@@ -5276,7 +5584,11 @@ impl App {
     // =========================================================================
 
     /// Validate that a required parameter is present and non-empty.
-    fn validate_required_param(params: &[String], index: usize, name: &str) -> Result<String, String> {
+    fn validate_required_param(
+        params: &[String],
+        index: usize,
+        name: &str,
+    ) -> Result<String, String> {
         let val = params.get(index).cloned().unwrap_or_default();
         if val.trim().is_empty() {
             return Err(format!("Required parameter '{}' is empty", name));
@@ -5294,7 +5606,11 @@ impl App {
         match tool_name {
             "chroot" => {
                 let sa = ChrootArgs {
-                    root: PathBuf::from(if !params.is_empty() && !params[0].is_empty() { &params[0] } else { "/mnt" }),
+                    root: PathBuf::from(if !params.is_empty() && !params[0].is_empty() {
+                        &params[0]
+                    } else {
+                        "/mnt"
+                    }),
                     no_mount: params.len() >= 2 && params[1] == "true",
                 };
                 let script_path = crate::script_runner::scripts_base_dir()
@@ -5303,12 +5619,26 @@ impl App {
                     .to_string_lossy()
                     .to_string();
                 let cli_args = sa.to_cli_args();
-                { let mut state = self.lock_state();
+                {
+                    let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = None;
                 }
-                let full_cmd = format!("{} {}", script_path, cli_args.iter().map(|a| format!("'{}'", a)).collect::<Vec<_>>().join(" "));
-                let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], tool_name, AppMode::SystemTools);
+                let full_cmd = format!(
+                    "{} {}",
+                    script_path,
+                    cli_args
+                        .iter()
+                        .map(|a| format!("'{}'", a))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                let _ = self.launch_embedded_tool(
+                    "bash",
+                    &["-c", &full_cmd],
+                    tool_name,
+                    AppMode::SystemTools,
+                );
                 return Ok(());
             }
             "manual_partition" => {
@@ -5334,13 +5664,31 @@ impl App {
                     .to_string();
                 let cli_args = sa.to_cli_args();
                 let env_vars = sa.get_env_vars();
-                let env_prefix: String = env_vars.iter().map(|(k, v)| format!("{}='{}' ", k, v)).collect();
-                { let mut state = self.lock_state();
+                let env_prefix: String = env_vars
+                    .iter()
+                    .map(|(k, v)| format!("{}='{}' ", k, v))
+                    .collect();
+                {
+                    let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
                 }
-                let full_cmd = format!("{}{} {}", env_prefix, script_path, cli_args.iter().map(|a| format!("'{}'", a)).collect::<Vec<_>>().join(" "));
-                let _ = self.launch_embedded_tool("bash", &["-c", &full_cmd], "manual_partition", AppMode::DiskTools);
+                let full_cmd = format!(
+                    "{}{} {}",
+                    env_prefix,
+                    script_path,
+                    cli_args
+                        .iter()
+                        .map(|a| format!("'{}'", a))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                let _ = self.launch_embedded_tool(
+                    "bash",
+                    &["-c", &full_cmd],
+                    "manual_partition",
+                    AppMode::DiskTools,
+                );
                 return Ok(());
             }
             "partition_action_menu" => {
@@ -5359,7 +5707,8 @@ impl App {
                     return Ok(());
                 }
                 // Clear the action menu dialog first
-                { let mut state = self.lock_state();
+                {
+                    let mut state = self.lock_state();
                     state.tool_dialog = None;
                 }
                 match action.as_str() {
@@ -5382,7 +5731,8 @@ impl App {
                         drop(state);
                         self.input_handler.start_disk_selection("".to_string());
                         let mut state = self.lock_state();
-                        state.status_message = "Select disk to partition (Enter to select, Esc to cancel)".to_string();
+                        state.status_message =
+                            "Select disk to partition (Enter to select, Esc to cancel)".to_string();
                     }
                     _ => {
                         let mut state = self.lock_state();
@@ -5406,7 +5756,8 @@ impl App {
                         return Ok(());
                     }
                 };
-                let fs: crate::types::Filesystem = params.get(1)
+                let fs: crate::types::Filesystem = params
+                    .get(1)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(crate::types::Filesystem::Ext4);
                 let sa = FormatPartitionArgs {
@@ -5416,8 +5767,12 @@ impl App {
                     force: false,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "format partition", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "format partition",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "wipe_disk" | "Wipe Disk" => {
@@ -5429,7 +5784,8 @@ impl App {
                         return Ok(());
                     }
                 };
-                let method: WipeMethod = params.get(1)
+                let method: WipeMethod = params
+                    .get(1)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(WipeMethod::Quick);
                 // User must type "CONFIRM" — reject anything else
@@ -5439,7 +5795,8 @@ impl App {
                     state.tool_dialog = None;
                     state.current_tool = None;
                     state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::DiskTools);
-                    state.status_message = "Wipe cancelled — you must type CONFIRM exactly".to_string();
+                    state.status_message =
+                        "Wipe cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
                 let sa = WipeDiskArgs {
@@ -5449,8 +5806,12 @@ impl App {
                 };
                 // skip_confirm=true: the typed CONFIRM IS the confirmation
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "wipe disk", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "wipe disk",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "partition_create_table" => {
@@ -5462,7 +5823,8 @@ impl App {
                         return Ok(());
                     }
                 };
-                let table_type: crate::scripts::disk::TableType = params.get(1)
+                let table_type: crate::scripts::disk::TableType = params
+                    .get(1)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(crate::scripts::disk::TableType::Gpt);
                 let confirm_text = params.get(2).cloned().unwrap_or_default();
@@ -5471,7 +5833,8 @@ impl App {
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
                     state.set_mode(AppMode::DiskTools);
-                    state.status_message = "Create table cancelled — you must type CONFIRM exactly".to_string();
+                    state.status_message =
+                        "Create table cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
                 let sa = CreateTableArgs {
@@ -5480,8 +5843,12 @@ impl App {
                     confirm: true,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "create partition table", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "create partition table",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "partition_add" => {
@@ -5493,11 +5860,13 @@ impl App {
                         return Ok(());
                     }
                 };
-                let number: u8 = params.get(1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(1);
-                let size = params.get(2).cloned().unwrap_or_else(|| "remaining".to_string());
-                let partition_type: crate::scripts::disk::PartitionType = params.get(3)
+                let number: u8 = params.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+                let size = params
+                    .get(2)
+                    .cloned()
+                    .unwrap_or_else(|| "remaining".to_string());
+                let partition_type: crate::scripts::disk::PartitionType = params
+                    .get(3)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(crate::scripts::disk::PartitionType::Linux);
                 let label = params.get(4).filter(|s| !s.is_empty()).cloned();
@@ -5507,7 +5876,8 @@ impl App {
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
                     state.set_mode(AppMode::DiskTools);
-                    state.status_message = "Add partition cancelled — you must type CONFIRM exactly".to_string();
+                    state.status_message =
+                        "Add partition cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
                 let sa = AddPartitionArgs {
@@ -5519,8 +5889,12 @@ impl App {
                     confirm: true,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "add partition", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "add partition",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "partition_delete" => {
@@ -5532,16 +5906,15 @@ impl App {
                         return Ok(());
                     }
                 };
-                let number: u8 = params.get(1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(1);
+                let number: u8 = params.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
                 let confirm_text = params.get(2).cloned().unwrap_or_default();
                 if confirm_text != "CONFIRM" {
                     let mut state = self.lock_state();
                     state.tool_dialog = None;
                     state.current_tool = Some("manual_partition".to_string());
                     state.set_mode(AppMode::DiskTools);
-                    state.status_message = "Delete partition cancelled — you must type CONFIRM exactly".to_string();
+                    state.status_message =
+                        "Delete partition cancelled — you must type CONFIRM exactly".to_string();
                     return Ok(());
                 }
                 let sa = DeletePartitionArgs {
@@ -5550,8 +5923,12 @@ impl App {
                     confirm: true,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "delete partition", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "delete partition",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "health" => {
@@ -5562,8 +5939,12 @@ impl App {
                     cli_args.push("--detailed".to_string());
                 }
                 self.execute_via_script_args(
-                    "check_disk_health.sh", cli_args, vec![],
-                    "check disk health", false, true,
+                    "check_disk_health.sh",
+                    cli_args,
+                    vec![],
+                    "check disk health",
+                    false,
+                    true,
                 )
             }
             "mount" => {
@@ -5595,8 +5976,12 @@ impl App {
                     cli_args.push("--force".to_string());
                 }
                 self.execute_via_script_args(
-                    "mount_partitions.sh", cli_args, vec![],
-                    "mount partitions", false, true,
+                    "mount_partitions.sh",
+                    cli_args,
+                    vec![],
+                    "mount partitions",
+                    false,
+                    true,
                 )
             }
             "info" => {
@@ -5608,19 +5993,24 @@ impl App {
                     cli_args.push("--json".to_string());
                 }
                 self.execute_via_script_args(
-                    sa.script_name(), cli_args, sa.get_env_vars(),
-                    "system info", sa.is_destructive(), true,
+                    sa.script_name(),
+                    cli_args,
+                    sa.get_env_vars(),
+                    "system info",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "install_bootloader" => {
-                let bootloader_type = match Self::validate_required_param(&params, 0, "bootloader type") {
-                    Ok(v) => v,
-                    Err(e) => {
-                        let mut state = self.lock_state();
-                        state.status_message = e;
-                        return Ok(());
-                    }
-                };
+                let bootloader_type =
+                    match Self::validate_required_param(&params, 0, "bootloader type") {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let mut state = self.lock_state();
+                            state.status_message = e;
+                            return Ok(());
+                        }
+                    };
                 let disk = match Self::validate_required_param(&params, 1, "disk") {
                     Ok(v) => v,
                     Err(e) => {
@@ -5633,15 +6023,23 @@ impl App {
                     bootloader_type,
                     disk: PathBuf::from(disk),
                     efi_path: params.get(2).filter(|s| !s.is_empty()).map(PathBuf::from),
-                    mode: params.get(3).filter(|s| !s.is_empty()).cloned().unwrap_or_default(),
+                    mode: params
+                        .get(3)
+                        .filter(|s| !s.is_empty())
+                        .cloned()
+                        .unwrap_or_default(),
                 };
                 let mut cli_args = sa.to_cli_args();
                 if params.len() >= 5 && params[4] == "true" {
                     cli_args.push("--repair".to_string());
                 }
                 self.execute_via_script_args(
-                    sa.script_name(), cli_args, sa.get_env_vars(),
-                    "install bootloader", sa.is_destructive(), false,
+                    sa.script_name(),
+                    cli_args,
+                    sa.get_env_vars(),
+                    "install bootloader",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "generate_fstab" => {
@@ -5649,8 +6047,12 @@ impl App {
                     root: PathBuf::from(params.first().cloned().unwrap_or_default()),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "generate fstab", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "generate fstab",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "add_user" | "Add New User" => {
@@ -5674,8 +6076,12 @@ impl App {
                     sudo: params.len() >= 6 && params[5] == "true",
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "add user", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "add user",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "reset_password" => {
@@ -5697,8 +6103,12 @@ impl App {
                 };
                 let sa = ResetPasswordArgs { username, password };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "reset password", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "reset password",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "configure_network" => {
@@ -5738,8 +6148,12 @@ impl App {
                     cli_args.push(params[5].clone());
                 }
                 self.execute_via_script_args(
-                    "configure_network.sh", cli_args, vec![],
-                    "configure network", true, false,
+                    "configure_network.sh",
+                    cli_args,
+                    vec![],
+                    "configure network",
+                    true,
+                    false,
                 )
             }
             "manage_services" => {
@@ -5748,8 +6162,12 @@ impl App {
                     service: params.get(1).filter(|s| !s.is_empty()).cloned(),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "manage services", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "manage services",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "manage_groups" => {
@@ -5767,8 +6185,12 @@ impl App {
                     group: params.get(2).filter(|s| !s.is_empty()).cloned(),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "manage groups", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "manage groups",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "configure_ssh" => {
@@ -5779,8 +6201,12 @@ impl App {
                     enable_password_auth: None,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "configure SSH", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "configure SSH",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "configure_firewall" => {
@@ -5793,40 +6219,65 @@ impl App {
                     deny: false,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "configure firewall", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "configure firewall",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "security_audit" => {
                 // params: action
                 let sa = SecurityAuditArgs {
-                    action: params.first().cloned().unwrap_or_else(|| "basic".to_string()),
+                    action: params
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "basic".to_string()),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "security audit", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "security audit",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "test_network" => {
                 // params: action, timeout
                 let sa = TestNetworkArgs {
-                    action: params.first().cloned().unwrap_or_else(|| "full".to_string()),
+                    action: params
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "full".to_string()),
                     host: None,
                     timeout: params.get(1).and_then(|s| s.parse().ok()).unwrap_or(5),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "test network", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "test network",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             "network_diagnostics" => {
                 // params: action
                 let sa = NetworkDiagnosticsArgs {
-                    action: params.first().cloned().unwrap_or_else(|| "info".to_string()),
+                    action: params
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "info".to_string()),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "network diagnostics", sa.is_destructive(), true,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "network diagnostics",
+                    sa.is_destructive(),
+                    true,
                 )
             }
             // === New tools (Phase 3) ===
@@ -5842,13 +6293,21 @@ impl App {
                     }
                 };
                 let password = params.get(2).cloned().unwrap_or_default();
-                let mapper_name = params.get(3).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "cryptroot".to_string());
+                let mapper_name = params
+                    .get(3)
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .unwrap_or_else(|| "cryptroot".to_string());
 
                 match action.as_str() {
                     "format" => {
                         // Create SecretFile for the password
-                        let secret = SecretFile::new(&password)
-                            .map_err(|e| anyhow::anyhow!("Failed to create temporary keyfile for LUKS format: {}", e))?;
+                        let secret = SecretFile::new(&password).map_err(|e| {
+                            anyhow::anyhow!(
+                                "Failed to create temporary keyfile for LUKS format: {}",
+                                e
+                            )
+                        })?;
                         let key_file_path = secret.path().to_path_buf();
                         // Store SecretFile on App to keep it alive during execution
                         self._active_secret_file = Some(secret);
@@ -5861,13 +6320,21 @@ impl App {
                             confirm: true,
                         };
                         self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "LUKS format", sa.is_destructive(), false,
+                            sa.script_name(),
+                            sa.to_cli_args(),
+                            sa.get_env_vars(),
+                            "LUKS format",
+                            sa.is_destructive(),
+                            false,
                         )
                     }
                     "open" => {
-                        let secret = SecretFile::new(&password)
-                            .map_err(|e| anyhow::anyhow!("Failed to create temporary keyfile for LUKS open: {}", e))?;
+                        let secret = SecretFile::new(&password).map_err(|e| {
+                            anyhow::anyhow!(
+                                "Failed to create temporary keyfile for LUKS open: {}",
+                                e
+                            )
+                        })?;
                         let key_file_path = secret.path().to_path_buf();
                         self._active_secret_file = Some(secret);
 
@@ -5877,15 +6344,23 @@ impl App {
                             key_file: key_file_path,
                         };
                         self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "LUKS open", sa.is_destructive(), true,
+                            sa.script_name(),
+                            sa.to_cli_args(),
+                            sa.get_env_vars(),
+                            "LUKS open",
+                            sa.is_destructive(),
+                            true,
                         )
                     }
                     "close" => {
                         let sa = LuksCloseArgs { mapper_name };
                         self.execute_via_script_args(
-                            sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                            "LUKS close", sa.is_destructive(), true,
+                            sa.script_name(),
+                            sa.to_cli_args(),
+                            sa.get_env_vars(),
+                            "LUKS close",
+                            sa.is_destructive(),
+                            true,
                         )
                     }
                     _ => Err(format!("Unknown encrypt action: {}", action).into()),
@@ -5894,17 +6369,31 @@ impl App {
             "enable_services" => {
                 // params: services (index 0), root (index 1) — matches dialog definition order
                 let sa = EnableServicesArgs {
-                    services: params.first().map(|s| s.split(',').map(|v| v.trim().to_string()).collect()).unwrap_or_default(),
-                    root: PathBuf::from(params.get(1).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
+                    services: params
+                        .first()
+                        .map(|s| s.split(',').map(|v| v.trim().to_string()).collect())
+                        .unwrap_or_default(),
+                    root: PathBuf::from(
+                        params
+                            .get(1)
+                            .filter(|s| !s.is_empty())
+                            .cloned()
+                            .unwrap_or_else(|| "/mnt".to_string()),
+                    ),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "enable services", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "enable services",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "rebuild_initramfs" => {
                 // params: root
-                let root = params.first()
+                let root = params
+                    .first()
                     .filter(|s| !s.is_empty())
                     .cloned()
                     .unwrap_or_else(|| "/mnt".to_string());
@@ -5919,7 +6408,8 @@ impl App {
             }
             "install_aur_helper" => {
                 // params: helper, user, root
-                let helper: AurHelper = params.first()
+                let helper: AurHelper = params
+                    .first()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(AurHelper::None);
                 let target_user = match Self::validate_required_param(&params, 1, "target user") {
@@ -5933,11 +6423,21 @@ impl App {
                 let sa = InstallAurHelperArgs {
                     helper,
                     target_user,
-                    chroot_path: PathBuf::from(params.get(2).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
+                    chroot_path: PathBuf::from(
+                        params
+                            .get(2)
+                            .filter(|s| !s.is_empty())
+                            .cloned()
+                            .unwrap_or_else(|| "/mnt".to_string()),
+                    ),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "install AUR helper", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "install AUR helper",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "install_dotfiles" => {
@@ -5966,8 +6466,12 @@ impl App {
                     backup: params.get(3).map(|s| s == "true").unwrap_or(true),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "install dotfiles", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "install dotfiles",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "run_as_user" => {
@@ -5991,12 +6495,22 @@ impl App {
                 let sa = UserRunArgs {
                     user,
                     command,
-                    chroot_path: PathBuf::from(params.get(2).filter(|s| !s.is_empty()).cloned().unwrap_or_else(|| "/mnt".to_string())),
+                    chroot_path: PathBuf::from(
+                        params
+                            .get(2)
+                            .filter(|s| !s.is_empty())
+                            .cloned()
+                            .unwrap_or_else(|| "/mnt".to_string()),
+                    ),
                     workdir: params.get(3).filter(|s| !s.is_empty()).map(PathBuf::from),
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "run as user", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "run as user",
+                    sa.is_destructive(),
+                    false,
                 )
             }
             "update_mirrors" => {
@@ -6015,13 +6529,15 @@ impl App {
                     save: true,
                 };
                 self.execute_via_script_args(
-                    sa.script_name(), sa.to_cli_args(), sa.get_env_vars(),
-                    "update mirrors", sa.is_destructive(), false,
+                    sa.script_name(),
+                    sa.to_cli_args(),
+                    sa.get_env_vars(),
+                    "update mirrors",
+                    sa.is_destructive(),
+                    false,
                 )
             }
-            _ => {
-                Err(format!("Unknown tool: {}", tool_name).into())
-            }
+            _ => Err(format!("Unknown tool: {}", tool_name).into()),
         }
     }
 }
