@@ -1303,18 +1303,18 @@ WINEOF
         fi
     fi
 
-    # Disable GRUB's internal shim_lock verifier for sbctl Secure Boot
-    # Without this, GRUB refuses to load vmlinuz when Secure Boot is on
-    # because it can't verify kernels against sbctl's custom signing keys
+    # Disable GRUB's internal shim_lock verifier unconditionally.
+    # ArchTUI uses sbctl for Secure Boot (not shim), so the verifier always
+    # fails. Some firmware (VirtualBox, certain UEFI) reports Secure Boot
+    # active even when unmanaged, triggering the verifier and dropping to
+    # grub rescue. Safe to disable — only needed with shim-signed.
     # https://wiki.archlinux.org/title/GRUB#Secure_Boot
-    if [[ "${SECURE_BOOT:-No}" == "Yes" ]]; then
-        if ! grep -q "^GRUB_DISABLE_SHIM_LOCK=y" "$grub_default"; then
-            echo "GRUB_DISABLE_SHIM_LOCK=y" >> "$grub_default" || {
-                log_error "Failed to write GRUB_DISABLE_SHIM_LOCK to $grub_default"
-                return 1
-            }
-            log_info "Disabled GRUB shim_lock for sbctl Secure Boot"
-        fi
+    if ! grep -q "^GRUB_DISABLE_SHIM_LOCK=y" "$grub_default"; then
+        echo "GRUB_DISABLE_SHIM_LOCK=y" >> "$grub_default" || {
+            log_error "Failed to write GRUB_DISABLE_SHIM_LOCK to $grub_default"
+            return 1
+        }
+        log_info "Disabled GRUB shim_lock verifier"
     fi
 
     # Configure GRUB theme if requested (cosmetic — must not block grub-mkconfig)
