@@ -126,7 +126,11 @@ impl HardwareInfo {
             }
         };
 
-        tracing::info!("Hardware detection: firmware={}, network={}", firmware, network);
+        tracing::info!(
+            "Hardware detection: firmware={}, network={}",
+            firmware,
+            network
+        );
 
         Self { firmware, network }
     }
@@ -139,8 +143,7 @@ impl HardwareInfo {
             crate::types::Bootloader::SystemdBoot
             | crate::types::Bootloader::Refind
             | crate::types::Bootloader::Efistub => self.firmware.is_uefi(),
-            crate::types::Bootloader::Grub
-            | crate::types::Bootloader::Limine => true,
+            crate::types::Bootloader::Grub | crate::types::Bootloader::Limine => true,
         }
     }
 }

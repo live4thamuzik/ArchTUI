@@ -109,7 +109,12 @@ impl KeybindingContext {
             AppMode::MainMenu,
             vec![
                 Keybinding::new(KeyCode::Up, KeyAction::NavigateUp, "Up", "Navigate up"),
-                Keybinding::new(KeyCode::Down, KeyAction::NavigateDown, "Down", "Navigate down"),
+                Keybinding::new(
+                    KeyCode::Down,
+                    KeyAction::NavigateDown,
+                    "Down",
+                    "Navigate down",
+                ),
                 Keybinding::new(KeyCode::Enter, KeyAction::Select, "Enter", "Select"),
             ],
         );
@@ -119,13 +124,23 @@ impl KeybindingContext {
             AppMode::GuidedInstaller,
             vec![
                 Keybinding::new(KeyCode::Up, KeyAction::NavigateUp, "Up", "Navigate up"),
-                Keybinding::new(KeyCode::Down, KeyAction::NavigateDown, "Down", "Navigate down"),
+                Keybinding::new(
+                    KeyCode::Down,
+                    KeyAction::NavigateDown,
+                    "Down",
+                    "Navigate down",
+                ),
                 Keybinding::new(KeyCode::PageUp, KeyAction::PageUp, "PgUp", "Page up"),
                 Keybinding::new(KeyCode::PageDown, KeyAction::PageDown, "PgDn", "Page down"),
                 Keybinding::new(KeyCode::Home, KeyAction::Home, "Home", "Go to first"),
                 Keybinding::new(KeyCode::End, KeyAction::End, "End", "Go to last"),
                 Keybinding::new(KeyCode::Enter, KeyAction::Select, "Enter", "Configure"),
-                Keybinding::new(KeyCode::Char(' '), KeyAction::StartInstall, "Space", "Start install"),
+                Keybinding::new(
+                    KeyCode::Char(' '),
+                    KeyAction::StartInstall,
+                    "Space",
+                    "Start install",
+                ),
                 Keybinding::new(KeyCode::Char('b'), KeyAction::Back, "B", "Back"),
             ],
         );
@@ -133,7 +148,12 @@ impl KeybindingContext {
         // Tools Menu and submenus
         let tools_bindings = vec![
             Keybinding::new(KeyCode::Up, KeyAction::NavigateUp, "Up", "Navigate up"),
-            Keybinding::new(KeyCode::Down, KeyAction::NavigateDown, "Down", "Navigate down"),
+            Keybinding::new(
+                KeyCode::Down,
+                KeyAction::NavigateDown,
+                "Down",
+                "Navigate down",
+            ),
             Keybinding::new(KeyCode::Enter, KeyAction::Select, "Enter", "Select"),
             Keybinding::new(KeyCode::Char('b'), KeyAction::Back, "B", "Back"),
         ];
@@ -297,11 +317,9 @@ impl KeybindingContext {
                 KeyAction::ScrollDown,
                 KeyAction::Dismiss,
             ],
-            AppMode::Installation => vec![
-                KeyAction::ScrollUp,
-                KeyAction::ScrollDown,
-                KeyAction::Quit,
-            ],
+            AppMode::Installation => {
+                vec![KeyAction::ScrollUp, KeyAction::ScrollDown, KeyAction::Quit]
+            }
             AppMode::Complete => vec![KeyAction::Dismiss, KeyAction::Back, KeyAction::Quit],
             AppMode::ToolDialog => vec![
                 KeyAction::NavigateUp,
@@ -321,11 +339,9 @@ impl KeybindingContext {
                 KeyAction::Select,
                 KeyAction::Dismiss,
             ],
-            AppMode::ConfirmDialog => vec![
-                KeyAction::Toggle,
-                KeyAction::Confirm,
-                KeyAction::Cancel,
-            ],
+            AppMode::ConfirmDialog => {
+                vec![KeyAction::Toggle, KeyAction::Confirm, KeyAction::Cancel]
+            }
             AppMode::DryRunSummary => vec![
                 KeyAction::ScrollUp,
                 KeyAction::ScrollDown,
@@ -439,7 +455,12 @@ impl KeybindingContext {
         let general_bindings: Vec<_> = self
             .get_bindings(mode)
             .into_iter()
-            .filter(|b| matches!(b.action, KeyAction::Back | KeyAction::Help | KeyAction::Quit))
+            .filter(|b| {
+                matches!(
+                    b.action,
+                    KeyAction::Back | KeyAction::Help | KeyAction::Quit
+                )
+            })
             .collect();
 
         if !general_bindings.is_empty() {

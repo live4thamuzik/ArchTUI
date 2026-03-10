@@ -46,7 +46,11 @@ impl fmt::Display for PostInstallResult {
         match self {
             Self::Success => write!(f, "All post-install operations succeeded"),
             Self::PartialSuccess(warnings) => {
-                write!(f, "Post-install completed with {} warning(s)", warnings.len())
+                write!(
+                    f,
+                    "Post-install completed with {} warning(s)",
+                    warnings.len()
+                )
             }
             Self::Skipped => write!(f, "No post-install operations to run"),
         }
@@ -169,11 +173,7 @@ pub fn install_aur_helper_safe(
 ///
 /// - `Ok(())` — Dotfiles cloned successfully
 /// - `Err(String)` — Cloning failed (message for logging)
-pub fn clone_dotfiles_safe(
-    repo_url: &str,
-    user: &str,
-    branch: Option<&str>,
-) -> Result<(), String> {
+pub fn clone_dotfiles_safe(repo_url: &str, user: &str, branch: Option<&str>) -> Result<(), String> {
     tracing::info!("Cloning dotfiles from {} for user {}", repo_url, user);
 
     let args = CloneDotfilesArgs {
@@ -234,11 +234,9 @@ pub fn run_postinstall(config: &PostInstallConfig) -> PostInstallResult {
     // 1. AUR helper
     if config.aur_helper != AurHelper::None {
         did_something = true;
-        if let Err(msg) = install_aur_helper_safe(
-            config.aur_helper,
-            &config.target_user,
-            &config.chroot_path,
-        ) {
+        if let Err(msg) =
+            install_aur_helper_safe(config.aur_helper, &config.target_user, &config.chroot_path)
+        {
             warnings.push(msg);
         }
     }
@@ -246,11 +244,9 @@ pub fn run_postinstall(config: &PostInstallConfig) -> PostInstallResult {
     // 2. Dotfiles
     if let Some(ref repo) = config.dotfiles_repo {
         did_something = true;
-        if let Err(msg) = clone_dotfiles_safe(
-            repo,
-            &config.target_user,
-            config.dotfiles_branch.as_deref(),
-        ) {
+        if let Err(msg) =
+            clone_dotfiles_safe(repo, &config.target_user, config.dotfiles_branch.as_deref())
+        {
             warnings.push(msg);
         }
     }
@@ -286,11 +282,7 @@ mod tests {
 
     #[test]
     fn test_install_aur_helper_none_skips() {
-        let result = install_aur_helper_safe(
-            AurHelper::None,
-            "user",
-            &PathBuf::from("/mnt"),
-        );
+        let result = install_aur_helper_safe(AurHelper::None, "user", &PathBuf::from("/mnt"));
         assert!(result.is_ok());
     }
 
@@ -310,10 +302,7 @@ mod tests {
     #[test]
     fn test_postinstall_result_display() {
         let success = PostInstallResult::Success;
-        assert_eq!(
-            success.to_string(),
-            "All post-install operations succeeded"
-        );
+        assert_eq!(success.to_string(), "All post-install operations succeeded");
 
         let partial = PostInstallResult::PartialSuccess(vec!["warn1".to_string()]);
         assert_eq!(

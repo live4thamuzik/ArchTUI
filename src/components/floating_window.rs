@@ -7,11 +7,11 @@
 use crate::scrolling::ScrollState;
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::Line,
     widgets::{Block, Borders, Clear, Gauge, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 /// Configuration for a floating window
@@ -89,15 +89,20 @@ impl FloatingWindow {
     }
 
     /// Render the floating window with text content
-    pub fn render_text(&self, f: &mut Frame, parent: Rect, content: &[String], footer: Option<&str>) {
+    pub fn render_text(
+        &self,
+        f: &mut Frame,
+        parent: Rect,
+        content: &[String],
+        footer: Option<&str>,
+    ) {
         let area = self.calculate_area(parent);
 
         // Clear the area behind the window
         f.render_widget(Clear, area);
 
         // Draw background
-        let bg_block = Block::default()
-            .style(Style::default().bg(Colors::BG_PRIMARY));
+        let bg_block = Block::default().style(Style::default().bg(Colors::BG_PRIMARY));
         f.render_widget(bg_block, area);
 
         // Create layout
@@ -119,20 +124,25 @@ impl FloatingWindow {
 
         // Draw content area with border
         let content_area = chunks[0];
-        let title = if self.config.show_scroll_indicator && content.len() > content_area.height as usize {
-            let visible = content_area.height.saturating_sub(2) as usize;
-            let current_page = (self.scroll_state.offset / visible.max(1)) + 1;
-            let total_pages = (content.len() / visible.max(1)) + 1;
-            format!("{} ({}/{})", self.config.title, current_page, total_pages)
-        } else {
-            self.config.title.clone()
-        };
+        let title =
+            if self.config.show_scroll_indicator && content.len() > content_area.height as usize {
+                let visible = content_area.height.saturating_sub(2) as usize;
+                let current_page = (self.scroll_state.offset / visible.max(1)) + 1;
+                let total_pages = (content.len() / visible.max(1)) + 1;
+                format!("{} ({}/{})", self.config.title, current_page, total_pages)
+            } else {
+                self.config.title.clone()
+            };
 
         let block = if self.config.has_border {
             Block::default()
                 .borders(Borders::ALL)
                 .title(title)
-                .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                .title_style(
+                    Style::default()
+                        .fg(Colors::PRIMARY)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .border_style(Style::default().fg(Colors::PRIMARY))
                 .style(Style::default().bg(Colors::BG_PRIMARY))
         } else {
@@ -169,15 +179,20 @@ impl FloatingWindow {
     }
 
     /// Render the floating window with styled lines
-    pub fn render_lines(&self, f: &mut Frame, parent: Rect, content: &[Line], footer: Option<&str>) {
+    pub fn render_lines(
+        &self,
+        f: &mut Frame,
+        parent: Rect,
+        content: &[Line],
+        footer: Option<&str>,
+    ) {
         let area = self.calculate_area(parent);
 
         // Clear the area behind the window
         f.render_widget(Clear, area);
 
         // Draw background
-        let bg_block = Block::default()
-            .style(Style::default().bg(Colors::BG_PRIMARY));
+        let bg_block = Block::default().style(Style::default().bg(Colors::BG_PRIMARY));
         f.render_widget(bg_block, area);
 
         // Create layout
@@ -185,10 +200,7 @@ impl FloatingWindow {
         let chunks = if has_footer {
             Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(1),
-                    Constraint::Length(1),
-                ])
+                .constraints([Constraint::Min(1), Constraint::Length(1)])
                 .split(area)
         } else {
             Layout::default()
@@ -203,7 +215,11 @@ impl FloatingWindow {
             Block::default()
                 .borders(Borders::ALL)
                 .title(self.config.title.clone())
-                .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                .title_style(
+                    Style::default()
+                        .fg(Colors::PRIMARY)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .border_style(Style::default().fg(Colors::PRIMARY))
                 .style(Style::default().bg(Colors::BG_PRIMARY))
         } else {
@@ -249,8 +265,7 @@ impl FloatingWindow {
         f.render_widget(Clear, area);
 
         // Draw background
-        let bg_block = Block::default()
-            .style(Style::default().bg(Colors::BG_PRIMARY));
+        let bg_block = Block::default().style(Style::default().bg(Colors::BG_PRIMARY));
         f.render_widget(bg_block, area);
 
         // Create layout with progress bar
@@ -269,11 +284,19 @@ impl FloatingWindow {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(self.config.title.clone())
-                    .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                    .title_style(
+                        Style::default()
+                            .fg(Colors::PRIMARY)
+                            .add_modifier(Modifier::BOLD),
+                    )
                     .border_style(Style::default().fg(Colors::PRIMARY))
                     .style(Style::default().bg(Colors::BG_PRIMARY)),
             )
-            .gauge_style(Style::default().fg(Colors::SUCCESS).bg(Colors::BG_SECONDARY))
+            .gauge_style(
+                Style::default()
+                    .fg(Colors::SUCCESS)
+                    .bg(Colors::BG_SECONDARY),
+            )
             .percent(progress as u16)
             .label(format!("{}%", progress));
         f.render_widget(gauge, chunks[0]);
@@ -299,7 +322,9 @@ impl FloatingWindow {
                 } else if line.contains("WARNING") || line.contains("warning") {
                     Style::default().fg(Colors::WARNING)
                 } else if line.starts_with("==>") || line.starts_with("::") {
-                    Style::default().fg(Colors::INFO).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Colors::INFO)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Colors::FG_PRIMARY)
                 };

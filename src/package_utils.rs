@@ -89,7 +89,10 @@ pub fn search_aur_packages(search_term: &str) -> Result<Vec<Package>, String> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
-        return Err("Search term may only contain alphanumeric characters, hyphens, underscores, and dots".to_string());
+        return Err(
+            "Search term may only contain alphanumeric characters, hyphens, underscores, and dots"
+                .to_string(),
+        );
     }
 
     let url = format!(

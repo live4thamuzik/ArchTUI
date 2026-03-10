@@ -12,11 +12,11 @@
 
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 use std::path::PathBuf;
 
@@ -171,7 +171,12 @@ pub fn render_disk_select_screen(
     // Safety warning
     let warning_lines = vec![
         Line::from(vec![
-            Span::styled("  WARNING: ", Style::default().fg(Colors::ERROR).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  WARNING: ",
+                Style::default()
+                    .fg(Colors::ERROR)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(
                 "The selected disk will be COMPLETELY ERASED!",
                 Style::default().fg(Colors::ERROR),
@@ -188,12 +193,12 @@ pub fn render_disk_select_screen(
 
     // Disk list
     if state.loading {
-        let loading = Paragraph::new("  Detecting disks...")
-            .style(Style::default().fg(Colors::FG_SECONDARY));
+        let loading =
+            Paragraph::new("  Detecting disks...").style(Style::default().fg(Colors::FG_SECONDARY));
         f.render_widget(loading, chunks[2]);
     } else if let Some(ref err) = state.error {
-        let error = Paragraph::new(format!("  Error: {}", err))
-            .style(Style::default().fg(Colors::ERROR));
+        let error =
+            Paragraph::new(format!("  Error: {}", err)).style(Style::default().fg(Colors::ERROR));
         f.render_widget(error, chunks[2]);
     } else if state.disks.is_empty() {
         let no_disks = Paragraph::new("  No disks detected. Check your hardware.")
@@ -248,11 +253,26 @@ pub fn render_disk_select_screen(
 
     // Instructions
     let instructions = Paragraph::new(vec![Line::from(vec![
-        Span::styled(" [Enter] ", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " [Enter] ",
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("Select  "),
-        Span::styled(" [j/k] ", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " [j/k] ",
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("Navigate  "),
-        Span::styled(" [Esc] ", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " [Esc] ",
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("Back"),
     ])])
     .alignment(Alignment::Center)
@@ -307,7 +327,10 @@ impl UserConfigField {
 
     /// Check if field is required.
     pub fn is_required(&self) -> bool {
-        matches!(self, Self::Hostname | Self::Username | Self::Password | Self::ConfirmPassword)
+        matches!(
+            self,
+            Self::Hostname | Self::Username | Self::Password | Self::ConfirmPassword
+        )
     }
 }
 
@@ -392,7 +415,11 @@ impl UserConfigState {
         if self.hostname.len() > 63 {
             return Err("Hostname must be 63 characters or less".to_string());
         }
-        if !self.hostname.chars().all(|c| c.is_alphanumeric() || c == '-') {
+        if !self
+            .hostname
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-')
+        {
             return Err("Hostname can only contain letters, numbers, and hyphens".to_string());
         }
 
@@ -402,8 +429,14 @@ impl UserConfigState {
         if self.username.starts_with(|c: char| c.is_numeric()) {
             return Err("Username cannot start with a number".to_string());
         }
-        if !self.username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
-            return Err("Username can only contain letters, numbers, underscores, and hyphens".to_string());
+        if !self
+            .username
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(
+                "Username can only contain letters, numbers, underscores, and hyphens".to_string(),
+            );
         }
 
         if self.password.is_empty() {
@@ -423,18 +456,14 @@ impl UserConfigState {
 }
 
 /// Render the user configuration screen.
-pub fn render_user_config_screen(
-    f: &mut Frame,
-    area: Rect,
-    state: &UserConfigState,
-) {
+pub fn render_user_config_screen(f: &mut Frame, area: Rect, state: &UserConfigState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Min(15),    // Form fields
-            Constraint::Length(3),  // Error/status
-            Constraint::Length(3),  // Instructions
+            Constraint::Length(3), // Title
+            Constraint::Min(15),   // Form fields
+            Constraint::Length(3), // Error/status
+            Constraint::Length(3), // Instructions
         ])
         .split(area);
 
@@ -477,7 +506,9 @@ pub fn render_user_config_screen(
         let is_required = field.is_required();
 
         let label_style = if is_current {
-            Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD)
         } else if is_required && value.is_empty() {
             Style::default().fg(Colors::WARNING)
         } else {
@@ -507,9 +538,11 @@ pub fn render_user_config_screen(
             Style::default().fg(Colors::BORDER_INACTIVE)
         };
 
-        let field_widget = Paragraph::new(field_text)
-            .style(label_style)
-            .block(Block::default().borders(Borders::ALL).border_style(border_style));
+        let field_widget = Paragraph::new(field_text).style(label_style).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style),
+        );
 
         f.render_widget(field_widget, form_chunks[i]);
     }
@@ -517,32 +550,47 @@ pub fn render_user_config_screen(
     // Sudo checkbox
     let sudo_marker = if state.sudo_enabled { "[x]" } else { "[ ]" };
     let sudo_style = Style::default().fg(Colors::FG_PRIMARY);
-    let sudo = Paragraph::new(format!("  {} Enable sudo access for user", sudo_marker))
-        .style(sudo_style);
+    let sudo =
+        Paragraph::new(format!("  {} Enable sudo access for user", sudo_marker)).style(sudo_style);
     f.render_widget(sudo, form_chunks[5]);
 
     // Error/status
     if let Some(ref error) = state.error {
-        let error_widget = Paragraph::new(format!("  Error: {}", error))
-            .style(Style::default().fg(Colors::ERROR));
+        let error_widget =
+            Paragraph::new(format!("  Error: {}", error)).style(Style::default().fg(Colors::ERROR));
         f.render_widget(error_widget, chunks[2]);
     } else if state.is_valid() {
-        let valid = Paragraph::new("  Configuration valid")
-            .style(Style::default().fg(Colors::SUCCESS));
+        let valid =
+            Paragraph::new("  Configuration valid").style(Style::default().fg(Colors::SUCCESS));
         f.render_widget(valid, chunks[2]);
     } else {
-        let hint = Paragraph::new("  * Required fields")
-            .style(Style::default().fg(Colors::FG_SECONDARY));
+        let hint =
+            Paragraph::new("  * Required fields").style(Style::default().fg(Colors::FG_SECONDARY));
         f.render_widget(hint, chunks[2]);
     }
 
     // Instructions
     let instructions = Paragraph::new(vec![Line::from(vec![
-        Span::styled(" [Tab] ", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " [Tab] ",
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("Next field  "),
-        Span::styled(" [Shift+Tab] ", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " [Shift+Tab] ",
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("Previous  "),
-        Span::styled(" [Enter] ", Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " [Enter] ",
+            Style::default()
+                .fg(Colors::PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw("Continue"),
     ])])
     .alignment(Alignment::Center)

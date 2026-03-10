@@ -145,11 +145,10 @@ fn tool_parameter_strategy() -> impl Strategy<Value = ToolParameter> {
         any::<i32>().prop_map(ToolParameter::Number),
         any::<bool>().prop_map(ToolParameter::Boolean),
         any::<String>().prop_map(ToolParameter::Password),
-        (prop::collection::vec(any::<String>(), 1..5), 0usize..5)
-            .prop_map(|(opts, idx)| {
-                let safe_idx = idx.min(opts.len().saturating_sub(1));
-                ToolParameter::Selection(opts, safe_idx)
-            }),
+        (prop::collection::vec(any::<String>(), 1..5), 0usize..5).prop_map(|(opts, idx)| {
+            let safe_idx = idx.min(opts.len().saturating_sub(1));
+            ToolParameter::Selection(opts, safe_idx)
+        }),
     ]
 }
 

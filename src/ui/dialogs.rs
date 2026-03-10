@@ -7,6 +7,7 @@ use crate::components::confirm_dialog::ConfirmDialog;
 use crate::components::floating_window::{FloatingWindow, FloatingWindowConfig};
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
@@ -14,33 +15,30 @@ use ratatui::{
         Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Scrollbar,
         ScrollbarOrientation, ScrollbarState, Wrap,
     },
-    Frame,
 };
 
 /// Convert snake_case to Title Case
 fn snake_to_title_case(s: &str) -> String {
     s.split('_')
         .filter(|w| !w.is_empty())
-        .map(|w| {
-            match w.to_ascii_lowercase().as_str() {
-                "ip" => "IP".to_string(),
-                "efi" => "EFI".to_string(),
-                "ssh" => "SSH".to_string(),
-                "url" => "URL".to_string(),
-                "json" => "JSON".to_string(),
-                "dns" => "DNS".to_string(),
-                "uuid" => "UUID".to_string(),
-                "aur" => "AUR".to_string(),
-                "usb" => "USB".to_string(),
-                _ => {
-                    let mut chars = w.chars();
-                    match chars.next() {
-                        Some(c) => {
-                            let upper: String = c.to_uppercase().collect();
-                            format!("{}{}", upper, chars.as_str())
-                        }
-                        None => String::new(),
+        .map(|w| match w.to_ascii_lowercase().as_str() {
+            "ip" => "IP".to_string(),
+            "efi" => "EFI".to_string(),
+            "ssh" => "SSH".to_string(),
+            "url" => "URL".to_string(),
+            "json" => "JSON".to_string(),
+            "dns" => "DNS".to_string(),
+            "uuid" => "UUID".to_string(),
+            "aur" => "AUR".to_string(),
+            "usb" => "USB".to_string(),
+            _ => {
+                let mut chars = w.chars();
+                match chars.next() {
+                    Some(c) => {
+                        let upper: String = c.to_uppercase().collect();
+                        format!("{}{}", upper, chars.as_str())
                     }
+                    None => String::new(),
                 }
             }
         })
@@ -71,11 +69,7 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
         f.render_widget(Clear, dialog_rect);
 
         let title = format!(" {} ", snake_to_title_case(&dialog.tool_name));
-        let pos = format!(
-            " {}/{} ",
-            dialog.current_param + 1,
-            dialog.parameters.len()
-        );
+        let pos = format!(" {}/{} ", dialog.current_param + 1, dialog.parameters.len());
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -258,7 +252,11 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
             String::new()
         };
 
-        let desc_title = if has_layout { " Disk Layout " } else { " Description " };
+        let desc_title = if has_layout {
+            " Disk Layout "
+        } else {
+            " Description "
+        };
 
         let desc_block = Block::default()
             .borders(Borders::ALL)
@@ -269,11 +267,14 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
                 Colors::BORDER_INACTIVE
             }))
             .title(Line::from(vec![
-                Span::styled("\u{2500}", Style::default().fg(if has_layout {
-                    Colors::BORDER_ACTIVE
-                } else {
-                    Colors::BORDER_INACTIVE
-                })),
+                Span::styled(
+                    "\u{2500}",
+                    Style::default().fg(if has_layout {
+                        Colors::BORDER_ACTIVE
+                    } else {
+                        Colors::BORDER_INACTIVE
+                    }),
+                ),
                 Span::styled(
                     desc_title,
                     Style::default().fg(if has_layout {
@@ -282,11 +283,14 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
                         Colors::FG_MUTED
                     }),
                 ),
-                Span::styled("\u{2500}", Style::default().fg(if has_layout {
-                    Colors::BORDER_ACTIVE
-                } else {
-                    Colors::BORDER_INACTIVE
-                })),
+                Span::styled(
+                    "\u{2500}",
+                    Style::default().fg(if has_layout {
+                        Colors::BORDER_ACTIVE
+                    } else {
+                        Colors::BORDER_INACTIVE
+                    }),
+                ),
             ]))
             .style(Style::default().bg(Colors::BG_PRIMARY));
 
@@ -302,7 +306,9 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
             for layout_line in &state.disk_layout {
                 let style = if layout_line.contains("NAME") || layout_line.starts_with("  ─") {
                     Style::default().fg(Colors::FG_MUTED)
-                } else if layout_line.contains("Disk model:") || layout_line.contains("Disklabel type:") {
+                } else if layout_line.contains("Disk model:")
+                    || layout_line.contains("Disklabel type:")
+                {
                     Style::default().fg(Colors::SECONDARY)
                 } else {
                     Style::default().fg(Colors::FG_PRIMARY)
@@ -325,15 +331,9 @@ pub fn render_tool_dialog(f: &mut Frame, state: &AppState) {
         let instructions = Line::from(vec![
             Span::styled("Enter", Style::default().fg(Colors::SECONDARY)),
             Span::styled(enter_label, Style::default().fg(Colors::FG_MUTED)),
-            Span::styled(
-                "\u{2191}\u{2193}",
-                Style::default().fg(Colors::SECONDARY),
-            ),
+            Span::styled("\u{2191}\u{2193}", Style::default().fg(Colors::SECONDARY)),
             Span::styled(" Navigate  ", Style::default().fg(Colors::FG_MUTED)),
-            Span::styled(
-                "\u{2190}\u{2192}",
-                Style::default().fg(Colors::SECONDARY),
-            ),
+            Span::styled("\u{2190}\u{2192}", Style::default().fg(Colors::SECONDARY)),
             Span::styled(" Change  ", Style::default().fg(Colors::FG_MUTED)),
             Span::styled("Esc", Style::default().fg(Colors::SECONDARY)),
             Span::styled(" Back", Style::default().fg(Colors::FG_MUTED)),
@@ -358,13 +358,7 @@ pub fn render_floating_output(f: &mut Frame, state: &AppState) {
         window.set_scroll_offset(output.scroll_offset);
 
         if let Some(progress) = output.progress {
-            window.render_with_progress(
-                f,
-                f.area(),
-                &output.content,
-                progress,
-                &output.status,
-            );
+            window.render_with_progress(f, f.area(), &output.content, progress, &output.status);
         } else {
             window.render_text(
                 f,
@@ -472,8 +466,7 @@ pub fn render_file_browser(f: &mut Frame, state: &AppState) {
         // Scrollbar on file list
         let total_entries = browser.entries.len();
         if total_entries > visible_height {
-            let mut scrollbar_state =
-                ScrollbarState::new(total_entries).position(browser.selected);
+            let mut scrollbar_state = ScrollbarState::new(total_entries).position(browser.selected);
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(None)
                 .end_symbol(None)
@@ -607,10 +600,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
             crate::input::InputType::PasswordInput { .. } => {
                 let input_text = dialog.get_display_value();
                 let display_text = if input_text.is_empty() {
-                    Span::styled(
-                        "Enter password..._",
-                        Style::default().fg(Colors::FG_MUTED),
-                    )
+                    Span::styled("Enter password..._", Style::default().fg(Colors::FG_MUTED))
                 } else {
                     Span::styled(
                         format!("{}_", input_text),
@@ -621,13 +611,25 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     .style(Style::default().bg(Colors::BG_PRIMARY));
                 f.render_widget(input_widget, content_area);
             }
-            crate::input::InputType::Selection { scroll_state, options, .. } => {
+            crate::input::InputType::Selection {
+                scroll_state,
+                options,
+                ..
+            } => {
                 let (start, end) = scroll_state.visible_range();
-                let items: Vec<ListItem> = options.iter().enumerate()
-                    .skip(start).take(end - start)
+                let items: Vec<ListItem> = options
+                    .iter()
+                    .enumerate()
+                    .skip(start)
+                    .take(end - start)
                     .map(|(index, option)| {
                         let (indicator, style) = if index == selected_index {
-                            ("\u{25b8} ", Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD))
+                            (
+                                "\u{25b8} ",
+                                Style::default()
+                                    .fg(Colors::SECONDARY)
+                                    .add_modifier(Modifier::BOLD),
+                            )
                         } else {
                             ("  ", Style::default().fg(Colors::FG_PRIMARY))
                         };
@@ -640,11 +642,20 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                 let list = List::new(items).style(Style::default().bg(Colors::BG_PRIMARY));
                 f.render_widget(list, content_area);
             }
-            crate::input::InputType::DiskSelection { available_disks, .. } => {
-                let items: Vec<ListItem> = available_disks.iter().enumerate()
+            crate::input::InputType::DiskSelection {
+                available_disks, ..
+            } => {
+                let items: Vec<ListItem> = available_disks
+                    .iter()
+                    .enumerate()
                     .map(|(index, disk)| {
                         let (indicator, style) = if index == selected_index {
-                            ("\u{25b8} ", Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD))
+                            (
+                                "\u{25b8} ",
+                                Style::default()
+                                    .fg(Colors::SECONDARY)
+                                    .add_modifier(Modifier::BOLD),
+                            )
                         } else {
                             ("  ", Style::default().fg(Colors::FG_PRIMARY))
                         };
@@ -658,18 +669,37 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                 f.render_widget(list, content_area);
             }
             crate::input::InputType::PackageSelection {
-                current_input, output_lines, scroll_offset,
-                package_list, show_search_results, search_results,
-                list_state, is_pacman, ..
+                current_input,
+                output_lines,
+                scroll_offset,
+                package_list,
+                show_search_results,
+                search_results,
+                list_state,
+                is_pacman,
+                ..
             } => {
                 if *show_search_results && !search_results.is_empty() {
-                    let package_items: Vec<ListItem> = search_results.iter()
+                    let package_items: Vec<ListItem> = search_results
+                        .iter()
                         .map(|p| {
-                            let is_selected = package_list.split_whitespace().any(|pkg| pkg == p.name);
-                            let status = if is_selected { "[\u{2713}]" } else if p.installed { "[I]" } else { "[ ]" };
-                            let text = format!("{} {}/{} ({}) - {}", status, p.repo, p.name, p.version, p.description);
+                            let is_selected =
+                                package_list.split_whitespace().any(|pkg| pkg == p.name);
+                            let status = if is_selected {
+                                "[\u{2713}]"
+                            } else if p.installed {
+                                "[I]"
+                            } else {
+                                "[ ]"
+                            };
+                            let text = format!(
+                                "{} {}/{} ({}) - {}",
+                                status, p.repo, p.name, p.version, p.description
+                            );
                             let style = if is_selected {
-                                Style::default().fg(Colors::SUCCESS).add_modifier(Modifier::BOLD)
+                                Style::default()
+                                    .fg(Colors::SUCCESS)
+                                    .add_modifier(Modifier::BOLD)
                             } else {
                                 Style::default().fg(Colors::FG_PRIMARY)
                             };
@@ -687,7 +717,11 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                         .style(Style::default().bg(Colors::BG_PRIMARY));
                     let search_list = List::new(package_items)
                         .block(results_block)
-                        .highlight_style(Style::default().fg(Colors::SUCCESS_LIGHT).add_modifier(Modifier::BOLD))
+                        .highlight_style(
+                            Style::default()
+                                .fg(Colors::SUCCESS_LIGHT)
+                                .add_modifier(Modifier::BOLD),
+                        )
                         .highlight_symbol(">> ");
                     f.render_stateful_widget(search_list, content_area, list_state);
                 } else {
@@ -712,18 +746,32 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     f.render_widget(Paragraph::new(help_line).block(help_block), cmd_chunks[0]);
                     let output_area = cmd_chunks[1];
                     let visible_height = output_area.height as usize;
-                    let mut list_items: Vec<ListItem> = output_lines.iter()
+                    let mut list_items: Vec<ListItem> = output_lines
+                        .iter()
                         .skip(*scroll_offset)
                         .take(visible_height.saturating_sub(1))
-                        .map(|line| ListItem::new(line.as_str()).style(Style::default().fg(Colors::FG_PRIMARY)))
+                        .map(|line| {
+                            ListItem::new(line.as_str())
+                                .style(Style::default().fg(Colors::FG_PRIMARY))
+                        })
                         .collect();
-                    let prompt = if *is_pacman { "Package selection> " } else { "AUR package selection> " };
+                    let prompt = if *is_pacman {
+                        "Package selection> "
+                    } else {
+                        "AUR package selection> "
+                    };
                     let input_line = Line::from(vec![
                         Span::styled(prompt, Style::default().fg(Colors::SECONDARY)),
-                        Span::styled(format!("{}_", current_input), Style::default().fg(Colors::FG_PRIMARY)),
+                        Span::styled(
+                            format!("{}_", current_input),
+                            Style::default().fg(Colors::FG_PRIMARY),
+                        ),
                     ]);
                     list_items.push(ListItem::new(input_line));
-                    f.render_widget(List::new(list_items).style(Style::default().bg(Colors::BG_PRIMARY)), output_area);
+                    f.render_widget(
+                        List::new(list_items).style(Style::default().bg(Colors::BG_PRIMARY)),
+                        output_area,
+                    );
                 }
             }
             crate::input::InputType::Warning { message, .. } => {
@@ -735,20 +783,38 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                 f.render_widget(warning_widget, content_area);
             }
             crate::input::InputType::MultiDiskSelection {
-                selected_disks, available_disks, scroll_state, min_disks, max_disks, ..
+                selected_disks,
+                available_disks,
+                scroll_state,
+                min_disks,
+                max_disks,
+                ..
             } => {
-                let counter_text = format!(" Selected: {}/{} (Min: {}, Max: {}) ", selected_disks.len(), max_disks, min_disks, max_disks);
+                let counter_text = format!(
+                    " Selected: {}/{} (Min: {}, Max: {}) ",
+                    selected_disks.len(),
+                    max_disks,
+                    min_disks,
+                    max_disks
+                );
                 let counter_block = Block::default()
                     .borders(Borders::BOTTOM)
                     .border_style(Style::default().fg(Colors::FG_MUTED))
-                    .title_top(Span::styled(counter_text, Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD)))
+                    .title_top(Span::styled(
+                        counter_text,
+                        Style::default()
+                            .fg(Colors::PRIMARY)
+                            .add_modifier(Modifier::BOLD),
+                    ))
                     .style(Style::default().bg(Colors::BG_PRIMARY));
                 let multi_chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([Constraint::Length(2), Constraint::Min(0)])
                     .split(content_area);
                 f.render_widget(counter_block, multi_chunks[0]);
-                let items: Vec<ListItem> = available_disks.iter().enumerate()
+                let items: Vec<ListItem> = available_disks
+                    .iter()
+                    .enumerate()
                     .map(|(i, disk)| {
                         let is_selected = selected_disks.contains(disk);
                         let is_cursor = i == scroll_state.selected_index;
@@ -756,9 +822,13 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                         let checkbox = if is_selected { "[x]" } else { "[ ]" };
                         let item_text = format!("{}{} {}", indicator, checkbox, disk);
                         let style = if is_cursor && is_selected {
-                            Style::default().fg(Colors::SUCCESS).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Colors::SUCCESS)
+                                .add_modifier(Modifier::BOLD)
                         } else if is_cursor {
-                            Style::default().fg(Colors::SECONDARY).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(Colors::SECONDARY)
+                                .add_modifier(Modifier::BOLD)
                         } else if is_selected {
                             Style::default().fg(Colors::SUCCESS)
                         } else {
@@ -767,7 +837,10 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                         ListItem::new(item_text).style(style)
                     })
                     .collect();
-                f.render_widget(List::new(items).style(Style::default().bg(Colors::BG_PRIMARY)), multi_chunks[1]);
+                f.render_widget(
+                    List::new(items).style(Style::default().bg(Colors::BG_PRIMARY)),
+                    multi_chunks[1],
+                );
             }
         }
 

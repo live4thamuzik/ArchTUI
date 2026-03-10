@@ -29,42 +29,39 @@ mod types;
 mod ui;
 
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use tracing::{debug, error, info};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::stdout;
 use std::path::PathBuf;
+use tracing::{debug, error, info};
 
 use crate::cli::Cli;
 use crate::config_file::InstallationConfig;
 use crate::process_guard::{ChildRegistry, CommandProcessGroup};
 use crate::script_runner::run_script_safe;
 use crate::script_traits::ScriptArgs;
+use crate::scripts::config::{GenFstabArgs, UserAddArgs};
 use crate::scripts::disk::{
     CheckDiskHealthArgs, FormatPartitionArgs, ManualPartitionArgs, MountPartitionsArgs,
     WipeDiskArgs, WipeMethod,
 };
-use crate::scripts::encryption::{LuksCloseArgs, LuksFormatArgs, LuksCipher, LuksOpenArgs, SecretFile};
+use crate::scripts::encryption::{
+    LuksCipher, LuksCloseArgs, LuksFormatArgs, LuksOpenArgs, SecretFile,
+};
 use crate::scripts::network::{
     ConfigureNetworkArgs, FirewallArgs, MirrorSortMethod, NetworkDiagnosticsArgs, TestNetworkArgs,
     UpdateMirrorsArgs,
 };
 use crate::scripts::profiles::{EnableServicesArgs, InstallDotfilesArgs};
-use crate::scripts::config::{GenFstabArgs, UserAddArgs};
-use crate::scripts::system::{
-    BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs,
-};
-use crate::scripts::user::{
-    GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs,
-};
+use crate::scripts::system::{BootloaderArgs, ChrootArgs, ServicesArgs, SystemInfoArgs};
+use crate::scripts::user::{GroupsArgs, ResetPasswordArgs, SecurityAuditArgs, SshArgs};
 use crate::scripts::user_ops::{InstallAurHelperArgs, UserRunArgs};
 use crate::types::AurHelper;
 
 /// Initialize the tracing subscriber for CLI mode (writes to stderr)
 fn init_logger_cli() {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     fmt()
         .with_env_filter(filter)
@@ -76,19 +73,17 @@ fn init_logger_cli() {
 
 /// Initialize the tracing subscriber for TUI mode (writes to file to avoid corrupting the terminal)
 fn init_logger_tui() {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
-    let target: Box<dyn std::io::Write + Send> =
-        match std::fs::File::create("/tmp/archtui.log") {
-            Ok(file) => Box::new(file),
-            Err(_) => {
-                // Fall back to silencing logs if we can't open the file
-                Box::new(std::io::sink())
-            }
-        };
+    let target: Box<dyn std::io::Write + Send> = match std::fs::File::create("/tmp/archtui.log") {
+        Ok(file) => Box::new(file),
+        Err(_) => {
+            // Fall back to silencing logs if we can't open the file
+            Box::new(std::io::sink())
+        }
+    };
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     fmt()
         .with_env_filter(filter)
@@ -184,10 +179,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             save_config,
         }) => {
             if let Some(config_path) = config {
-                info!("Running headless installation with config: {:?}", config_path);
+                info!(
+                    "Running headless installation with config: {:?}",
+                    config_path
+                );
                 run_installer_with_config(&config_path)?;
             } else if let Some(save_path) = save_config {
-                info!("Running TUI installer with config save path: {:?}", save_path);
+                info!(
+                    "Running TUI installer with config save path: {:?}",
+                    save_path
+                );
                 run_tui_installer_with_save(&save_path)?;
             } else {
                 info!("Running TUI installer in interactive mode");
@@ -328,8 +329,11 @@ fn run_installer_with_config(
     }
 
     // Always wait for the child process to finish
-    let output = child.wait_with_output()
-        .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to wait for installer subprocess: {}", e).into() })?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| -> Box<dyn std::error::Error> {
+            format!("Failed to wait for installer subprocess: {}", e).into()
+        })?;
 
     // Death Pact: unregister child now that it has exited
     if let Ok(mut registry) = ChildRegistry::global().lock() {
@@ -340,7 +344,11 @@ fn run_installer_with_config(
         info!("Installation completed successfully");
         println!("\n✓ Installation completed successfully!");
         if let Some(ref mut f) = master_log {
-            let _ = writeln!(f, "[{}] [RUST] Installation completed successfully", installer::now_hms());
+            let _ = writeln!(
+                f,
+                "[{}] [RUST] Installation completed successfully",
+                installer::now_hms()
+            );
         }
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -505,11 +513,17 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                         // Password is read from stdin for CLI
                         eprintln!("Enter LUKS passphrase:");
                         let mut password = String::new();
-                        std::io::stdin().read_line(&mut password)
-                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to read LUKS passphrase from stdin: {}", e).into() })?;
+                        std::io::stdin().read_line(&mut password).map_err(
+                            |e| -> Box<dyn std::error::Error> {
+                                format!("Failed to read LUKS passphrase from stdin: {}", e).into()
+                            },
+                        )?;
                         let password = password.trim().to_string();
-                        let secret_file = SecretFile::new(&password)
-                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to create temporary keyfile: {}", e).into() })?;
+                        let secret_file = SecretFile::new(&password).map_err(
+                            |e| -> Box<dyn std::error::Error> {
+                                format!("Failed to create temporary keyfile: {}", e).into()
+                            },
+                        )?;
                         let format_args = LuksFormatArgs {
                             device: PathBuf::from(dev),
                             key_file: secret_file.path().to_path_buf(),
@@ -527,11 +541,17 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                         });
                         eprintln!("Enter LUKS passphrase:");
                         let mut password = String::new();
-                        std::io::stdin().read_line(&mut password)
-                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to read LUKS passphrase from stdin: {}", e).into() })?;
+                        std::io::stdin().read_line(&mut password).map_err(
+                            |e| -> Box<dyn std::error::Error> {
+                                format!("Failed to read LUKS passphrase from stdin: {}", e).into()
+                            },
+                        )?;
                         let password = password.trim().to_string();
-                        let secret_file = SecretFile::new(&password)
-                            .map_err(|e| -> Box<dyn std::error::Error> { format!("Failed to create temporary keyfile: {}", e).into() })?;
+                        let secret_file = SecretFile::new(&password).map_err(
+                            |e| -> Box<dyn std::error::Error> {
+                                format!("Failed to create temporary keyfile: {}", e).into()
+                            },
+                        )?;
                         let open_args = LuksOpenArgs {
                             device: PathBuf::from(dev),
                             key_file: secret_file.path().to_path_buf(),
@@ -769,7 +789,10 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     "score" => MirrorSortMethod::Score,
                     "country" => MirrorSortMethod::Country,
                     _ => {
-                        eprintln!("❌ Invalid sort method: {}. Valid: rate, age, score, country", sort);
+                        eprintln!(
+                            "❌ Invalid sort method: {}. Valid: rate, age, score, country",
+                            sort
+                        );
                         std::process::exit(1);
                     }
                 };

@@ -7,11 +7,11 @@
 use super::keybindings::NavBarItem;
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 /// Navigation bar component
@@ -35,33 +35,21 @@ impl NavBar {
 
         for (i, item) in self.items.iter().enumerate() {
             if i > 0 {
-                spans.push(Span::styled(
-                    "  ",
-                    Style::default().fg(Colors::FG_MUTED),
-                ));
+                spans.push(Span::styled("  ", Style::default().fg(Colors::FG_MUTED)));
             }
 
             // Key in brackets with cyan color
-            spans.push(Span::styled(
-                "[",
-                Style::default().fg(Colors::FG_MUTED),
-            ));
+            spans.push(Span::styled("[", Style::default().fg(Colors::FG_MUTED)));
             spans.push(Span::styled(
                 &item.key_display,
                 Style::default()
                     .fg(Colors::PRIMARY)
                     .add_modifier(Modifier::BOLD),
             ));
-            spans.push(Span::styled(
-                "]",
-                Style::default().fg(Colors::FG_MUTED),
-            ));
+            spans.push(Span::styled("]", Style::default().fg(Colors::FG_MUTED)));
 
             // Action label
-            spans.push(Span::styled(
-                " ",
-                Style::default(),
-            ));
+            spans.push(Span::styled(" ", Style::default()));
             spans.push(Span::styled(
                 &item.action_label,
                 Style::default().fg(Colors::FG_PRIMARY),

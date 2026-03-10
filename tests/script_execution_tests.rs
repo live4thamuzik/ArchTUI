@@ -258,10 +258,7 @@ fn test_mount_partition_args_not_destructive() {
         options: None,
     };
 
-    assert!(
-        !args.is_destructive(),
-        "Mount should not be destructive"
-    );
+    assert!(!args.is_destructive(), "Mount should not be destructive");
 }
 
 #[test]

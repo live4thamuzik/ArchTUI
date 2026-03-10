@@ -70,7 +70,7 @@ fn process_in_ps_output(pid: u32) -> bool {
 /// This verifies basic process group setup and signaling
 #[test]
 fn test_death_pact_spawn_and_kill_via_group() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn "sleep 1000" in its own process group
@@ -90,8 +90,14 @@ fn test_death_pact_spawn_and_kill_via_group() {
     thread::sleep(Duration::from_millis(100));
 
     // Verify it's alive using both methods
-    assert!(is_process_alive(pid), "sleep 1000 should be alive after spawn");
-    assert!(process_in_ps_output(pid), "sleep 1000 should appear in ps output");
+    assert!(
+        is_process_alive(pid),
+        "sleep 1000 should be alive after spawn"
+    );
+    assert!(
+        process_in_ps_output(pid),
+        "sleep 1000 should appear in ps output"
+    );
 
     // Kill the entire process group (negative PID)
     let kill_result = kill(Pid::from_raw(-(pid as i32)), Signal::SIGTERM);
@@ -112,7 +118,7 @@ fn test_death_pact_spawn_and_kill_via_group() {
 /// This is the primary mechanism for ensuring destructive operations stop on crash
 #[test]
 fn test_death_pact_group_signal_kills_children() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn a bash process that spawns sleep as a child
@@ -147,10 +153,7 @@ fn test_death_pact_group_signal_kills_children() {
         .and_then(|s| s.trim().parse().ok())
         .unwrap_or(0);
 
-    println!(
-        "Parent PID: {}, Child sleep PID: {}",
-        parent_pid, child_pid
-    );
+    println!("Parent PID: {}, Child sleep PID: {}", parent_pid, child_pid);
 
     if child_pid == 0 {
         // Cleanup and skip if we couldn't get child PID
@@ -194,7 +197,7 @@ fn test_death_pact_group_signal_kills_children() {
 /// Simulates: TUI spawns bash -> bash spawns sgdisk -> kill TUI -> both die
 #[test]
 fn test_death_pact_entire_tree_killed() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn bash that creates a nested process tree
@@ -230,9 +233,7 @@ fn test_death_pact_entire_tree_killed() {
 
     // Use pgrep to check for any remaining sleep 500 or 501 processes
     // (There shouldn't be any from our process group)
-    let pgrep_output = Command::new("pgrep")
-        .args(["-f", "sleep 50[01]"])
-        .output();
+    let pgrep_output = Command::new("pgrep").args(["-f", "sleep 50[01]"]).output();
 
     if let Ok(output) = pgrep_output {
         let remaining = String::from_utf8_lossy(&output.stdout);
@@ -295,7 +296,7 @@ fn test_death_pact_registry_terminate_all() {
 /// Test 5: Verify process group isolation - one group's death doesn't affect another
 #[test]
 fn test_death_pact_group_isolation() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     // Spawn two independent process groups
@@ -350,7 +351,7 @@ fn test_death_pact_group_isolation() {
 /// Test: Rapid spawn and kill doesn't cause issues
 #[test]
 fn test_death_pact_rapid_spawn_kill() {
-    use nix::sys::signal::{kill, Signal};
+    use nix::sys::signal::{Signal, kill};
     use nix::unistd::Pid;
 
     for i in 0..10 {

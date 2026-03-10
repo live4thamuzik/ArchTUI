@@ -63,7 +63,10 @@ pub enum ManifestError {
     #[error(
         "Destructive script '{script}' requires confirmation: set {confirmation}=yes in environment"
     )]
-    MissingConfirmation { script: String, confirmation: String },
+    MissingConfirmation {
+        script: String,
+        confirmation: String,
+    },
 
     /// Script file not found
     #[error("Script file not found: {path}")]
@@ -270,11 +273,10 @@ impl ScriptManifest {
         let content = std::fs::read_to_string(&path).map_err(|e| ManifestError::IoError {
             reason: format!("Failed to read manifest {:?}: {}", path.as_ref(), e),
         })?;
-        let manifest: Self = serde_json::from_str(&content).map_err(|e| {
-            ManifestError::InvalidFormat {
+        let manifest: Self =
+            serde_json::from_str(&content).map_err(|e| ManifestError::InvalidFormat {
                 reason: format!("Invalid JSON in {:?}: {}", path.as_ref(), e),
-            }
-        })?;
+            })?;
         manifest.validate_structure()?;
         tracing::debug!(
             script = %manifest.script,
@@ -358,7 +360,8 @@ impl ScriptManifest {
         // Check confirmation for destructive scripts
         if self.destructive {
             if let Some(ref confirmation_var) = self.required_confirmation {
-                let confirmation_value = env.get(confirmation_var).map(|s| s.as_str()).unwrap_or("");
+                let confirmation_value =
+                    env.get(confirmation_var).map(|s| s.as_str()).unwrap_or("");
                 if confirmation_value != "yes" {
                     tracing::error!(script = %self.script, var = %confirmation_var, "Missing destructive confirmation");
                     return Err(ManifestError::MissingConfirmation {
@@ -426,7 +429,10 @@ impl ScriptManifest {
                     .as_ref()
                     .map(|p| format!(" (pattern: {})", p))
                     .unwrap_or_default();
-                lines.push(format!("#   {} - {}{}", req.name, req.description, pattern_note));
+                lines.push(format!(
+                    "#   {} - {}{}",
+                    req.name, req.description, pattern_note
+                ));
             }
         }
 
@@ -649,7 +655,10 @@ impl ManifestRegistry {
                     "Disk partitioning strategy",
                 ))
                 .require_env(EnvRequirement::new("SYSTEM_HOSTNAME", "System hostname"))
-                .require_env(EnvRequirement::new("MAIN_USERNAME", "Primary user account name"))
+                .require_env(EnvRequirement::new(
+                    "MAIN_USERNAME",
+                    "Primary user account name",
+                ))
                 .require_env(EnvRequirement::new("BOOT_MODE", "Boot mode (UEFI or BIOS)"))
                 .optional_env(OptionalEnv::new("KERNEL", "Linux kernel variant", "linux"))
                 .optional_env(OptionalEnv::new("LOCALE", "System locale", "en_US.UTF-8"))
@@ -753,8 +762,7 @@ mod tests {
 
     #[test]
     fn test_env_requirement_validates_prefix_pattern() {
-        let req =
-            EnvRequirement::new("DISK", "A disk device").with_pattern("^/dev/");
+        let req = EnvRequirement::new("DISK", "A disk device").with_pattern("^/dev/");
 
         assert!(req.validate("/dev/sda").is_ok());
         assert!(req.validate("/dev/nvme0n1").is_ok());
@@ -921,7 +929,11 @@ mod tests {
     fn test_validate_execution_success() {
         let manifest = ScriptManifest::builder("scripts/test.sh", "Test")
             .require_env(EnvRequirement::new("REQUIRED_VAR", "A required var"))
-            .optional_env(OptionalEnv::new("OPTIONAL_VAR", "Optional", "default_value"))
+            .optional_env(OptionalEnv::new(
+                "OPTIONAL_VAR",
+                "Optional",
+                "default_value",
+            ))
             .build()
             .unwrap();
 
@@ -931,7 +943,10 @@ mod tests {
         let result = manifest.validate_execution(&env, None).unwrap();
 
         // Required var should be in final environment
-        assert_eq!(result.environment.get("REQUIRED_VAR").unwrap(), "some_value");
+        assert_eq!(
+            result.environment.get("REQUIRED_VAR").unwrap(),
+            "some_value"
+        );
 
         // Optional var should have default
         assert_eq!(
@@ -957,9 +972,7 @@ mod tests {
     #[test]
     fn test_validate_execution_invalid_pattern() {
         let manifest = ScriptManifest::builder("scripts/test.sh", "Test")
-            .require_env(
-                EnvRequirement::new("DISK", "Target disk").with_pattern("^/dev/"),
-            )
+            .require_env(EnvRequirement::new("DISK", "Target disk").with_pattern("^/dev/"))
             .build()
             .unwrap();
 
@@ -1033,14 +1046,15 @@ mod tests {
 
     #[test]
     fn test_bash_header_generation() {
-        let manifest = ScriptManifest::builder("scripts/tools/wipe_disk.sh", "Securely wipe a disk")
-            .destructive("CONFIRM_WIPE_DISK")
-            .require_env(
-                EnvRequirement::new("INSTALL_DISK", "Target disk").with_pattern("^/dev/"),
-            )
-            .optional_env(OptionalEnv::new("WIPE_METHOD", "Wipe method", "quick"))
-            .build()
-            .unwrap();
+        let manifest =
+            ScriptManifest::builder("scripts/tools/wipe_disk.sh", "Securely wipe a disk")
+                .destructive("CONFIRM_WIPE_DISK")
+                .require_env(
+                    EnvRequirement::new("INSTALL_DISK", "Target disk").with_pattern("^/dev/"),
+                )
+                .optional_env(OptionalEnv::new("WIPE_METHOD", "Wipe method", "quick"))
+                .build()
+                .unwrap();
 
         let header = manifest.to_bash_header();
 

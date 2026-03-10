@@ -9,10 +9,10 @@ use super::keybindings::{HelpSection, KeybindingContext};
 use crate::app::AppMode;
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    Frame,
 };
 
 /// Help overlay component
@@ -126,12 +126,8 @@ impl HelpOverlay {
 
     /// Render the help overlay
     pub fn render(&self, f: &mut Frame, parent: Rect) {
-        self.window.render_lines(
-            f,
-            parent,
-            &self.content,
-            Some("Press ? or Esc to close"),
-        );
+        self.window
+            .render_lines(f, parent, &self.content, Some("Press ? or Esc to close"));
     }
 
     /// Update help content for a new mode

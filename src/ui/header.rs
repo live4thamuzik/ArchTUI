@@ -8,14 +8,14 @@
 
 use crate::theme::Colors;
 use ratatui::{
+    Frame,
     layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, Borders, Gauge, List, ListItem, Scrollbar,
-        ScrollbarOrientation, ScrollbarState,
+        Block, BorderType, Borders, Gauge, List, ListItem, Scrollbar, ScrollbarOrientation,
+        ScrollbarState,
     },
-    Frame,
 };
 
 /// Render progress bar with rounded border
@@ -26,7 +26,11 @@ pub fn render_progress_bar(f: &mut Frame, area: Rect, progress: u16) {
                 .borders(Borders::ALL)
                 .border_type(BorderType::Rounded)
                 .title(" Progress ")
-                .title_style(Style::default().fg(Colors::PRIMARY).add_modifier(Modifier::BOLD))
+                .title_style(
+                    Style::default()
+                        .fg(Colors::PRIMARY)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .border_style(Style::default().fg(Colors::BORDER_ACTIVE)),
         )
         .gauge_style(Style::default().fg(Colors::SUCCESS).bg(Colors::BG_GAUGE))
@@ -72,12 +76,7 @@ pub fn render_installer_output(
 
     // Position indicator in bottom-right
     let pos_text = if total > visible_height {
-        format!(
-            " {}-{}/{} ",
-            start + 1,
-            end.min(total),
-            total
-        )
+        format!(" {}-{}/{} ", start + 1, end.min(total), total)
     } else {
         format!(" {}/{} ", total, total)
     };
@@ -101,10 +100,7 @@ pub fn render_installer_output(
                 Style::default().fg(Colors::WARNING).bg(Colors::BG_PRIMARY)
             } else if line.contains("SUCCESS") {
                 Style::default().fg(Colors::SUCCESS).bg(Colors::BG_PRIMARY)
-            } else if line.starts_with("==>")
-                || line.starts_with("::")
-                || line.contains("Phase ")
-            {
+            } else if line.starts_with("==>") || line.starts_with("::") || line.contains("Phase ") {
                 Style::default()
                     .fg(Colors::INFO)
                     .bg(Colors::BG_PRIMARY)
