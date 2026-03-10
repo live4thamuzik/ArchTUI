@@ -853,17 +853,31 @@ pub fn render_automated_install_ui(f: &mut Frame, _state: &AppState, area: Rect)
 // Installation Progress
 // =============================================================================
 
-/// Phase names for step indicators
+/// Phase names for step indicators — aligned to actual progress percentages
 const INSTALL_PHASES: &[&str] = &[
-    "Partitioning",
-    "Formatting",
-    "Base Packages",
-    "Bootloader",
-    "System Config",
-    "Users",
-    "Desktop",
-    "Final",
+    "Preflight",     //  0-13%: validate, mirrors, deps
+    "Partitioning",  // 14-19%: disk partition + format
+    "Base System",   // 20-44%: pacstrap
+    "System Config", // 45-57%: fstab, locale, timezone, hostname
+    "Bootloader",    // 58-64%: bootloader + initramfs
+    "Desktop",       // 65-77%: DE/WM install
+    "Packages",      // 78-91%: AUR, extra packages, dotfiles
+    "Finalizing",    // 92-100%: cleanup + unmount
 ];
+
+/// Map progress percentage to phase index via thresholds (not linear)
+fn progress_to_phase(progress: u8) -> usize {
+    match progress {
+        0..=13 => 0,
+        14..=19 => 1,
+        20..=44 => 2,
+        45..=57 => 3,
+        58..=64 => 4,
+        65..=77 => 5,
+        78..=91 => 6,
+        _ => 7,
+    }
+}
 
 pub fn render_installation_ui(f: &mut Frame, state: &AppState, area: Rect) {
     let layout = Layout::default()
@@ -881,7 +895,7 @@ pub fn render_installation_ui(f: &mut Frame, state: &AppState, area: Rect) {
     render_progress_bar(f, layout[1], state.installation_progress as u16);
 
     // Phase step indicators
-    let current_phase = (state.installation_progress as usize * INSTALL_PHASES.len()) / 100;
+    let current_phase = progress_to_phase(state.installation_progress);
     let phase_spans: Vec<Span> = INSTALL_PHASES
         .iter()
         .enumerate()
