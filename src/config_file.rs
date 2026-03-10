@@ -371,6 +371,23 @@ impl InstallationConfig {
             _ => {}
         }
 
+        // BIOS RAID: only GRUB and Limine support BIOS boot
+        if self.partitioning_strategy.requires_raid() && self.boot_mode == BootMode::Bios {
+            match self.bootloader {
+                Bootloader::Grub | Bootloader::Limine => {}
+                _ => {
+                    tracing::error!(
+                        bootloader = %self.bootloader,
+                        "UEFI-only bootloader with BIOS + RAID"
+                    );
+                    anyhow::bail!(
+                        "{} requires UEFI firmware and cannot be used with BIOS + RAID",
+                        self.bootloader
+                    );
+                }
+            }
+        }
+
         tracing::info!("Configuration validation passed");
         Ok(())
     }

@@ -197,6 +197,14 @@ pub enum Bootloader {
     Efistub,
 }
 
+#[allow(dead_code)] // API: Documents bootloader capability for future Rust-side use
+impl Bootloader {
+    /// Whether this bootloader requires kernels on FAT32 (cannot read ext4/btrfs /boot).
+    pub fn requires_fat32_boot(&self) -> bool {
+        matches!(self, Self::SystemdBoot | Self::Efistub)
+    }
+}
+
 /// AUR helper selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[derive(Display, EnumString, EnumIter)]

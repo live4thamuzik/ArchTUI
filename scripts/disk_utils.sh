@@ -43,6 +43,7 @@ if [[ -z "${EFI_PARTITION_TYPE:-}" ]]; then
     readonly DEFAULT_SWAP_SIZE_MIB=2048
     readonly DEFAULT_ROOT_SIZE_MIB=51200
     readonly DEFAULT_ESP_SIZE_MIB=512
+    readonly RAID_ESP_BOOT_SIZE_MIB=1024  # Larger ESP when it doubles as /boot (2-partition RAID layout)
 
     # Filesystem Types
     readonly DEFAULT_ROOT_FILESYSTEM="ext4"
@@ -50,6 +51,17 @@ if [[ -z "${EFI_PARTITION_TYPE:-}" ]]; then
     readonly EFI_FILESYSTEM="vfat"
     readonly BOOT_FILESYSTEM="ext4"
 fi
+
+# --- Bootloader Capability Helpers ---
+
+# Returns 0 if bootloader needs kernels on FAT32 (2-partition layout: ESP at /boot)
+# Returns 1 if bootloader can read ext4 (3-partition layout: ESP at /efi + XBOOTLDR at /boot)
+bootloader_needs_fat32_boot() {
+    case "${BOOTLOADER:-grub}" in
+        systemd-boot|efistub) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 # --- Device Discovery ---
 

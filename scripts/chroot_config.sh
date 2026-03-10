@@ -753,13 +753,8 @@ install_systemd_boot() {
         local efi_fstype
         efi_fstype=$(findmnt -n -o FSTYPE /efi 2>/dev/null || echo "")
         if [[ "$efi_fstype" == "vfat" && "$boot_fstype" == "ext4" ]]; then
-            log_error "systemd-boot incompatible with current layout!"
-            log_error "ESP is at /efi (FAT32) but /boot is ext4"
-            log_error "systemd-boot cannot read ext4 - kernels must be on FAT32"
-            log_error "Options:"
-            log_error "  1. Use GRUB instead (works with separate /boot)"
-            log_error "  2. Mount ESP at /boot (put kernels on ESP)"
-            log_warn "Falling back to GRUB for this installation"
+            log_error "BUG: systemd-boot reached install with incompatible layout (ESP at /efi, ext4 /boot)"
+            log_error "This should have been prevented by partitioning — falling back to GRUB"
             export BOOTLOADER="grub"
             install_grub
             return $?
@@ -1021,12 +1016,25 @@ install_limine() {
         }
     else
         # BIOS: install to disk MBR
-        local target_disk="${INSTALL_DISK%%,*}"  # First disk for RAID
-        log_cmd "limine bios-install $target_disk"
-        limine bios-install "$target_disk" || {
-            log_error "Limine BIOS install failed on $target_disk"
-            return 1
-        }
+        if [[ "$PARTITIONING_STRATEGY" == *raid* ]]; then
+            # RAID: install to all member disks for boot redundancy
+            IFS=',' read -ra _limine_disks <<< "$INSTALL_DISK"
+            for _ldisk in "${_limine_disks[@]}"; do
+                _ldisk="${_ldisk// /}"
+                log_cmd "limine bios-install $_ldisk"
+                limine bios-install "$_ldisk" || {
+                    log_error "Limine BIOS install failed on $_ldisk"
+                    return 1
+                }
+            done
+        else
+            local target_disk="${INSTALL_DISK%%,*}"
+            log_cmd "limine bios-install $target_disk"
+            limine bios-install "$target_disk" || {
+                log_error "Limine BIOS install failed on $target_disk"
+                return 1
+            }
+        fi
     fi
 
     # Generate limine.conf

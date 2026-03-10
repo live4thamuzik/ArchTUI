@@ -448,8 +448,11 @@ validate_configuration() {
     fi
 
     # systemd-boot and efistub require kernels on FAT32 (ESP at /boot)
-    # Our auto_* strategies create ESP at /efi + ext4 /boot — incompatible
-    if [[ ("$BOOTLOADER" == "systemd-boot" || "$BOOTLOADER" == "efistub") && "$PARTITIONING_STRATEGY" == auto_* ]]; then
+    # Non-RAID auto_* strategies create ESP at /efi + ext4 /boot — incompatible
+    # RAID strategies handle this themselves with a 2-partition layout (ESP at /boot)
+    if [[ ("$BOOTLOADER" == "systemd-boot" || "$BOOTLOADER" == "efistub") \
+          && "$PARTITIONING_STRATEGY" == auto_* \
+          && "$PARTITIONING_STRATEGY" != *raid* ]]; then
         log_warn "$BOOTLOADER is incompatible with auto partitioning (ESP at /efi, ext4 /boot)"
         log_warn "$BOOTLOADER requires kernels on FAT32 — switching to GRUB"
         BOOTLOADER="grub"
