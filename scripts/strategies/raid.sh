@@ -47,15 +47,23 @@ execute_raid_partitioning() {
         log_info "Partitioning RAID member disk: $disk"
 
         if [[ "$PARTITION_TABLE" == "gpt" ]]; then
-            # UEFI: ESP + XBOOTLDR + data
             log_cmd "sgdisk --zap-all $disk"
             sgdisk --zap-all "$disk" || error_exit "Failed to wipe $disk"
-            log_cmd "sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:$esp_type --change-name=1:ESP $disk"
-            sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
-            log_cmd "sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:$xbootldr_type --change-name=2:XBOOTLDR $disk"
-            sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$xbootldr_type" --change-name=2:XBOOTLDR "$disk" || error_exit "Failed to create XBOOTLDR on $disk"
-            log_cmd "sgdisk --new=3:0:0 --typecode=3:$LINUX_PARTITION_TYPE --change-name=3:RAID_MEMBER $disk"
-            sgdisk --new=3:0:0 --typecode=3:"$LINUX_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member on $disk"
+            if bootloader_needs_fat32_boot; then
+                # 2-partition layout: larger ESP at /boot (no XBOOTLDR)
+                log_cmd "sgdisk --new=1:0:+${RAID_ESP_BOOT_SIZE_MIB}MiB --typecode=1:$esp_type --change-name=1:ESP $disk"
+                sgdisk --new=1:0:+${RAID_ESP_BOOT_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
+                log_cmd "sgdisk --new=2:0:0 --typecode=2:$LINUX_PARTITION_TYPE --change-name=2:RAID_MEMBER $disk"
+                sgdisk --new=2:0:0 --typecode=2:"$LINUX_PARTITION_TYPE" --change-name=2:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member on $disk"
+            else
+                # 3-partition layout: ESP + XBOOTLDR + data
+                log_cmd "sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:$esp_type --change-name=1:ESP $disk"
+                sgdisk --new=1:0:+${DEFAULT_ESP_SIZE_MIB}MiB --typecode=1:"$esp_type" --change-name=1:ESP "$disk" || error_exit "Failed to create ESP on $disk"
+                log_cmd "sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:$xbootldr_type --change-name=2:XBOOTLDR $disk"
+                sgdisk --new=2:0:+${BOOT_PART_SIZE_MIB}MiB --typecode=2:"$xbootldr_type" --change-name=2:XBOOTLDR "$disk" || error_exit "Failed to create XBOOTLDR on $disk"
+                log_cmd "sgdisk --new=3:0:0 --typecode=3:$LINUX_PARTITION_TYPE --change-name=3:RAID_MEMBER $disk"
+                sgdisk --new=3:0:0 --typecode=3:"$LINUX_PARTITION_TYPE" --change-name=3:RAID_MEMBER "$disk" || error_exit "Failed to create RAID member on $disk"
+            fi
         else
             # BIOS: BIOS boot (EF02) + boot + data
             log_cmd "sgdisk --zap-all $disk"
@@ -81,37 +89,60 @@ execute_raid_partitioning() {
     log_info "Creating RAID arrays (level: $raid_level)"
 
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
-        # UEFI: Create RAID arrays for XBOOTLDR and data
-        local -a XBOOTLDR_PARTS=()
-        local -a DATA_PARTS=()
+        if bootloader_needs_fat32_boot; then
+            # 2-partition layout: no XBOOTLDR, DATA from partition 2
+            local -a DATA_PARTS=()
 
-        for disk in "${RAID_DEVICES[@]}"; do
-            XBOOTLDR_PARTS+=("$(get_partition_path "$disk" 2)")
-            DATA_PARTS+=("$(get_partition_path "$disk" 3)")
-        done
+            for disk in "${RAID_DEVICES[@]}"; do
+                DATA_PARTS+=("$(get_partition_path "$disk" 2)")
+            done
 
-        # Zero stale superblocks and stop auto-assembled arrays
-        prepare_raid_partitions "${XBOOTLDR_PARTS[@]}" "${DATA_PARTS[@]}"
+            # Zero stale superblocks and stop auto-assembled arrays
+            prepare_raid_partitions "${DATA_PARTS[@]}"
 
-        # Create XBOOTLDR RAID1 array (always RAID1 for boot redundancy)
-        log_info "Creating XBOOTLDR RAID1 array"
-        log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR ${XBOOTLDR_PARTS[*]}"
-        mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
+            # Create data RAID array
+            log_info "Creating data RAID array"
+            log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
+            mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
 
-        # Create data RAID array
-        log_info "Creating data RAID array"
-        log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
-        mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+            # Resume udev event processing now that all arrays are created
+            resume_udev
 
-        # Resume udev event processing now that all arrays are created
-        resume_udev
+            # Wait for RAID array to be ready
+            wait_for_raid_array /dev/md/DATA
+        else
+            # 3-partition layout: XBOOTLDR RAID1 + DATA RAID
+            local -a XBOOTLDR_PARTS=()
+            local -a DATA_PARTS=()
 
-        # Wait for RAID arrays to be ready
-        wait_for_raid_array /dev/md/XBOOTLDR
-        wait_for_raid_array /dev/md/DATA
+            for disk in "${RAID_DEVICES[@]}"; do
+                XBOOTLDR_PARTS+=("$(get_partition_path "$disk" 2)")
+                DATA_PARTS+=("$(get_partition_path "$disk" 3)")
+            done
 
-        # Format XBOOTLDR
-        format_filesystem "/dev/md/XBOOTLDR" "$BOOT_FILESYSTEM"
+            # Zero stale superblocks and stop auto-assembled arrays
+            prepare_raid_partitions "${XBOOTLDR_PARTS[@]}" "${DATA_PARTS[@]}"
+
+            # Create XBOOTLDR RAID1 array (always RAID1 for boot redundancy)
+            log_info "Creating XBOOTLDR RAID1 array"
+            log_cmd "mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR ${XBOOTLDR_PARTS[*]}"
+            mdadm --create --run --verbose --level=1 --raid-devices=${#RAID_DEVICES[@]} /dev/md/XBOOTLDR "${XBOOTLDR_PARTS[@]}" || error_exit "Failed to create XBOOTLDR RAID array"
+
+            # Create data RAID array
+            log_info "Creating data RAID array"
+            log_cmd "mdadm --create --run --verbose --level=$raid_level --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA ${DATA_PARTS[*]}"
+            mdadm --create --run --verbose --level="$raid_level" --raid-devices=${#RAID_DEVICES[@]} /dev/md/DATA "${DATA_PARTS[@]}" || error_exit "Failed to create DATA RAID array"
+
+            # Resume udev event processing now that all arrays are created
+            resume_udev
+
+            # Wait for RAID arrays to be ready
+            wait_for_raid_array /dev/md/XBOOTLDR
+            wait_for_raid_array /dev/md/DATA
+
+            # Format XBOOTLDR
+            format_filesystem "/dev/md/XBOOTLDR" "$BOOT_FILESYSTEM"
+        fi
 
     else
         # BIOS: Create RAID arrays for boot and data
@@ -162,15 +193,25 @@ execute_raid_partitioning() {
 
     # --- Phase 4: Handle boot partitions (after root is mounted) ---
     if [[ "$PARTITION_TABLE" == "gpt" ]]; then
-        # UEFI: Mount XBOOTLDR RAID1 array and ESP from first disk
-        safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
-        local efi_part
-        efi_part=$(get_partition_path "${RAID_DEVICES[0]}" 1)
-        format_filesystem "$efi_part" "$EFI_FILESYSTEM"
-        safe_mount "$efi_part" "/mnt/efi"
+        if bootloader_needs_fat32_boot; then
+            # 2-partition layout: ESP from first disk mounted at /boot (no /efi)
+            local efi_part
+            efi_part=$(get_partition_path "${RAID_DEVICES[0]}" 1)
+            format_filesystem "$efi_part" "$EFI_FILESYSTEM"
+            safe_mount "$efi_part" "/mnt/boot"
 
-        capture_device_info "boot" "/dev/md/XBOOTLDR"
-        capture_device_info "efi" "$efi_part"
+            capture_device_info "boot" "$efi_part"
+        else
+            # 3-partition layout: XBOOTLDR RAID1 at /boot, ESP at /efi
+            safe_mount "/dev/md/XBOOTLDR" "/mnt/boot"
+            local efi_part
+            efi_part=$(get_partition_path "${RAID_DEVICES[0]}" 1)
+            format_filesystem "$efi_part" "$EFI_FILESYSTEM"
+            safe_mount "$efi_part" "/mnt/efi"
+
+            capture_device_info "boot" "/dev/md/XBOOTLDR"
+            capture_device_info "efi" "$efi_part"
+        fi
     else
         # BIOS: Mount boot RAID1 array
         safe_mount "/dev/md/BOOT" "/mnt/boot"
