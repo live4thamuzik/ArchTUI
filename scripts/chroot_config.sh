@@ -1303,6 +1303,17 @@ WINEOF
         fi
     fi
 
+    # Disable GRUB's internal shim_lock verifier for sbctl Secure Boot
+    # Without this, GRUB refuses to load vmlinuz when Secure Boot is on
+    # because it can't verify kernels against sbctl's custom signing keys
+    # https://wiki.archlinux.org/title/GRUB#Secure_Boot
+    if [[ "${SECURE_BOOT:-No}" == "Yes" ]]; then
+        if ! grep -q "^GRUB_DISABLE_SHIM_LOCK=y" "$grub_default"; then
+            echo "GRUB_DISABLE_SHIM_LOCK=y" >> "$grub_default"
+            log_info "Disabled GRUB shim_lock for sbctl Secure Boot"
+        fi
+    fi
+
     # Configure GRUB theme if requested (cosmetic — must not block grub-mkconfig)
     configure_grub_theme || log_warn "GRUB theme installation failed — continuing without theme"
 
@@ -1502,32 +1513,55 @@ configure_secure_boot() {
 
     # Sign the kernel
     local kernel="${KERNEL:-linux}"
+    local _sign_err
     if [[ -f "/boot/vmlinuz-${kernel}" ]]; then
         log_cmd "sbctl sign -s /boot/vmlinuz-${kernel}"
-        sbctl sign -s "/boot/vmlinuz-${kernel}" 2>/dev/null || log_warn "Failed to sign vmlinuz-${kernel}"
+        if ! _sign_err=$(sbctl sign -s "/boot/vmlinuz-${kernel}" 2>&1); then
+            log_warn "Failed to sign vmlinuz-${kernel}: $_sign_err"
+        fi
     fi
 
     # Sign bootloader EFI binaries based on type
     log_info "Signing bootloader EFI binaries for: ${BOOTLOADER:-grub}"
     case "${BOOTLOADER:-grub}" in
         "grub")
-            for grub_efi in /boot/efi/EFI/GRUB/grubx64.efi /boot/EFI/GRUB/grubx64.efi /efi/EFI/GRUB/grubx64.efi; do
-                [[ -f "$grub_efi" ]] && { log_cmd "sbctl sign -s $grub_efi"; sbctl sign -s "$grub_efi" 2>/dev/null || log_warn "Failed to sign GRUB"; }
+            for grub_efi in /efi/EFI/GRUB/grubx64.efi /boot/EFI/GRUB/grubx64.efi; do
+                if [[ -f "$grub_efi" ]]; then
+                    log_cmd "sbctl sign -s $grub_efi"
+                    if ! _sign_err=$(sbctl sign -s "$grub_efi" 2>&1); then
+                        log_warn "Failed to sign GRUB: $_sign_err"
+                    fi
+                fi
             done
             ;;
         "systemd-boot")
-            for sd_efi in /boot/efi/EFI/systemd/systemd-bootx64.efi /boot/EFI/systemd/systemd-bootx64.efi /efi/EFI/systemd/systemd-bootx64.efi; do
-                [[ -f "$sd_efi" ]] && { log_cmd "sbctl sign -s $sd_efi"; sbctl sign -s "$sd_efi" 2>/dev/null || log_warn "Failed to sign systemd-boot"; }
+            for sd_efi in /efi/EFI/systemd/systemd-bootx64.efi /boot/EFI/systemd/systemd-bootx64.efi; do
+                if [[ -f "$sd_efi" ]]; then
+                    log_cmd "sbctl sign -s $sd_efi"
+                    if ! _sign_err=$(sbctl sign -s "$sd_efi" 2>&1); then
+                        log_warn "Failed to sign systemd-boot: $_sign_err"
+                    fi
+                fi
             done
             ;;
         "refind")
-            for refind_efi in /boot/efi/EFI/refind/refind_x64.efi /boot/EFI/refind/refind_x64.efi /efi/EFI/refind/refind_x64.efi; do
-                [[ -f "$refind_efi" ]] && { log_cmd "sbctl sign -s $refind_efi"; sbctl sign -s "$refind_efi" 2>/dev/null || log_warn "Failed to sign rEFInd"; }
+            for refind_efi in /efi/EFI/refind/refind_x64.efi /boot/EFI/refind/refind_x64.efi; do
+                if [[ -f "$refind_efi" ]]; then
+                    log_cmd "sbctl sign -s $refind_efi"
+                    if ! _sign_err=$(sbctl sign -s "$refind_efi" 2>&1); then
+                        log_warn "Failed to sign rEFInd: $_sign_err"
+                    fi
+                fi
             done
             ;;
         "limine")
-            for limine_efi in /boot/efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI /efi/EFI/BOOT/BOOTX64.EFI; do
-                [[ -f "$limine_efi" ]] && { log_cmd "sbctl sign -s $limine_efi"; sbctl sign -s "$limine_efi" 2>/dev/null || log_warn "Failed to sign Limine"; }
+            for limine_efi in /efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI; do
+                if [[ -f "$limine_efi" ]]; then
+                    log_cmd "sbctl sign -s $limine_efi"
+                    if ! _sign_err=$(sbctl sign -s "$limine_efi" 2>&1); then
+                        log_warn "Failed to sign Limine: $_sign_err"
+                    fi
+                fi
             done
             ;;
         "efistub")
@@ -1537,22 +1571,34 @@ configure_secure_boot() {
     esac
 
     # Sign EFI fallback bootloader (common to all bootloaders)
-    for fallback_efi in /boot/efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI /efi/EFI/BOOT/BOOTX64.EFI; do
+    for fallback_efi in /efi/EFI/BOOT/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI; do
         if [[ -f "$fallback_efi" ]]; then
             log_cmd "sbctl sign -s $fallback_efi"
-            sbctl sign -s "$fallback_efi" 2>/dev/null || log_warn "Failed to sign EFI fallback"
+            if ! _sign_err=$(sbctl sign -s "$fallback_efi" 2>&1); then
+                log_warn "Failed to sign EFI fallback: $_sign_err"
+            fi
             break
         fi
     done
 
     # Sign Linux EFI stubs (UKI / systemd-boot auto-entries)
-    for linux_efi_dir in /boot/efi/EFI/Linux /boot/EFI/Linux /efi/EFI/Linux; do
+    for linux_efi_dir in /boot/EFI/Linux /efi/EFI/Linux; do
         if [[ -d "$linux_efi_dir" ]]; then
             for efi in "$linux_efi_dir"/*.efi; do
-                [[ -f "$efi" ]] && { sbctl sign -s "$efi" 2>/dev/null || log_warn "Failed to sign $efi"; }
+                if [[ -f "$efi" ]]; then
+                    if ! _sign_err=$(sbctl sign -s "$efi" 2>&1); then
+                        log_warn "Failed to sign $efi: $_sign_err"
+                    fi
+                fi
             done
         fi
     done
+
+    # Verify all registered files are properly signed
+    log_info "Verifying Secure Boot signatures..."
+    if ! sbctl verify; then
+        log_warn "Some EFI binaries may not be properly signed — check sbctl verify output"
+    fi
 
     # Create post-install script for key enrollment
     cat > /root/enroll-secure-boot-keys.sh << 'SBEOF'
@@ -1581,11 +1627,21 @@ if sbctl status | grep -q "Setup Mode:.*Enabled"; then
 else
     echo "Setup Mode is NOT enabled."
     echo ""
-    echo "To enroll keys:"
-    echo "1. Reboot and enter UEFI setup (usually F2, Del, or Esc)"
-    echo "2. Find Secure Boot settings"
-    echo "3. Enable 'Setup Mode' or 'Clear Secure Boot Keys'"
-    echo "4. Boot into Arch Linux and run this script again"
+    echo "Secure Boot must be in 'Setup Mode' before keys can be enrolled."
+    echo "This means clearing the existing Secure Boot keys so the firmware"
+    echo "accepts new ones. Your firmware might call this different things:"
+    echo ""
+    echo "  - 'Setup Mode'                       (most common)"
+    echo "  - 'Clear Secure Boot Keys' / 'Reset Keys'"
+    echo "  - 'Custom Mode'                      (some ASUS/MSI boards)"
+    echo "  - 'Key Management' → 'Clear All Keys'"
+    echo ""
+    echo "Steps:"
+    echo "1. Reboot and enter UEFI/BIOS setup (usually F2, Del, or Esc at POST)"
+    echo "2. Navigate to Secure Boot settings (often under Security or Boot)"
+    echo "3. Clear/reset existing Secure Boot keys to enter Setup Mode"
+    echo "4. Save and exit — boot back into Arch Linux"
+    echo "5. Run this script again: /root/enroll-secure-boot-keys.sh"
 fi
 SBEOF
     chmod +x /root/enroll-secure-boot-keys.sh
@@ -1601,6 +1657,11 @@ Target = linux
 Target = linux-lts
 Target = linux-zen
 Target = linux-hardened
+Target = grub
+Target = systemd
+Target = refind
+Target = limine
+Target = fwupd
 
 [Action]
 Description = Signing EFI binaries for Secure Boot...
