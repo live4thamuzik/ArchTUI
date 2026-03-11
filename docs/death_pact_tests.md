@@ -29,7 +29,7 @@ The death pact uses two complementary mechanisms:
 
 ### tests/death_pact_forced_crash.rs
 
-Primary Sprint 4 tests proving children die under forced crashes.
+Primary tests proving children die under forced crashes.
 
 | Test | Description | Mechanism Tested |
 |------|-------------|-----------------|
@@ -133,4 +133,5 @@ If tests fail with "DEATH PACT VIOLATION":
 - Container/namespace isolation tests (QEMU)
 - Test under memory pressure
 - Test with disk I/O in progress
+
 
