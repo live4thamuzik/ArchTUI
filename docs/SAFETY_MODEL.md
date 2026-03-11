@@ -299,4 +299,4 @@ ArchTUI is designed so that **accidental data loss is structurally impossible** 
 - [architecture.md](architecture.md) - Full system architecture
 - [process-safety.md](process-safety.md) - Death pact implementation
 - [destructive-ops-policy.md](destructive-ops-policy.md) - Destructive operation policy
-- [roe](roe) - Rules of Engagement for development
+
