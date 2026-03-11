@@ -282,7 +282,7 @@ The compiled binary requires glibc (dynamically linked, LTO, stripped). The bash
 
 ## Current status
 
-**v1.0.0 — Stable release.** Validated on real hardware with most partitioning strategies including the full RAID+LVM+LUKS stack.
+**v1.0.0 — release.** Validated on real hardware with most partitioning strategies including the full RAID+LVM+LUKS stack.
 
 - TUI framework, navigation, menus, dialogs, embedded PTY terminal
 - Full CLI with subcommands for all 28 tools
