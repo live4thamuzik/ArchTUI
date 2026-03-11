@@ -2,7 +2,9 @@
 
 A guided installer and system administration toolkit for Arch Linux. The TUI handles configuration, validation, and sequencing. Bash scripts handle execution. The two layers communicate through typed argument structs and environment contracts — Rust decides what to do, Bash does it.
 
-It is not a replacement for reading the Arch Wiki or understanding how a manual installation works. If you have never installed Arch by hand, do that first.
+**This is not a replacement for reading the Arch Wiki or understanding how a manual installation works. If you have never installed Arch manually, do that first. The point of the manual install is to understand how the system works.**
+
+**Test in a disposable environment before deploying to systems you care about!**
 
 ---
 
@@ -280,7 +282,7 @@ The compiled binary requires glibc (dynamically linked, LTO, stripped). The bash
 
 ## Current status
 
-**v1.0.0 — Stable release.** Validated on real hardware with all partitioning strategies including the full RAID+LVM+LUKS+Btrfs stack.
+**v1.0.0 — Stable release.** Validated on real hardware with most partitioning strategies including the full RAID+LVM+LUKS stack.
 
 - TUI framework, navigation, menus, dialogs, embedded PTY terminal
 - Full CLI with subcommands for all 28 tools
@@ -298,7 +300,9 @@ The compiled binary requires glibc (dynamically linked, LTO, stripped). The bash
 - CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit + safety linter)
 
 Known limitations:
+- BTRFS snapshots with snapper are problematic, use timeshift for now. 
+- Secure boot is still in testing (secure boot is not recommended! It was added as a side effort for those who dual-boot with Windows and have secure boot enabled already.)
 - ALPM integration is feature-gated and lightly tested
 - Error recovery paths are not fully exercised on all strategy combinations
 
-Test in a disposable environment before deploying to systems you care about.
+
