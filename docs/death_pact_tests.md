@@ -1,7 +1,5 @@
 # Death Pact Test Documentation
 
-Sprint 4: Process Death Guarantees
-
 ## Overview
 
 This document describes the integration tests that PROVE no child process survives when the Rust parent crashes. These tests verify the Death Pact mechanism works under forced termination scenarios.
@@ -135,3 +133,4 @@ If tests fail with "DEATH PACT VIOLATION":
 - Container/namespace isolation tests (QEMU)
 - Test under memory pressure
 - Test with disk I/O in progress
+
