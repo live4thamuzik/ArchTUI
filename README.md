@@ -302,11 +302,7 @@ make clean          # Remove build artifacts
 
 Release binaries are built by CI in an Arch Linux container and published to GitHub releases with SHA256 checksums.
 
-The `alpm` feature enables native pacman database queries via libalpm. It is optional and only compiles on Arch Linux where libalpm headers are available. Without it, package operations fall back to CLI pacman calls.
-
-```
-cargo build --release --features alpm
-```
+ALPM (libalpm) is enabled by default for native pacman database queries. Non-Arch build environments can disable it with `--no-default-features`.
 
 ### Packaging
 
@@ -345,7 +341,6 @@ The binary is dynamically linked against glibc, built on Arch Linux. The bash sc
 
 Known limitations:
 - Secure boot is still in testing (secure boot is not recommended! It was added as a side effort for those who dual-boot with Windows and have secure boot enabled already.)
-- ALPM integration is feature-gated and lightly tested
 - Error recovery paths are not fully exercised on all strategy combinations
 
 

@@ -19,8 +19,8 @@ path = "src/bin/death_pact_test_helper.rs"
 required-features = ["__test_helper"]
 
 [features]
-default = []
-# Enable ALPM integration (requires libalpm - Arch Linux only)
+default = ["alpm"]
+# ALPM integration (requires libalpm - Arch Linux only, use --no-default-features on other distros)
 alpm = ["dep:alpm", "dep:pacmanconf"]
 # Internal: builds the death_pact_test_helper binary (not for end users)
 __test_helper = []
