@@ -296,7 +296,7 @@ create_user_account() {
         { set +x; } 2>/dev/null
         log_cmd "printf '***:***' | chpasswd (user password)"
         printf '%s:%s\n' "$MAIN_USERNAME" "$MAIN_USER_PASSWORD" | chpasswd || log_warn "Failed to set user password"
-        unset MAIN_USER_PASSWORD  # ROE §8.1: clear immediately after use
+        unset MAIN_USER_PASSWORD  # clear immediately after use
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "User password set"
     fi
@@ -306,7 +306,7 @@ create_user_account() {
         { set +x; } 2>/dev/null
         log_cmd "printf '***:***' | chpasswd (root password)"
         printf '%s:%s\n' "root" "$ROOT_PASSWORD" | chpasswd || log_warn "Failed to set root password"
-        unset ROOT_PASSWORD  # ROE §8.1: clear immediately after use
+        unset ROOT_PASSWORD  # clear immediately after use
         if [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" || "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then set -x; fi
         log_info "Root password set"
     fi

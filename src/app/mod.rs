@@ -130,7 +130,7 @@ impl App {
     /// MutexGuard provides both &T and &mut T — use `let mut state` at
     /// the call site when mutation is needed.
     ///
-    /// Recovers from mutex poisoning per ROE §2.1: "Recover from mutex
+    /// Recovers from mutex poisoning per "Recover from mutex
     /// poisoning, never panic." If the mutex is poisoned (a thread panicked
     /// while holding the lock), the guard is recovered via `into_inner()`.
     fn lock_state(&self) -> std::sync::MutexGuard<'_, AppState> {

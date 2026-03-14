@@ -9,7 +9,7 @@ _STRATEGY_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../disk_utils.sh
 source_or_die "$_STRATEGY_SCRIPT_DIR/../disk_utils.sh"
 
-# Signal handling (ROE §3.1) — detection only, no children to kill
+# Signal handling — detection only, no children to kill
 # shellcheck disable=SC2317
 cleanup() { :; }
 trap cleanup TERM INT EXIT
@@ -18,7 +18,7 @@ execute_pre_mounted_partitioning() {
     echo "=== PHASE 1: Pre-Mounted Partition Detection ==="
     log_info "Detecting pre-mounted partitions at /mnt..."
 
-    # Validate /mnt is mounted (ROE §7.3)
+    # Validate /mnt is mounted
     if ! mountpoint -q /mnt; then
         error_exit "/mnt is not mounted — mount your root partition to /mnt first"
     fi
@@ -36,7 +36,7 @@ execute_pre_mounted_partitioning() {
     # Export root filesystem type
     export ROOT_FILESYSTEM_TYPE="$root_fstype"
 
-    # Get root UUID (ROE §8.3: validated)
+    # Get root UUID (validated)
     local root_uuid
     root_uuid=$(get_device_uuid "$root_source") || error_exit "Cannot get UUID for root device $root_source"
     export ROOT_UUID="$root_uuid"
@@ -73,7 +73,7 @@ execute_pre_mounted_partitioning() {
         fi
     done
 
-    # UEFI validation (ROE §7.3)
+    # UEFI validation
     if [[ "${BOOT_MODE:-Auto}" == "UEFI" ]]; then
         local has_esp="no"
         for esp_check in /mnt/efi /mnt/boot/efi /mnt/boot; do

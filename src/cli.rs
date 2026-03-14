@@ -230,7 +230,7 @@ pub enum UserToolCommands {
         #[arg(short, long, default_value = "/bin/bash")]
         shell: String,
     },
-    /// Reset user password (reads password from USER_PASSWORD env var — ROE §8.1)
+    /// Reset user password (reads password from USER_PASSWORD env var)
     ResetPassword {
         /// Username to reset password for
         #[arg(short, long)]

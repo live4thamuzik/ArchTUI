@@ -545,7 +545,7 @@ setup_luks_encryption() {
     local mapper_name="${2:-cryptroot}"
 
     # Password comes from environment (secure - not in command line)
-    # ROE §8.1: Suppress set -x tracing for password handling
+    # Suppress set -x tracing for password handling
     { set +x; } 2>/dev/null
     local password="${ENCRYPTION_PASSWORD:-}"
 
@@ -590,7 +590,7 @@ enroll_fido2() {
 
     log_info "Enrolling FIDO2 device on $partition..."
 
-    # ROE §8.1: Suppress tracing during password piping
+    # Suppress tracing during password piping
     { set +x; } 2>/dev/null
     local password="${ENCRYPTION_PASSWORD:-}"
 

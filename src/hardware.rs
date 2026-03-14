@@ -186,7 +186,7 @@ pub fn detect_firmware_mode() -> FirmwareMode {
 /// # Why TCP instead of ICMP/ping?
 ///
 /// - ICMP is often blocked by firewalls
-/// - `ping` requires shelling out (violates ROE: Rust controls)
+/// - `ping` requires shelling out (Rust controls)
 /// - TCP connect is the most reliable connectivity test
 ///
 /// # Failure Mode
