@@ -37,20 +37,42 @@ A guided installer and system administration toolkit for Arch Linux. The TUI han
 ![Disk Tools](assets/disk-tools.png)
 
 ---
-A pre-compiled binary (`archtui`) ships in the repo. The Arch live ISO does not have the space or tooling to build from source — the Rust toolchain alone exceeds available ISO memory, and the build also requires `jq`. Clone and run directly. To build from source on a full system:
+
+## Quick start
+
+The Arch live ISO cannot build from source — the Rust toolchain exceeds available ISO memory. Clone and download the pre-built binary:
 
 ```
 git clone https://github.com/live4thamuzik/ArchTUI.git
 cd ArchTUI
+./setup.sh
+./archtui
+```
+
+`setup.sh` downloads the latest release binary and verifies its SHA256 checksum.
+
+### Manual download (if you prefer not to run the script)
+
+```
+git clone https://github.com/live4thamuzik/ArchTUI.git
+cd ArchTUI
+curl -LO https://github.com/live4thamuzik/ArchTUI/releases/latest/download/archtui
+curl -LO https://github.com/live4thamuzik/ArchTUI/releases/latest/download/archtui.sha256
+sha256sum -c archtui.sha256
+chmod +x archtui
+./archtui
+```
+
+### Build from source
+
+Requires the Rust toolchain (1.74+). On a full Arch system:
+
+```
 cargo build --release
 cp target/release/archtui ./
 ```
 
-Or use the Makefile:
-
-```
-make build
-```
+Or use `make build`.
 
 ---
 
@@ -59,8 +81,6 @@ make build
 ### TUI mode (default)
 
 ```
-git clone https://github.com/live4thamuzik/ArchTUI.git
-cd ArchTUI
 ./archtui
 ```
 
@@ -267,7 +287,7 @@ ArchTUI/
 
 ## Building and development
 
-Requires the Rust toolchain (1.85+). On Arch: `sudo pacman -S rust`
+Requires the Rust toolchain (1.74+). On Arch: `sudo pacman -S rust`
 
 ```
 make build          # Release build, copies binary to ./archtui
@@ -279,6 +299,8 @@ make generate       # Generate man page and shell completions (output in dist/)
 make install        # Install binary, scripts, man page, and completions
 make clean          # Remove build artifacts
 ```
+
+Release binaries are built by CI in an Arch Linux container and published to GitHub releases with SHA256 checksums.
 
 The `alpm` feature enables native pacman database queries via libalpm. It is optional and only compiles on Arch Linux where libalpm headers are available. Without it, package operations fall back to CLI pacman calls.
 
@@ -298,7 +320,7 @@ This installs the binary to `$PREFIX/bin/`, scripts to `$PREFIX/share/archtui/sc
 
 ### Runtime dependencies
 
-The compiled binary requires glibc (dynamically linked, LTO, stripped). The bash scripts expect standard Arch Linux utilities: `pacman`, `sgdisk`, `mkfs.*`, `cryptsetup`, `mdadm`, `arch-chroot`, etc. — all present on the Arch live ISO.
+The binary is dynamically linked against glibc, built on Arch Linux. The bash scripts expect standard Arch Linux utilities: `pacman`, `sgdisk`, `mkfs.*`, `cryptsetup`, `mdadm`, `arch-chroot`, etc. — all present on the Arch live ISO.
 
 ---
 
