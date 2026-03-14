@@ -56,7 +56,7 @@ clean:
 
 # Generate man page and shell completions into dist/
 generate:
-	ARCHTUI_GEN_DIR=dist cargo build --release --no-default-features
+	ARCHTUI_GEN_DIR=dist cargo build --release
 	cp target/release/archtui ./
 
 # Installation with FHS layout
@@ -88,9 +88,9 @@ lint: lint-rust lint-bash
 lint-rust:
 	cargo clippy -- -D warnings
 
-# Match CI flags exactly (alpm feature disabled on non-Arch systems)
+# Match CI flags exactly
 lint-ci:
-	cargo clippy --no-default-features -- -D warnings
+	cargo clippy -- -D warnings
 
 lint-bash:
 	@if command -v shellcheck >/dev/null 2>&1; then \
