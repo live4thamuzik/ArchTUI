@@ -340,7 +340,6 @@ The binary is dynamically linked against glibc, built on Arch Linux. The bash sc
 - CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit + safety linter)
 
 Known limitations:
-- Secure boot is still in testing (secure boot is not recommended! It was added as a side effort for those who dual-boot with Windows and have secure boot enabled already.)
-- Error recovery paths are not fully exercised on all strategy combinations
+- Secure boot is still in testing (added for users who dual-boot with Windows and have secure boot enabled already)
 
 
