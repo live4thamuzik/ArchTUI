@@ -15,7 +15,7 @@ use crate::types::{
 };
 
 /// Installation configuration that can be saved/loaded
-/// NOTE: Debug impl redacts password fields (ROE §8.1)
+/// NOTE: Debug impl redacts password fields
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InstallationConfig {
     // Boot & System
@@ -98,7 +98,7 @@ pub struct InstallationConfig {
     pub encryption_key_type: EncryptionKeyType,
 }
 
-// ROE §8.1: Custom Debug impl redacts password fields to prevent accidental leaks
+// Custom Debug impl redacts password fields to prevent accidental leaks
 impl std::fmt::Debug for InstallationConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InstallationConfig")
@@ -174,10 +174,10 @@ impl InstallationConfig {
     }
 
     /// Save configuration to a JSON file
-    /// Passwords are redacted — they are NEVER written to disk (ROE §8.1)
+    /// Passwords are redacted — they are NEVER written to disk
     #[allow(dead_code)] // API: Used by --save-config CLI option
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        // Clone and redact passwords before serialization (ROE §8.1: never write passwords to disk)
+        // Clone and redact passwords before serialization (never write passwords to disk)
         let mut redacted = self.clone();
         redacted.user_password = String::new();
         redacted.root_password = String::new();
@@ -297,7 +297,7 @@ impl InstallationConfig {
             anyhow::bail!("Username can only contain lowercase letters, numbers, and underscores");
         }
 
-        // Validate passwords (non-empty, no whitespace) — ROE §8.1: never log password values
+        // Validate passwords (non-empty, no whitespace) — never log password values
         if self.user_password.trim().is_empty() {
             tracing::error!(
                 field = "user_password",
@@ -845,7 +845,7 @@ mod tests {
         assert_eq!(loaded.encryption, original.encryption);
         assert_eq!(loaded.hostname, original.hostname);
         assert_eq!(loaded.username, original.username);
-        // Passwords are redacted on save (ROE §8.1) — they should be empty after roundtrip
+        // Passwords are redacted on save — they should be empty after roundtrip
         assert_eq!(
             loaded.user_password, "",
             "Passwords must be redacted on save"

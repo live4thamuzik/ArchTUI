@@ -188,7 +188,7 @@ PARTITIONING_STRATEGY="${PARTITIONING_STRATEGY:-auto_simple}"
 export PARTITION_SCHEME="$PARTITIONING_STRATEGY"
 ENCRYPTION="${ENCRYPTION:-No}"
 ENCRYPTION_KEY_TYPE="${ENCRYPTION_KEY_TYPE:-Password}"
-# ROE §8.1: Suppress set -x tracing for password variables
+# Suppress set -x tracing for password variables
 { set +x; } 2>/dev/null
 ENCRYPTION_PASSWORD="${ENCRYPTION_PASSWORD:-}"
 [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
@@ -220,7 +220,7 @@ fi
 # Export for strategy scripts
 export ROOT_FILESYSTEM_TYPE HOME_FILESYSTEM_TYPE WANT_HOME_PARTITION WANT_SWAP SWAP_SIZE
 export ROOT_SIZE HOME_SIZE
-# ROE §8.1: Suppress set -x tracing for ENCRYPTION_PASSWORD export
+# Suppress set -x tracing for ENCRYPTION_PASSWORD export
 { set +x; } 2>/dev/null
 export ENCRYPTION ENCRYPTION_KEY_TYPE ENCRYPTION_PASSWORD
 [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
@@ -246,7 +246,7 @@ GPU_DRIVERS="${GPU_DRIVERS:-Auto}"
 # User Setup
 SYSTEM_HOSTNAME="${SYSTEM_HOSTNAME:-archlinux}"
 MAIN_USERNAME="${MAIN_USERNAME:-user}"
-# ROE §8.1: Suppress set -x tracing for password variables
+# Suppress set -x tracing for password variables
 { set +x; } 2>/dev/null
 MAIN_USER_PASSWORD="${MAIN_USER_PASSWORD:-}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-}"
@@ -338,7 +338,7 @@ validate_configuration() {
         "SYSTEM_HOSTNAME"
     )
 
-    # ROE §8.1: Suppress set -x — indirect expansion ${!var} traces password values
+    # Suppress set -x — indirect expansion ${!var} traces password values
     { set +x; } 2>/dev/null
     for var in "${required_vars[@]}"; do
         if [[ -z "${!var:-}" ]]; then
@@ -972,7 +972,7 @@ configure_chroot() {
     log_info "Entering chroot environment..."
     log_info "Running chroot_config.sh inside /mnt..."
 
-    # ROE §8.1: Suppress set -x before arch-chroot line (inline env vars contain passwords)
+    # Suppress set -x before arch-chroot line (inline env vars contain passwords)
     { set +x; } 2>/dev/null
     MAIN_USER_PASSWORD="$MAIN_USER_PASSWORD" \
     ROOT_PASSWORD="$ROOT_PASSWORD" \
@@ -1020,7 +1020,7 @@ configure_chroot() {
     local chroot_exit=${PIPESTATUS[0]}
     [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x
 
-    # ROE §8.1: Clear password variables after chroot completes (no longer needed)
+    # Clear password variables after chroot completes (no longer needed)
     { set +x; } 2>/dev/null
     unset MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
     [[ "${LOG_LEVEL:-INFO}" == "VERBOSE" ]] && set -x

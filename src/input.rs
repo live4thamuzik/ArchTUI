@@ -1302,7 +1302,7 @@ impl InputHandler {
         if let Some(ref mut dialog) = self.current_dialog {
             match dialog.handle_input(key_event) {
                 InputResult::Confirm(value) => {
-                    // ROE §8.1: redact password dialog values
+                    // redact password dialog values
                     if matches!(&dialog.input_type, InputType::PasswordInput { .. }) {
                         info!("Dialog confirmed (password value redacted)");
                     } else {

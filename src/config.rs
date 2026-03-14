@@ -99,7 +99,7 @@ impl ConfigOption {
             _ => true, // Default: any non-empty value is valid
         };
         if !valid {
-            // ROE §8.1: never log password values
+            // never log password values
             if self.name.contains("Password") {
                 error!(field = %self.name, "Field validation failed (value redacted)");
             } else {

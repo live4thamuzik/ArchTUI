@@ -859,7 +859,7 @@ pub struct SystemConfig {
     pub root_password: Option<String>,
 }
 
-// ROE §8.1: Custom Debug impl redacts password fields
+// Custom Debug impl redacts password fields
 impl std::fmt::Debug for SystemConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SystemConfig")
@@ -1063,7 +1063,7 @@ pub struct EncryptionConfig {
     pub cipher: LuksCipher,
 }
 
-// ROE §8.1: Custom Debug impl redacts password field
+// Custom Debug impl redacts password field
 impl std::fmt::Debug for EncryptionConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EncryptionConfig")

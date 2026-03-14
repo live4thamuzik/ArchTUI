@@ -23,7 +23,7 @@ pub struct ResetPasswordArgs {
     pub password: String,
 }
 
-// ROE §8.1: Custom Debug impl redacts password field
+// Custom Debug impl redacts password field
 impl std::fmt::Debug for ResetPasswordArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ResetPasswordArgs")

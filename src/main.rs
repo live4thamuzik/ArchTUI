@@ -660,7 +660,7 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 execute_tool(&add_user_args)?;
             }
             crate::cli::UserToolCommands::ResetPassword { username } => {
-                // ROE §8.1: Read password from env var, never from CLI args (/proc/PID/cmdline)
+                // Read password from env var, never from CLI args (/proc/PID/cmdline)
                 let password = std::env::var("USER_PASSWORD").unwrap_or_else(|_| {
                     eprintln!("❌ USER_PASSWORD environment variable must be set");
                     eprintln!("   Usage: USER_PASSWORD='secret' archtui tool user reset-password -u <user>");

@@ -138,7 +138,7 @@ pub struct UserAddArgs {
     pub sudo: bool,
 }
 
-// ROE §8.1: Custom Debug impl redacts password field
+// Custom Debug impl redacts password field
 impl std::fmt::Debug for UserAddArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UserAddArgs")

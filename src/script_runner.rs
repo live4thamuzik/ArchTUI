@@ -145,7 +145,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     tracing::debug!(script = %script_name, "Argument validation passed");
 
     // Log exact command and environment for transparency
-    // ROE §8.1: redact password-containing env vars
+    // redact password-containing env vars
     let redacted_env = redact_env_vars(&env_vars);
     info!(
         script = %script_name,
@@ -255,7 +255,7 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
 
 /// Redact password-containing environment variables for safe logging.
 ///
-/// ROE §8.1: password values must NEVER appear in logs or tracing output.
+/// password values must NEVER appear in logs or tracing output.
 /// Any env var whose name contains "PASSWORD" (case-insensitive) gets its
 /// value replaced with `<REDACTED>`.
 pub fn redact_env_vars(env_vars: &[(String, String)]) -> Vec<String> {
