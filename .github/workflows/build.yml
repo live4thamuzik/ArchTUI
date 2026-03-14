@@ -11,7 +11,7 @@ jobs:
   shellcheck:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Install shellcheck
       run: sudo apt-get install -y shellcheck
@@ -28,7 +28,7 @@ jobs:
   bats:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Install bats
       run: sudo apt-get update && sudo apt-get install -y bats
@@ -47,7 +47,7 @@ jobs:
         pacman -Sy --noconfirm archlinux-keyring
         pacman -Syu --noconfirm git base-devel rust
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Run clippy
       run: cargo clippy --no-default-features -- -D warnings
@@ -65,7 +65,7 @@ jobs:
 
     - name: Upload binary artifact
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: archtui
         path: target/release/archtui
@@ -78,7 +78,7 @@ jobs:
       contents: write
     steps:
     - name: Download binary artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         name: archtui
 
