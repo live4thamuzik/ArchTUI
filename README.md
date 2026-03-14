@@ -15,6 +15,28 @@ A guided installer and system administration toolkit for Arch Linux. The TUI han
 **System tools** — 28 standalone administration scripts accessible from the TUI or directly via CLI. Disk operations, service management, user/group administration, network configuration, security auditing, initramfs rebuilding, and install log viewing.
 
 ---
+
+## Screenshots
+
+**Main Menu**
+![Main Menu](assets/main-menu.png)
+
+**Guided Installer** — 48 configuration options with cascading defaults
+![Guided Installer](assets/guided-installer.png)
+
+**Automated Install** — config format preview for headless installs
+![Automated Install](assets/automated-install.png)
+
+**AUR Search** — live search with version numbers
+![AUR Search](assets/aur-search.png)
+
+**AUR Package Selection** — search, select, queue, review
+![AUR Packages](assets/aur-packages.png)
+
+**Disk Tools** — 28 system administration tools accessible from TUI or CLI
+![Disk Tools](assets/disk-tools.png)
+
+---
 A pre-compiled binary (`archtui`) ships in the repo. The Arch live ISO does not have the space or tooling to build from source — the Rust toolchain alone exceeds available ISO memory, and the build also requires `jq`. Clone and run directly. To build from source on a full system:
 
 ```
