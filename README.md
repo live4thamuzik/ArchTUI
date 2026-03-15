@@ -218,7 +218,7 @@ archtui (Rust)
   |-- CLI: clap
   |-- Config: serde_json
   |-- Process management: nix, signal-hook
-  |-- Package queries: alpm (optional, Arch-only)
+  |-- Package queries: alpm (default, Arch-only)
   |
   v
 scripts/ (Bash)
