@@ -56,8 +56,8 @@ cd ArchTUI
 ```
 git clone https://github.com/live4thamuzik/ArchTUI.git
 cd ArchTUI
-curl -LO https://github.com/live4thamuzik/ArchTUI/releases/latest/download/archtui
-curl -LO https://github.com/live4thamuzik/ArchTUI/releases/latest/download/archtui.sha256
+curl -FsSL https://github.com/live4thamuzik/ArchTUI/releases/latest/download/archtui
+curl -FsSL https://github.com/live4thamuzik/ArchTUI/releases/latest/download/archtui.sha256
 sha256sum -c archtui.sha256
 chmod +x archtui
 ./archtui
