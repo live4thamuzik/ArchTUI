@@ -358,17 +358,16 @@ impl ScriptManifest {
         }
 
         // Check confirmation for destructive scripts
-        if self.destructive {
-            if let Some(ref confirmation_var) = self.required_confirmation {
-                let confirmation_value =
-                    env.get(confirmation_var).map(|s| s.as_str()).unwrap_or("");
-                if confirmation_value != "yes" {
-                    tracing::error!(script = %self.script, var = %confirmation_var, "Missing destructive confirmation");
-                    return Err(ManifestError::MissingConfirmation {
-                        script: self.script.clone(),
-                        confirmation: confirmation_var.clone(),
-                    });
-                }
+        if self.destructive
+            && let Some(ref confirmation_var) = self.required_confirmation
+        {
+            let confirmation_value = env.get(confirmation_var).map(|s| s.as_str()).unwrap_or("");
+            if confirmation_value != "yes" {
+                tracing::error!(script = %self.script, var = %confirmation_var, "Missing destructive confirmation");
+                return Err(ManifestError::MissingConfirmation {
+                    script: self.script.clone(),
+                    confirmation: confirmation_var.clone(),
+                });
             }
         }
 
@@ -414,10 +413,10 @@ impl ScriptManifest {
         lines.push("#".to_string());
         lines.push("# ENVIRONMENT CONTRACT:".to_string());
 
-        if self.destructive {
-            if let Some(ref conf) = self.required_confirmation {
-                lines.push(format!("#   {}=yes   Required for execution", conf));
-            }
+        if self.destructive
+            && let Some(ref conf) = self.required_confirmation
+        {
+            lines.push(format!("#   {}=yes   Required for execution", conf));
         }
 
         if !self.required_env.is_empty() {

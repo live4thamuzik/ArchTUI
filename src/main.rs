@@ -1,7 +1,6 @@
 //! ArchTUI - Main entry point
 //!
 //! A clean, modular TUI for Arch Linux installation with proper separation of concerns.
-
 mod app;
 mod cli;
 mod components;

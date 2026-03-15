@@ -240,23 +240,23 @@ impl InstallationConfig {
             );
             anyhow::bail!("Hostname must be at most 63 characters long (RFC 1123)");
         }
-        if let Some(first_char) = hostname.chars().next() {
-            if !first_char.is_ascii_alphanumeric() {
-                tracing::error!(
-                    field = "hostname",
-                    "Hostname must start with a letter or digit (RFC 1123)"
-                );
-                anyhow::bail!("Hostname must start with a letter or digit (RFC 1123)");
-            }
+        if let Some(first_char) = hostname.chars().next()
+            && !first_char.is_ascii_alphanumeric()
+        {
+            tracing::error!(
+                field = "hostname",
+                "Hostname must start with a letter or digit (RFC 1123)"
+            );
+            anyhow::bail!("Hostname must start with a letter or digit (RFC 1123)");
         }
-        if let Some(last_char) = hostname.chars().last() {
-            if !last_char.is_ascii_alphanumeric() {
-                tracing::error!(
-                    field = "hostname",
-                    "Hostname must end with a letter or digit (RFC 1123)"
-                );
-                anyhow::bail!("Hostname must end with a letter or digit (RFC 1123)");
-            }
+        if let Some(last_char) = hostname.chars().last()
+            && !last_char.is_ascii_alphanumeric()
+        {
+            tracing::error!(
+                field = "hostname",
+                "Hostname must end with a letter or digit (RFC 1123)"
+            );
+            anyhow::bail!("Hostname must end with a letter or digit (RFC 1123)");
         }
         if !hostname
             .chars()
@@ -280,14 +280,14 @@ impl InstallationConfig {
             );
             anyhow::bail!("Username must be 3-32 characters long");
         }
-        if let Some(first_char) = username.chars().next() {
-            if !first_char.is_ascii_lowercase() {
-                tracing::error!(
-                    field = "username",
-                    "Username must start with lowercase letter"
-                );
-                anyhow::bail!("Username must start with a lowercase letter");
-            }
+        if let Some(first_char) = username.chars().next()
+            && !first_char.is_ascii_lowercase()
+        {
+            tracing::error!(
+                field = "username",
+                "Username must start with lowercase letter"
+            );
+            anyhow::bail!("Username must start with a lowercase letter");
         }
         if !username
             .chars()

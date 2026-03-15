@@ -773,10 +773,10 @@ impl App {
                 KeyCode::Enter => {
                     let mut state = self.lock_state();
                     if let Some(output) = state.floating_output.take() {
-                        if !output.complete {
-                            if let Ok(mut registry) = ChildRegistry::global().lock() {
-                                registry.terminate_current(Duration::from_secs(3));
-                            }
+                        if !output.complete
+                            && let Ok(mut registry) = ChildRegistry::global().lock()
+                        {
+                            registry.terminate_current(Duration::from_secs(3));
                         }
                         // Check if we're in the disk layout → action loop
                         let pending_device = state.pending_tool_device.clone();
@@ -820,10 +820,10 @@ impl App {
                     // Dismiss floating output and return to DiskTools (or previous mode)
                     let mut state = self.lock_state();
                     if let Some(output) = state.floating_output.take() {
-                        if !output.complete {
-                            if let Ok(mut registry) = ChildRegistry::global().lock() {
-                                registry.terminate_current(Duration::from_secs(3));
-                            }
+                        if !output.complete
+                            && let Ok(mut registry) = ChildRegistry::global().lock()
+                        {
+                            registry.terminate_current(Duration::from_secs(3));
                         }
                         state.pending_tool_device = None;
                         state.mode = state.pre_dialog_mode.take().unwrap_or(AppMode::ToolsMenu);
@@ -1126,10 +1126,10 @@ impl App {
                     }
                 }
                 AppMode::ToolDialog => {
-                    if let Some(ref mut dialog) = state.tool_dialog {
-                        if dialog.current_param > 0 {
-                            dialog.current_param -= 1;
-                        }
+                    if let Some(ref mut dialog) = state.tool_dialog
+                        && dialog.current_param > 0
+                    {
+                        dialog.current_param -= 1;
                     }
                 }
                 AppMode::GuidedInstaller => {
@@ -1196,10 +1196,10 @@ impl App {
                     }
                 }
                 AppMode::ToolDialog => {
-                    if let Some(ref mut dialog) = state.tool_dialog {
-                        if dialog.current_param < dialog.parameters.len().saturating_sub(1) {
-                            dialog.current_param += 1;
-                        }
+                    if let Some(ref mut dialog) = state.tool_dialog
+                        && dialog.current_param < dialog.parameters.len().saturating_sub(1)
+                    {
+                        dialog.current_param += 1;
                     }
                 }
                 AppMode::GuidedInstaller => {
@@ -1995,11 +1995,11 @@ impl App {
             // ToolExecution removed — tool execution uses FloatingOutput mode
             AppMode::Installation => {
                 // Kill the running installer process group before switching modes
-                if let Some(pid) = state.installer_pid.take() {
-                    if let Ok(mut registry) = ChildRegistry::global().lock() {
-                        registry.terminate_current(std::time::Duration::from_secs(3));
-                        registry.unregister(pid);
-                    }
+                if let Some(pid) = state.installer_pid.take()
+                    && let Ok(mut registry) = ChildRegistry::global().lock()
+                {
+                    registry.terminate_current(std::time::Duration::from_secs(3));
+                    registry.unregister(pid);
                 }
                 state.set_mode(AppMode::GuidedInstaller);
                 state.status_message =
@@ -2069,17 +2069,16 @@ impl App {
         // Find the Secure Boot option
         if let Some(secure_boot_option) =
             config.options.iter().find(|opt| opt.name == "Secure Boot")
+            && secure_boot_option.value.to_lowercase() == "yes"
         {
-            if secure_boot_option.value.to_lowercase() == "yes" {
-                // Check if Boot Mode is UEFI
-                if let Some(boot_mode_option) =
-                    config.options.iter().find(|opt| opt.name == "Boot Mode")
-                {
-                    let boot_mode = boot_mode_option.value.to_lowercase();
-                    if boot_mode != "uefi" && boot_mode != "auto" {
-                        // Secure boot validation failed - this will be handled in the main validation
-                        return false;
-                    }
+            // Check if Boot Mode is UEFI
+            if let Some(boot_mode_option) =
+                config.options.iter().find(|opt| opt.name == "Boot Mode")
+            {
+                let boot_mode = boot_mode_option.value.to_lowercase();
+                if boot_mode != "uefi" && boot_mode != "auto" {
+                    // Secure boot validation failed - this will be handled in the main validation
+                    return false;
                 }
             }
         }
@@ -2146,16 +2145,16 @@ impl App {
         // Add secure boot validation errors
         if let Some(secure_boot_option) =
             config.options.iter().find(|opt| opt.name == "Secure Boot")
+            && secure_boot_option.value.to_lowercase() == "yes"
+            && let Some(boot_mode_option) =
+                config.options.iter().find(|opt| opt.name == "Boot Mode")
         {
-            if secure_boot_option.value.to_lowercase() == "yes" {
-                if let Some(boot_mode_option) =
-                    config.options.iter().find(|opt| opt.name == "Boot Mode")
-                {
-                    let boot_mode = boot_mode_option.value.to_lowercase();
-                    if boot_mode != "uefi" && boot_mode != "auto" {
-                        errors.push("Secure Boot requires UEFI boot mode. Please configure UEFI firmware first.".to_string());
-                    }
-                }
+            let boot_mode = boot_mode_option.value.to_lowercase();
+            if boot_mode != "uefi" && boot_mode != "auto" {
+                errors.push(
+                    "Secure Boot requires UEFI boot mode. Please configure UEFI firmware first."
+                        .to_string(),
+                );
             }
         }
 
@@ -2172,17 +2171,14 @@ impl App {
         // Check for secure boot issues first (show warning dialog)
         if let Some(secure_boot_option) =
             config.options.iter().find(|opt| opt.name == "Secure Boot")
+            && secure_boot_option.value.to_lowercase() == "yes"
+            && let Some(boot_mode_option) =
+                config.options.iter().find(|opt| opt.name == "Boot Mode")
         {
-            if secure_boot_option.value.to_lowercase() == "yes" {
-                if let Some(boot_mode_option) =
-                    config.options.iter().find(|opt| opt.name == "Boot Mode")
-                {
-                    let boot_mode = boot_mode_option.value.to_lowercase();
-                    if boot_mode != "uefi" && boot_mode != "auto" {
-                        self.show_secure_boot_warning();
-                        return false;
-                    }
-                }
+            let boot_mode = boot_mode_option.value.to_lowercase();
+            if boot_mode != "uefi" && boot_mode != "auto" {
+                self.show_secure_boot_warning();
+                return false;
             }
         }
 
@@ -3607,20 +3603,18 @@ impl App {
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "Encryption Password")
+                            && pass_opt.value == "N/A"
                         {
-                            if pass_opt.value == "N/A" {
-                                pass_opt.value = String::new();
-                            }
+                            pass_opt.value = String::new();
                         }
                         if let Some(key_opt) = state
                             .config
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "Encryption Key Type")
+                            && key_opt.value == "N/A"
                         {
-                            if key_opt.value == "N/A" {
-                                key_opt.value = "Password".to_string();
-                            }
+                            key_opt.value = "Password".to_string();
                         }
                     }
                 }
@@ -3652,15 +3646,14 @@ impl App {
         {
             let mut state = self.lock_state();
             // Auto-set display manager
-            if !display_manager.is_empty() {
-                if let Some(dm_opt) = state
+            if !display_manager.is_empty()
+                && let Some(dm_opt) = state
                     .config
                     .options
                     .iter_mut()
                     .find(|opt| opt.name == "Display Manager")
-                {
-                    dm_opt.value = display_manager.to_string();
-                }
+            {
+                dm_opt.value = display_manager.to_string();
             }
 
             // Auto-set AUR helper when DE requires AUR packages
@@ -3670,10 +3663,9 @@ impl App {
                     .options
                     .iter_mut()
                     .find(|opt| opt.name == "AUR Helper")
+                    && aur_opt.get_value().to_lowercase() == "none"
                 {
-                    if aur_opt.get_value().to_lowercase() == "none" {
-                        aur_opt.value = "paru".to_string();
-                    }
+                    aur_opt.value = "paru".to_string();
                 }
                 state.status_message = format!(
                     "{} requires AUR packages — AUR Helper auto-set",
@@ -3857,10 +3849,9 @@ impl App {
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "RAID Level")
+                            && raid_opt.value == "N/A"
                         {
-                            if raid_opt.value == "N/A" {
-                                raid_opt.value = "raid1".to_string();
-                            }
+                            raid_opt.value = "raid1".to_string();
                         }
                     } else if let Some(raid_opt) = state
                         .config
@@ -3888,10 +3879,9 @@ impl App {
                                 .options
                                 .iter_mut()
                                 .find(|opt| opt.name == "Root Size")
+                                && root_opt.value == "N/A"
                             {
-                                if root_opt.value == "N/A" {
-                                    root_opt.value = "Remaining".to_string();
-                                }
+                                root_opt.value = "Remaining".to_string();
                             }
                         }
                     }
@@ -4039,20 +4029,18 @@ impl App {
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "Encryption Password")
+                            && pass_option.value == "N/A"
                         {
-                            if pass_option.value == "N/A" {
-                                pass_option.value = String::new();
-                            }
+                            pass_option.value = String::new();
                         }
                         if let Some(key_type_option) = state
                             .config
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "Encryption Key Type")
+                            && key_type_option.value == "N/A"
                         {
-                            if key_type_option.value == "N/A" {
-                                key_type_option.value = "Password".to_string();
-                            }
+                            key_type_option.value = "Password".to_string();
                         }
                     }
                 }
@@ -4149,15 +4137,14 @@ impl App {
                         _ => "",                      // Don't auto-select for other regions
                     };
 
-                    if !mirror_country.is_empty() {
-                        if let Some(mirror_option) = state
+                    if !mirror_country.is_empty()
+                        && let Some(mirror_option) = state
                             .config
                             .options
                             .iter_mut()
                             .find(|opt| opt.name == "Mirror Country")
-                        {
-                            mirror_option.value = mirror_country.to_string();
-                        }
+                    {
+                        mirror_option.value = mirror_country.to_string();
                     }
                 }
                 _ => {}
@@ -4878,19 +4865,19 @@ impl App {
             KeyCode::Up => {
                 // Move to previous parameter (if not at first)
                 let mut state = self.lock_state();
-                if let Some(ref mut dialog) = state.tool_dialog {
-                    if dialog.current_param > 0 {
-                        dialog.current_param -= 1;
-                    }
+                if let Some(ref mut dialog) = state.tool_dialog
+                    && dialog.current_param > 0
+                {
+                    dialog.current_param -= 1;
                 }
             }
             KeyCode::Down => {
                 // Move to next parameter (if not at last)
                 let mut state = self.lock_state();
-                if let Some(ref mut dialog) = state.tool_dialog {
-                    if dialog.current_param < dialog.parameters.len().saturating_sub(1) {
-                        dialog.current_param += 1;
-                    }
+                if let Some(ref mut dialog) = state.tool_dialog
+                    && dialog.current_param < dialog.parameters.len().saturating_sub(1)
+                {
+                    dialog.current_param += 1;
                 }
             }
             KeyCode::Enter => {
@@ -4963,23 +4950,22 @@ impl App {
                 let mut state = self.lock_state();
                 if let Some(ref mut dialog) = state.tool_dialog {
                     let idx = dialog.current_param;
-                    if idx < dialog.parameters.len() && idx < dialog.param_values.len() {
-                        if let ToolParameter::Selection(ref options, _) =
+                    if idx < dialog.parameters.len()
+                        && idx < dialog.param_values.len()
+                        && let ToolParameter::Selection(ref options, _) =
                             dialog.parameters[idx].param_type
-                        {
-                            if !options.is_empty() {
-                                // Find current selection index
-                                let current_val = &dialog.param_values[idx];
-                                let current_idx =
-                                    options.iter().position(|o| o == current_val).unwrap_or(0);
-                                let new_idx = if key_event.code == KeyCode::Right {
-                                    (current_idx + 1) % options.len()
-                                } else {
-                                    current_idx.checked_sub(1).unwrap_or(options.len() - 1)
-                                };
-                                dialog.param_values[idx] = options[new_idx].clone();
-                            }
-                        }
+                        && !options.is_empty()
+                    {
+                        // Find current selection index
+                        let current_val = &dialog.param_values[idx];
+                        let current_idx =
+                            options.iter().position(|o| o == current_val).unwrap_or(0);
+                        let new_idx = if key_event.code == KeyCode::Right {
+                            (current_idx + 1) % options.len()
+                        } else {
+                            current_idx.checked_sub(1).unwrap_or(options.len() - 1)
+                        };
+                        dialog.param_values[idx] = options[new_idx].clone();
                     }
                 }
             }

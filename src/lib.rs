@@ -1,7 +1,6 @@
 //! ArchTUI Library
 //!
 //! This library provides the core functionality for the Arch Linux TUI installer.
-
 pub mod app;
 pub mod cli;
 pub mod components;

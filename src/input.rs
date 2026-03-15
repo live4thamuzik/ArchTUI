@@ -92,11 +92,13 @@ pub enum InputType {
         options: Vec<String>,
         scroll_state: crate::scrolling::ScrollState,
     },
-    /// Disk selection with detection
+    /// Disk selection with detection and partition preview
     DiskSelection {
         current_value: String,
         available_disks: Vec<String>,
         scroll_state: crate::scrolling::ScrollState,
+        /// Cached partition layouts keyed by disk path (e.g. "/dev/sda")
+        disk_layouts: std::collections::HashMap<String, Vec<String>>,
     },
     /// Multi-disk selection for RAID and manual partitioning
     MultiDiskSelection {
@@ -309,10 +311,10 @@ impl InputDialog {
                     crossterm::event::KeyCode::Up => {
                         if *show_search_results && !search_results.is_empty() {
                             // Handle list navigation for search results
-                            if let Some(selected) = list_state.selected() {
-                                if selected > 0 {
-                                    list_state.select(Some(selected - 1));
-                                }
+                            if let Some(selected) = list_state.selected()
+                                && selected > 0
+                            {
+                                list_state.select(Some(selected - 1));
                             }
                         } else {
                             // Handle command mode scrolling
@@ -348,33 +350,32 @@ impl InputDialog {
                     crossterm::event::KeyCode::Enter => {
                         if *show_search_results {
                             // Toggle package selection
-                            if let Some(selected) = list_state.selected() {
-                                if let Some(selected_result) = search_results.get(selected) {
-                                    // Extract package name from search result
-                                    let package_name = &selected_result.name;
+                            if let Some(selected) = list_state.selected()
+                                && let Some(selected_result) = search_results.get(selected)
+                            {
+                                // Extract package name from search result
+                                let package_name = &selected_result.name;
 
-                                    // Toggle selection (exact word match, not substring)
-                                    let is_already_selected =
-                                        package_list.split_whitespace().any(|p| p == package_name);
-                                    if is_already_selected {
-                                        // Remove package
-                                        let new_list = package_list
-                                            .split_whitespace()
-                                            .filter(|&p| p != package_name)
-                                            .collect::<Vec<&str>>()
-                                            .join(" ");
-                                        *package_list = new_list;
-                                        output_lines
-                                            .push(format!("✓ Removed package: {}", package_name));
-                                    } else {
-                                        // Add package
-                                        if !package_list.is_empty() {
-                                            package_list.push(' ');
-                                        }
-                                        package_list.push_str(package_name);
-                                        output_lines
-                                            .push(format!("✓ Added package: {}", package_name));
+                                // Toggle selection (exact word match, not substring)
+                                let is_already_selected =
+                                    package_list.split_whitespace().any(|p| p == package_name);
+                                if is_already_selected {
+                                    // Remove package
+                                    let new_list = package_list
+                                        .split_whitespace()
+                                        .filter(|&p| p != package_name)
+                                        .collect::<Vec<&str>>()
+                                        .join(" ");
+                                    *package_list = new_list;
+                                    output_lines
+                                        .push(format!("✓ Removed package: {}", package_name));
+                                } else {
+                                    // Add package
+                                    if !package_list.is_empty() {
+                                        package_list.push(' ');
                                     }
+                                    package_list.push_str(package_name);
+                                    output_lines.push(format!("✓ Added package: {}", package_name));
                                 }
                             }
                         } else {
@@ -1255,10 +1256,13 @@ impl InputHandler {
         let mut scroll_state = crate::scrolling::ScrollState::new(available_disks.len(), 10);
         scroll_state.set_selected(selected_index);
 
+        let disk_layouts = Self::cache_disk_layouts(&available_disks);
+
         let input_type = InputType::DiskSelection {
             current_value,
             available_disks,
             scroll_state,
+            disk_layouts,
         };
 
         self.current_dialog = Some(InputDialog::new(
@@ -1616,6 +1620,46 @@ impl InputHandler {
         }
 
         disks
+    }
+
+    /// Cache partition layouts for all detected disks
+    fn cache_disk_layouts(
+        available_disks: &[String],
+    ) -> std::collections::HashMap<String, Vec<String>> {
+        use std::process::Command;
+        let mut layouts = std::collections::HashMap::new();
+
+        for disk_entry in available_disks {
+            // Extract device path from "/dev/sda (953.9G) Samsung SSD..."
+            let dev_path = disk_entry
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            if dev_path.is_empty() {
+                continue;
+            }
+
+            let mut lines = Vec::new();
+            if let Ok(output) = Command::new("lsblk")
+                .args(["-o", "NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS", &dev_path])
+                .in_new_process_group()
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    lines.push(line.to_string());
+                }
+            }
+
+            if lines.is_empty() {
+                lines.push("No partition data available".to_string());
+            }
+
+            layouts.insert(dev_path, lines);
+        }
+
+        layouts
     }
 
     /// Start multi-disk selection for RAID or manual partitioning
@@ -2118,13 +2162,11 @@ impl InputHandler {
             .args(["--getss", disk])
             .in_new_process_group()
             .output()
-        {
-            if let Ok(sector_size) = String::from_utf8_lossy(&output.stdout)
+            && let Ok(sector_size) = String::from_utf8_lossy(&output.stdout)
                 .trim()
                 .parse::<u32>()
-            {
-                info_parts.push(format!("{}B", sector_size));
-            }
+        {
+            info_parts.push(format!("{}B", sector_size));
         }
 
         if info_parts.is_empty() {

@@ -63,12 +63,12 @@ pub fn scripts_base_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("ARCHTUI_SCRIPTS_DIR") {
         return PathBuf::from(dir);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let candidate = parent.join("scripts");
-            if candidate.is_dir() {
-                return candidate;
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        let candidate = parent.join("scripts");
+        if candidate.is_dir() {
+            return candidate;
         }
     }
     // FHS fallback for system-wide installation (e.g. /usr/bin/archtui + /usr/share/archtui/scripts)

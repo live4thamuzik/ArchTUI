@@ -134,10 +134,10 @@ pub fn now_hms() -> String {
 /// Write a line to the master log file (thread-safe, best-effort).
 fn write_master_log(log_file: &Arc<Mutex<Option<File>>>, line: &str) {
     // SAFETY: poison recovery via into_inner — never panic on mutex
-    if let Ok(mut guard) = log_file.lock() {
-        if let Some(ref mut f) = *guard {
-            let _ = writeln!(f, "[{}] {}", now_hms(), line);
-        }
+    if let Ok(mut guard) = log_file.lock()
+        && let Some(ref mut f) = *guard
+    {
+        let _ = writeln!(f, "[{}] {}", now_hms(), line);
     }
 }
 

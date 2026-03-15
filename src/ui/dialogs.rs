@@ -643,12 +643,32 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                 f.render_widget(list, content_area);
             }
             crate::input::InputType::DiskSelection {
-                available_disks, ..
+                available_disks,
+                disk_layouts,
+                ..
             } => {
+                // Split content area: 40% disk list, 60% partition preview
+                let panels = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                    .split(content_area);
+
+                let list_area = panels[0];
+                let preview_area = panels[1];
+
+                // Left panel: disk list
                 let items: Vec<ListItem> = available_disks
                     .iter()
                     .enumerate()
                     .map(|(index, disk)| {
+                        // Show device + size on first line, model on second
+                        let parts: Vec<&str> = disk.splitn(2, ')').collect();
+                        let (dev_size, model) = if parts.len() == 2 {
+                            (format!("{})", parts[0]), parts[1].trim().to_string())
+                        } else {
+                            (disk.clone(), String::new())
+                        };
+
                         let (indicator, style) = if index == selected_index {
                             (
                                 "\u{25b8} ",
@@ -659,14 +679,73 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                         } else {
                             ("  ", Style::default().fg(Colors::FG_PRIMARY))
                         };
-                        ListItem::new(Line::from(vec![
+
+                        let mut lines = vec![Line::from(vec![
                             Span::styled(indicator, style),
-                            Span::styled(disk.clone(), style),
-                        ]))
+                            Span::styled(dev_size, style),
+                        ])];
+                        if !model.is_empty() {
+                            let model_style = if index == selected_index {
+                                Style::default().fg(Colors::SECONDARY)
+                            } else {
+                                Style::default().fg(Colors::FG_MUTED)
+                            };
+                            lines.push(Line::from(vec![
+                                Span::raw("    "),
+                                Span::styled(model, model_style),
+                            ]));
+                        }
+                        // Add a blank line between entries
+                        lines.push(Line::from(""));
+
+                        ListItem::new(lines)
                     })
                     .collect();
                 let list = List::new(items).style(Style::default().bg(Colors::BG_PRIMARY));
-                f.render_widget(list, content_area);
+                f.render_widget(list, list_area);
+
+                // Right panel: partition preview for selected disk
+                let selected_dev = available_disks
+                    .get(selected_index)
+                    .and_then(|d| d.split_whitespace().next())
+                    .unwrap_or("");
+
+                let preview_lines: Vec<Line> = if let Some(layout) = disk_layouts.get(selected_dev)
+                {
+                    layout
+                        .iter()
+                        .map(|line| {
+                            let style = if line.contains("part")
+                                || line.contains("lvm")
+                                || line.contains("crypt")
+                            {
+                                Style::default().fg(Colors::FG_PRIMARY)
+                            } else if line.starts_with("NAME") {
+                                Style::default()
+                                    .fg(Colors::FG_MUTED)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Colors::FG_SECONDARY)
+                            };
+                            Line::from(Span::styled(line.as_str(), style))
+                        })
+                        .collect()
+                } else {
+                    vec![Line::from(Span::styled(
+                        "No layout data",
+                        Style::default().fg(Colors::FG_MUTED),
+                    ))]
+                };
+
+                let preview = Paragraph::new(preview_lines)
+                    .style(Style::default().bg(Colors::BG_PRIMARY))
+                    .block(
+                        Block::default()
+                            .borders(Borders::LEFT)
+                            .border_style(Style::default().fg(Colors::BORDER_INACTIVE))
+                            .padding(ratatui::widgets::Padding::left(1)),
+                    );
+                f.render_widget(preview, preview_area);
             }
             crate::input::InputType::PackageSelection {
                 current_input,
