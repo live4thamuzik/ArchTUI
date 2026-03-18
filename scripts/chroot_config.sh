@@ -2385,60 +2385,47 @@ configure_numlock() {
         return 0
     fi
 
-    log_info "Configuring numlock on boot..."
+    log_info "Configuring numlock on boot via mkinitcpio-numlock (AUR)..."
 
-    # TTY numlock via systemd service (setleds on /dev/tty1-6)
-    mkdir -p /etc/systemd/system
-    cat > /etc/systemd/system/numlock.service << 'EOF'
-[Unit]
-Description=Activate numlock on boot
+    # mkinitcpio-numlock activates numlock in early userspace (initramfs).
+    # Works universally — TTY, X11, Wayland, all display managers.
+    local _aur_helper="${AUR_HELPER:-none}"
 
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'for tty in /dev/tty{1..6}; do /usr/bin/setleds -D +num < "$tty"; done'
+    if [[ "$_aur_helper" == "none" ]]; then
+        log_warn "Numlock on boot requires an AUR helper (mkinitcpio-numlock is an AUR package)"
+        log_warn "Skipping numlock — install mkinitcpio-numlock manually after boot"
+        return 0
+    fi
 
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl enable numlock.service || log_warn "Failed to enable numlock.service"
+    # Install mkinitcpio-numlock via the configured AUR helper
+    local _user="${MAIN_USERNAME:?MAIN_USERNAME not set}"
+    if command -v "$_aur_helper" &>/dev/null; then
+        log_cmd "runuser -u $_user -- $_aur_helper -S --noconfirm mkinitcpio-numlock"
+        runuser -u "$_user" -- "$_aur_helper" -S --noconfirm mkinitcpio-numlock || {
+            log_warn "Failed to install mkinitcpio-numlock — numlock will not activate on boot"
+            return 0
+        }
+    else
+        log_warn "AUR helper '$_aur_helper' not found — skipping mkinitcpio-numlock"
+        return 0
+    fi
 
-    # Display manager numlock (graphical sessions)
-    case "${DISPLAY_MANAGER:-}" in
-        sddm)
-            mkdir -p /etc/sddm.conf.d
-            cat > /etc/sddm.conf.d/numlock.conf << 'EOF'
-[General]
-Numlock=on
-EOF
-            ;;
-        gdm)
-            # GDM reads X11 numlock state from dconf
-            local _gdm_db="/etc/dconf/db/gdm.d"
-            mkdir -p "$_gdm_db"
-            cat > "${_gdm_db}/10-numlock" << 'EOF'
-[org/gnome/settings-daemon/peripherals/keyboard]
-numlock-state='on'
-[org/gnome/desktop/peripherals/keyboard]
-numlock-state=true
-remember-numlock-state=true
-EOF
-            dconf update 2>/dev/null || log_warn "dconf update failed for GDM numlock"
-            ;;
-        lightdm)
-            # LightDM runs numlockx in greeter-setup-script
-            pacman -S --noconfirm --needed numlockx 2>/dev/null || log_warn "Failed to install numlockx"
-            if [[ -f /etc/lightdm/lightdm.conf ]]; then
-                sed -i 's/^#*greeter-setup-script=.*/greeter-setup-script=\/usr\/bin\/numlockx on/' \
-                    /etc/lightdm/lightdm.conf || log_warn "Failed to configure LightDM numlock"
-            fi
-            ;;
-        greetd)
-            # greetd has no built-in numlock — use numlockx in user session
-            pacman -S --noconfirm --needed numlockx 2>/dev/null || log_warn "Failed to install numlockx"
-            ;;
-    esac
+    # Insert numlock hook between modconf and block in mkinitcpio.conf
+    if [[ -f /etc/mkinitcpio.conf ]]; then
+        if ! grep -q "numlock" /etc/mkinitcpio.conf; then
+            sed -i 's/\(modconf\)/\1 numlock/' /etc/mkinitcpio.conf || {
+                log_warn "Failed to add numlock hook to mkinitcpio.conf"
+                return 0
+            }
+            log_info "Added numlock hook to mkinitcpio.conf (after modconf)"
+        fi
 
-    log_success "Numlock configured"
+        # Rebuild initramfs with the new hook
+        log_cmd "mkinitcpio -P"
+        mkinitcpio -P || log_warn "mkinitcpio rebuild failed after adding numlock hook"
+    fi
+
+    log_success "Numlock on boot configured via mkinitcpio-numlock"
 }
 
 deploy_dotfiles() {

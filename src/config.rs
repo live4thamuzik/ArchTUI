@@ -269,7 +269,7 @@ impl Default for Configuration {
                 // Boot Splash and Final Setup (42-46)
                 ConfigOption::new("Plymouth", false, "Boot splash screen", "No"),
                 ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "N/A"),
-                ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot", "No"),
+                ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot (requires AUR: mkinitcpio-numlock)", "No"),
                 ConfigOption::new(
                     "Git Repository",
                     false,
