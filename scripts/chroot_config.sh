@@ -1711,15 +1711,15 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "hyprland")
-            install_packages "Hyprland" hyprland hyprlock hypridle waybar \
-                rofi-wayland grim slurp kitty xdg-desktop-portal-hyprland \
-                wl-clipboard thunar mako polkit-kde-agent \
+            install_packages "Hyprland" hyprland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \
+                polkit hyprpolkitagent hyprlock hypridle hyprpaper waybar \
+                rofi grim slurp kitty wl-clipboard cliphist thunar mako brightnessctl blueman \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-jetbrains-mono-nerd noto-fonts noto-fonts-emoji firefox
             ;;
         "sway")
             install_packages "Sway" sway swaylock swayidle waybar \
-                rofi-wayland grim slurp foot xdg-desktop-portal-wlr \
+                rofi grim slurp foot xdg-desktop-portal-wlr \
                 wl-clipboard mako thunar \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
@@ -1776,7 +1776,7 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "river")
-            install_packages "River" river xdg-desktop-portal-wlr swaylock swayidle waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
+            install_packages "River" river xdg-desktop-portal-wlr swaylock swayidle waybar foot rofi mako grim slurp wl-clipboard thunar \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;
@@ -1786,7 +1786,7 @@ install_desktop_environment() {
                 ttf-dejavu noto-fonts firefox
             ;;
         "labwc")
-            install_packages "Labwc" labwc xdg-desktop-portal-wlr swaylock swayidle waybar foot rofi-wayland mako grim slurp wl-clipboard thunar \
+            install_packages "Labwc" labwc xdg-desktop-portal-wlr swaylock swayidle waybar foot rofi mako grim slurp wl-clipboard thunar \
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
                 ttf-dejavu noto-fonts firefox
             ;;

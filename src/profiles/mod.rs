@@ -199,18 +199,24 @@ impl Profile {
             ],
 
             Profile::Hyprland => &[
-                // Hyprland compositor
+                // Hyprland compositor + portals
                 "hyprland",
                 "xdg-desktop-portal-hyprland",
-                // Lock/idle (Hyprland-native)
+                "xdg-desktop-portal-gtk",
+                // Authentication
+                "polkit",
+                "hyprpolkitagent",
+                // Lock/idle
                 "hyprlock",
                 "hypridle",
+                // Wallpaper
+                "hyprpaper",
                 // Status bar
                 "waybar",
                 // Terminal
                 "kitty",
                 // Launcher
-                "rofi-wayland",
+                "rofi",
                 // Notification daemon
                 "mako",
                 // Screenshot
@@ -218,8 +224,13 @@ impl Profile {
                 "slurp",
                 // Clipboard
                 "wl-clipboard",
+                "cliphist",
                 // File manager
                 "thunar",
+                // Brightness
+                "brightnessctl",
+                // Bluetooth
+                "blueman",
                 // Display manager
                 "sddm",
                 // Network
@@ -236,7 +247,6 @@ impl Profile {
                 "noto-fonts-emoji",
                 // Utilities
                 "firefox",
-                "polkit-kde-agent",
             ],
 
             Profile::Sway => &[
@@ -250,7 +260,7 @@ impl Profile {
                 // Terminal
                 "foot",
                 // Launcher
-                "rofi-wayland",
+                "rofi",
                 // Notification
                 "mako",
                 // Screenshot
@@ -632,7 +642,7 @@ impl Profile {
                 // Terminal
                 "foot",
                 // Launcher
-                "rofi-wayland",
+                "rofi",
                 // Notification
                 "mako",
                 // Screenshot
@@ -710,7 +720,7 @@ impl Profile {
                 // Terminal
                 "foot",
                 // Launcher
-                "rofi-wayland",
+                "rofi",
                 // Notification
                 "mako",
                 // Screenshot
@@ -1111,10 +1121,17 @@ mod tests {
     fn test_hyprland_packages() {
         let packages = Profile::Hyprland.get_packages();
         assert!(packages.contains(&"hyprland"));
+        assert!(packages.contains(&"xdg-desktop-portal-hyprland"));
+        assert!(packages.contains(&"xdg-desktop-portal-gtk"));
+        assert!(packages.contains(&"polkit"));
+        assert!(packages.contains(&"hyprpolkitagent"));
+        assert!(packages.contains(&"hyprpaper"));
         assert!(packages.contains(&"waybar"));
         assert!(packages.contains(&"kitty"));
-        assert!(packages.contains(&"rofi-wayland"));
-        assert!(packages.contains(&"sddm")); // Display manager included
+        assert!(packages.contains(&"rofi"));
+        assert!(packages.contains(&"cliphist"));
+        assert!(packages.contains(&"brightnessctl"));
+        assert!(packages.contains(&"sddm"));
     }
 
     #[test]
