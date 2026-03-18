@@ -493,72 +493,61 @@ configure_mkinitcpio() {
         fi
         log_info "Updated HOOKS in mkinitcpio.conf: $hooks"
 
-        # Add btrfs module if using Btrfs
+        # Build MODULES string once instead of multiple sed calls per module
+        local modules=""
+
+        # Btrfs module
         if [[ "${ROOT_FILESYSTEM_TYPE:-ext4}" == "btrfs" ]]; then
-            if ! grep -q "btrfs" /etc/mkinitcpio.conf; then
-                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 btrfs)/' /etc/mkinitcpio.conf || log_warn "Failed to add btrfs module"
-                # Clean up double spaces
-                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
-                log_info "Added btrfs module to mkinitcpio.conf"
-            fi
+            modules="$modules btrfs"
+            log_info "Added btrfs module to MODULES"
         fi
 
-        # Add RAID kernel modules explicitly (autodetect may miss them if live ISO environment differs)
+        # RAID kernel modules (autodetect may miss them if live ISO environment differs)
         if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
-            for rmod in md_mod raid0 raid1 raid456 raid10; do
-                if ! grep -q "$rmod" /etc/mkinitcpio.conf; then
-                    sed -i "s/^MODULES=(\(.*\))/MODULES=(\1 $rmod)/" /etc/mkinitcpio.conf || log_warn "Failed to add $rmod module"
-                    sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
-                fi
-            done
-            log_info "Added RAID modules to mkinitcpio.conf: md_mod raid0 raid1 raid456 raid10"
+            modules="$modules md_mod raid0 raid1 raid456 raid10"
+            log_info "Added RAID modules to MODULES: md_mod raid0 raid1 raid456 raid10"
         fi
 
-        # Add dm-mod for LVM/LUKS strategies (explicit inclusion)
+        # dm-mod for LVM/LUKS strategies
         if [[ "${PARTITIONING_STRATEGY:-}" == *"lvm"* ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-            if ! grep -q "dm_mod" /etc/mkinitcpio.conf; then
-                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 dm_mod)/' /etc/mkinitcpio.conf || log_warn "Failed to add dm_mod module"
-                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
-                log_info "Added dm_mod module to mkinitcpio.conf"
-            fi
+            modules="$modules dm_mod"
+            log_info "Added dm_mod module to MODULES"
         fi
 
-        # Add GPU modules for early KMS (required for Plymouth + proprietary drivers)
-        # Check GPU_DRIVERS env var first, fall back to hardware detection
+        # GPU modules for early KMS (required for Plymouth + proprietary drivers)
+        # Cache lspci output — single subprocess instead of 3
         local _gpu_drv="${GPU_DRIVERS:-Auto}"
         _gpu_drv="${_gpu_drv,,}"  # lowercase
 
+        local _lspci_kms=""
+        if [[ "$_gpu_drv" == "auto" ]]; then
+            _lspci_kms=$(lspci 2>/dev/null) || log_warn "lspci failed — GPU auto-detection for early KMS skipped"
+        fi
+
         if [[ "$_gpu_drv" == "nvidia" || "$_gpu_drv" == "nvidia-open" ]] \
-           || { [[ "$_gpu_drv" == "auto" ]] && lspci 2>/dev/null | grep -qi nvidia; }; then
+           || { [[ "$_gpu_drv" == "auto" ]] && echo "$_lspci_kms" | grep -qi nvidia; }; then
             # NVIDIA early KMS: required for Plymouth, DRM modeset, Wayland compositors
             # https://wiki.archlinux.org/title/NVIDIA#DRM_kernel_mode_setting
-            local nvidia_mods="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
-            for nmod in $nvidia_mods; do
-                if ! grep -q "$nmod" /etc/mkinitcpio.conf; then
-                    sed -i "s/^MODULES=(\(.*\))/MODULES=(\1 $nmod)/" /etc/mkinitcpio.conf || log_warn "Failed to add $nmod module"
-                    sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
-                fi
-            done
-            log_info "Added NVIDIA modules for early KMS: $nvidia_mods"
+            modules="$modules nvidia nvidia_modeset nvidia_uvm nvidia_drm"
+            log_info "Added NVIDIA modules for early KMS"
         fi
 
         if [[ "$_gpu_drv" == "amd" ]] \
-           || { [[ "$_gpu_drv" == "auto" ]] && lspci 2>/dev/null | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; }; then
-            if ! grep -q "amdgpu" /etc/mkinitcpio.conf; then
-                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 amdgpu)/' /etc/mkinitcpio.conf || log_warn "Failed to add amdgpu module"
-                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
-                log_info "Added amdgpu module for early KMS"
-            fi
+           || { [[ "$_gpu_drv" == "auto" ]] && echo "$_lspci_kms" | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; }; then
+            modules="$modules amdgpu"
+            log_info "Added amdgpu module for early KMS"
         fi
 
         if [[ "$_gpu_drv" == "intel" ]] \
-           || { [[ "$_gpu_drv" == "auto" ]] && lspci 2>/dev/null | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; }; then
-            if ! grep -q "i915" /etc/mkinitcpio.conf; then
-                sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 i915)/' /etc/mkinitcpio.conf || log_warn "Failed to add i915 module"
-                sed -i 's/MODULES=( /MODULES=(/' /etc/mkinitcpio.conf || log_warn "Failed to clean MODULES spacing"
-                log_info "Added i915 module for early KMS"
-            fi
+           || { [[ "$_gpu_drv" == "auto" ]] && echo "$_lspci_kms" | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; }; then
+            modules="$modules i915"
+            log_info "Added i915 module for early KMS"
         fi
+
+        # Write MODULES once (trim leading space)
+        modules="${modules# }"
+        sed -i "s|^MODULES=.*|MODULES=($modules)|" /etc/mkinitcpio.conf || { log_error "sed failed on MODULES"; return 1; }
+        log_info "Updated MODULES in mkinitcpio.conf: ($modules)"
 
         # FIDO2 crypttab.initramfs entry (for sd-encrypt to use fido2-device=auto)
         if [[ "${ENCRYPTION_KEY_TYPE:-Password}" == *"FIDO2"* ]]; then
@@ -1436,7 +1425,7 @@ configure_grub_theme() {
                 _grub_theme_git_clone "https://github.com/NayamAmarshe/Cyberpunk-GRUB-Theme.git" "Cyberpunk-GRUB-Theme" "$theme_name"
                 ;;
             "HyperFluent"|"hyperfluent")
-                # HyperFluent ships in Source/ (arch variant only, no distro bloat)
+                # HyperFluent arch variant — copied to /root/grub-themes by install.sh
                 local _hf_src="/root/grub-themes/HyperFluent-GRUB-Theme"
                 if [[ -d "$_hf_src/arch" ]]; then
                     mkdir -p "$theme_dir"
@@ -1962,20 +1951,22 @@ install_gpu_drivers() {
 
     case "$gpu" in
         "Auto"|"auto")
-            # Auto-detect GPU
-            if lspci | grep -qi nvidia; then
+            # Auto-detect GPU (cache lspci output — single subprocess instead of 3)
+            local _lspci_cache
+            _lspci_cache=$(lspci 2>/dev/null) || { log_warn "lspci failed — skipping GPU auto-detection"; _lspci_cache=""; }
+            if echo "$_lspci_cache" | grep -qi nvidia; then
                 log_info "NVIDIA GPU detected"
                 local nvidia_auto_pkgs=(nvidia-dkms libglvnd nvidia-utils opencl-nvidia nvidia-settings)
                 [[ "$use_lib32" == "yes" ]] && nvidia_auto_pkgs+=(lib32-libglvnd lib32-nvidia-utils lib32-opencl-nvidia)
                 pacman -S "${nvidia_auto_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install NVIDIA drivers"
             fi
-            if lspci | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
+            if echo "$_lspci_cache" | grep -qi "amd.*radeon\|radeon.*amd\|amd.*graphics"; then
                 log_info "AMD GPU detected"
                 local amd_pkgs=(mesa xf86-video-amdgpu vulkan-radeon)
                 [[ "$use_lib32" == "yes" ]] && amd_pkgs+=(lib32-mesa)
                 pacman -S "${amd_pkgs[@]}" --noconfirm --needed || log_warn "Failed to install AMD drivers"
             fi
-            if lspci | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; then
+            if echo "$_lspci_cache" | grep -qi "intel.*graphics\|intel.*uhd\|intel.*iris"; then
                 log_info "Intel GPU detected"
                 local intel_pkgs=(mesa xf86-video-intel vulkan-intel)
                 [[ "$use_lib32" == "yes" ]] && intel_pkgs+=(lib32-mesa)
@@ -2295,10 +2286,6 @@ _configure_snapper() {
 
     # Configure snapper settings
     if [[ -f /etc/snapper/configs/root ]]; then
-        sed -i 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_CREATE"
-        sed -i 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_CLEANUP"
-        sed -i 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_MIN_AGE"
-
         local keep_count="${BTRFS_KEEP_COUNT:-3}"
         local frequency="${BTRFS_FREQUENCY:-weekly}"
 
@@ -2315,11 +2302,17 @@ _configure_snapper() {
             *)       weekly_limit="$keep_count"; log_warn "Unknown frequency '$frequency', defaulting to weekly" ;;
         esac
 
-        sed -i "s/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY=\"$hourly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_HOURLY"
-        sed -i "s/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY=\"$daily_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_DAILY"
-        sed -i "s/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY=\"$weekly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_WEEKLY"
-        sed -i "s/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY=\"$monthly_limit\"/" /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_MONTHLY"
-        sed -i 's/^TIMELINE_LIMIT_YEARLY=.*/TIMELINE_LIMIT_YEARLY="0"/' /etc/snapper/configs/root || log_warn "Failed to set TIMELINE_LIMIT_YEARLY"
+        # Single chained sed instead of 8 separate file rewrites
+        sed -i \
+            -e 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="yes"/' \
+            -e 's/^TIMELINE_CLEANUP=.*/TIMELINE_CLEANUP="yes"/' \
+            -e 's/^TIMELINE_MIN_AGE=.*/TIMELINE_MIN_AGE="1800"/' \
+            -e "s/^TIMELINE_LIMIT_HOURLY=.*/TIMELINE_LIMIT_HOURLY=\"$hourly_limit\"/" \
+            -e "s/^TIMELINE_LIMIT_DAILY=.*/TIMELINE_LIMIT_DAILY=\"$daily_limit\"/" \
+            -e "s/^TIMELINE_LIMIT_WEEKLY=.*/TIMELINE_LIMIT_WEEKLY=\"$weekly_limit\"/" \
+            -e "s/^TIMELINE_LIMIT_MONTHLY=.*/TIMELINE_LIMIT_MONTHLY=\"$monthly_limit\"/" \
+            -e 's/^TIMELINE_LIMIT_YEARLY=.*/TIMELINE_LIMIT_YEARLY="0"/' \
+            /etc/snapper/configs/root || log_warn "Failed to configure snapper timeline settings"
 
         log_info "Configured snapper timeline settings (frequency: $frequency, keep: $keep_count)"
     fi

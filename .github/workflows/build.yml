@@ -83,9 +83,20 @@ jobs:
     - name: Generate SHA256 checksum
       run: sha256sum archtui > archtui.sha256
 
+    - name: Download theme assets from previous release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p themes
+        for theme in arch-glow arch-mac-style HyperFluent-arch; do
+          gh release download --repo "${{ github.repository }}" --pattern "${theme}.tar.gz" --dir themes 2>/dev/null || \
+            echo "::warning::Theme asset ${theme}.tar.gz not found in previous release"
+        done
+
     - name: Create GitHub release
       uses: softprops/action-gh-release@v2
       with:
         files: |
           archtui
           archtui.sha256
+          themes/*.tar.gz

@@ -3,3 +3,4 @@ dist/
 *.tar.gz
 archtui
 build.rs.tmp
+Source/
