@@ -1436,14 +1436,14 @@ configure_grub_theme() {
                 _grub_theme_git_clone "https://github.com/NayamAmarshe/Cyberpunk-GRUB-Theme.git" "Cyberpunk-GRUB-Theme" "$theme_name"
                 ;;
             "HyperFluent"|"hyperfluent")
-                # HyperFluent is bundled in Source/ — copy arch/ variant to theme_dir
+                # HyperFluent ships in Source/ (arch variant only, no distro bloat)
                 local _hf_src="/root/grub-themes/HyperFluent-GRUB-Theme"
                 if [[ -d "$_hf_src/arch" ]]; then
                     mkdir -p "$theme_dir"
                     cp -r "$_hf_src/arch/"* "$theme_dir/" || log_warn "Failed to copy HyperFluent theme"
                     log_info "Installed HyperFluent theme from bundled source"
                 else
-                    _grub_theme_git_clone "https://github.com/Coopydood/HyperFluent-GRUB-Theme.git" "HyperFluent-GRUB-Theme" "$theme_name"
+                    log_warn "HyperFluent theme not found at $_hf_src — theme will not be applied"
                 fi
                 ;;
             *)
