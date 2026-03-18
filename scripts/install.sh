@@ -878,15 +878,14 @@ configure_chroot() {
     cp "$SCRIPT_DIR/chroot_config.sh" /mnt/ || error_exit "Failed to copy chroot_config.sh to /mnt/"
     cp "$SCRIPT_DIR/utils.sh" /mnt/ || error_exit "Failed to copy utils.sh to /mnt/"
 
-    # Copy Plymouth themes to target system BEFORE chroot (so configure_plymouth can find them)
+    # Copy selected Plymouth theme to target system BEFORE chroot
     if [[ "${PLYMOUTH:-No}" == "Yes" ]]; then
-        local themes_source="$SCRIPT_DIR/../Source"
-        if [[ -d "$themes_source" ]]; then
-            log_info "Copying Plymouth themes to target system..."
+        local _pt="${PLYMOUTH_THEME:-bgrt}"
+        local _pt_src="$SCRIPT_DIR/../Source/${_pt}"
+        if [[ -d "$_pt_src" ]]; then
+            log_info "Copying Plymouth theme '$_pt' to target system..."
             mkdir -p /mnt/usr/share/plymouth/themes
-            cp -r "$themes_source/"* /mnt/usr/share/plymouth/themes/ || log_warn "Failed to copy some Plymouth themes"
-        else
-            log_warn "Plymouth themes source directory not found: $themes_source"
+            cp -r "$_pt_src" /mnt/usr/share/plymouth/themes/ || log_warn "Failed to copy Plymouth theme: $_pt"
         fi
     fi
 
