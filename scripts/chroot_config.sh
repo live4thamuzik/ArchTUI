@@ -670,7 +670,7 @@ install_grub() {
         fi
 
         log_info "Installing GRUB for UEFI to $efi_dir"
-        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --modules="tpm" --disable-shim-lock --recheck"
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --modules=tpm --disable-shim-lock --recheck"
         grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --modules="tpm" --disable-shim-lock --recheck || {
             log_error "GRUB installation failed"
             return 1
@@ -680,7 +680,7 @@ install_grub() {
         # This protects against Windows Update resetting UEFI boot order
         # (per Arch wiki: --removable installs to the fallback path)
         log_info "Installing GRUB to EFI fallback path for boot resilience"
-        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --modules="tpm" --disable-shim-lock --recheck"
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --modules=tpm --disable-shim-lock --recheck"
         grub-install --target=x86_64-efi --efi-directory="$efi_dir" --removable --modules="tpm" --disable-shim-lock --recheck || {
             log_warn "GRUB fallback installation failed (non-fatal)"
         }
@@ -1286,20 +1286,13 @@ WINEOF
         fi
     fi
 
-    # Enable GRUB_ENABLE_CRYPTODISK only if /boot is on the encrypted root.
-    # All auto_*_luks strategies create a SEPARATE unencrypted /boot partition,
-    # so GRUB can read it without decryption. Setting this unnecessarily causes
-    # GRUB to prompt for a password at every boot even when not needed.
+    # Enable GRUB crypto support unconditionally for any LUKS layout.
+    # Required for os-prober to detect other OSes on encrypted systems,
+    # even when /boot is on a separate unencrypted partition.
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-        if mountpoint -q /boot 2>/dev/null; then
-            # /boot is a separate mount → unencrypted, GRUB can read it directly
-            log_info "Skipping GRUB_ENABLE_CRYPTODISK (/boot is a separate unencrypted partition)"
-        else
-            # /boot is on the encrypted root → GRUB needs crypto to read it
-            if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
-                echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
-                log_info "Enabled GRUB_ENABLE_CRYPTODISK (/boot on encrypted root)"
-            fi
+        if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
+            echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
+            log_info "Enabled GRUB_ENABLE_CRYPTODISK for LUKS layout"
         fi
     fi
 
