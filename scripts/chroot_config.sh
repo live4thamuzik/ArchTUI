@@ -670,8 +670,8 @@ install_grub() {
         fi
 
         log_info "Installing GRUB for UEFI to $efi_dir"
-        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --recheck"
-        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --recheck || {
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --disable-shim-lock --recheck"
+        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --disable-shim-lock --recheck || {
             log_error "GRUB installation failed"
             return 1
         }
@@ -680,8 +680,8 @@ install_grub() {
         # This protects against Windows Update resetting UEFI boot order
         # (per Arch wiki: --removable installs to the fallback path)
         log_info "Installing GRUB to EFI fallback path for boot resilience"
-        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --recheck"
-        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --removable --recheck || {
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --disable-shim-lock --recheck"
+        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --removable --disable-shim-lock --recheck || {
             log_warn "GRUB fallback installation failed (non-fatal)"
         }
     else
@@ -2394,7 +2394,7 @@ configure_numlock() {
 
     log_info "Configuring numlock on boot..."
 
-    # For console (TTY) — always create the systemd service
+    # TTY numlock via systemd service (setleds on /dev/tty1-6)
     mkdir -p /etc/systemd/system
     cat > /etc/systemd/system/numlock.service << 'EOF'
 [Unit]
@@ -2409,14 +2409,41 @@ WantedBy=multi-user.target
 EOF
     systemctl enable numlock.service || log_warn "Failed to enable numlock.service"
 
-    # For SDDM
-    if [[ "${DISPLAY_MANAGER:-}" == "sddm" ]]; then
-        mkdir -p /etc/sddm.conf.d
-        cat > /etc/sddm.conf.d/numlock.conf << 'EOF'
+    # Display manager numlock (graphical sessions)
+    case "${DISPLAY_MANAGER:-}" in
+        sddm)
+            mkdir -p /etc/sddm.conf.d
+            cat > /etc/sddm.conf.d/numlock.conf << 'EOF'
 [General]
 Numlock=on
 EOF
-    fi
+            ;;
+        gdm)
+            # GDM reads X11 numlock state from dconf
+            local _gdm_db="/etc/dconf/db/gdm.d"
+            mkdir -p "$_gdm_db"
+            cat > "${_gdm_db}/10-numlock" << 'EOF'
+[org/gnome/settings-daemon/peripherals/keyboard]
+numlock-state='on'
+[org/gnome/desktop/peripherals/keyboard]
+numlock-state=true
+remember-numlock-state=true
+EOF
+            dconf update 2>/dev/null || log_warn "dconf update failed for GDM numlock"
+            ;;
+        lightdm)
+            # LightDM runs numlockx in greeter-setup-script
+            pacman -S --noconfirm --needed numlockx 2>/dev/null || log_warn "Failed to install numlockx"
+            if [[ -f /etc/lightdm/lightdm.conf ]]; then
+                sed -i 's/^#*greeter-setup-script=.*/greeter-setup-script=\/usr\/bin\/numlockx on/' \
+                    /etc/lightdm/lightdm.conf || log_warn "Failed to configure LightDM numlock"
+            fi
+            ;;
+        greetd)
+            # greetd has no built-in numlock — use numlockx in user session
+            pacman -S --noconfirm --needed numlockx 2>/dev/null || log_warn "Failed to install numlockx"
+            ;;
+    esac
 
     log_success "Numlock configured"
 }
