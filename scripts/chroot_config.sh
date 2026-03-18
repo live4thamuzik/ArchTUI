@@ -670,8 +670,8 @@ install_grub() {
         fi
 
         log_info "Installing GRUB for UEFI to $efi_dir"
-        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --disable-shim-lock --recheck"
-        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --disable-shim-lock --recheck || {
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --bootloader-id=GRUB --modules="tpm" --disable-shim-lock --recheck"
+        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --bootloader-id=GRUB --modules="tpm" --disable-shim-lock --recheck || {
             log_error "GRUB installation failed"
             return 1
         }
@@ -680,8 +680,8 @@ install_grub() {
         # This protects against Windows Update resetting UEFI boot order
         # (per Arch wiki: --removable installs to the fallback path)
         log_info "Installing GRUB to EFI fallback path for boot resilience"
-        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --disable-shim-lock --recheck"
-        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --removable --disable-shim-lock --recheck || {
+        log_cmd "grub-install --target=x86_64-efi --efi-directory=$efi_dir --removable --modules="tpm" --disable-shim-lock --recheck"
+        grub-install --target=x86_64-efi --efi-directory="$efi_dir" --removable --modules="tpm" --disable-shim-lock --recheck || {
             log_warn "GRUB fallback installation failed (non-fatal)"
         }
     else
