@@ -56,14 +56,17 @@ fn test_required_scripts_exist() {
 }
 
 #[test]
-fn test_plymouth_themes_exist() {
+fn test_plymouth_theme_downloads_wired() {
+    // Plymouth themes (arch-glow, arch-mac-style) are now release assets downloaded on demand.
+    // Verify install.sh handles both custom themes and downloads from releases.
+    let content = std::fs::read_to_string("scripts/install.sh").expect("install.sh should exist");
     assert!(
-        std::path::Path::new("Source/arch-glow").exists(),
-        "Arch-glow theme should exist"
+        content.contains("arch-glow|arch-mac-style"),
+        "install.sh should handle arch-glow and arch-mac-style themes"
     );
     assert!(
-        std::path::Path::new("Source/arch-mac-style").exists(),
-        "Arch-mac-style theme should exist"
+        content.contains("releases/latest/download"),
+        "install.sh should download themes from GitHub releases"
     );
 }
 
