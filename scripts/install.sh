@@ -890,11 +890,11 @@ configure_chroot() {
         fi
     fi
 
-    # Copy bundled GRUB themes to target system BEFORE chroot
-    if [[ "${GRUB_THEME:-No}" == "Yes" ]]; then
+    # Copy bundled HyperFluent GRUB theme only when selected
+    if [[ "${GRUB_THEME_SELECTION:-}" =~ ^(HyperFluent|hyperfluent)$ ]]; then
         local grub_theme_source="$SCRIPT_DIR/../Source/HyperFluent-GRUB-Theme"
         if [[ -d "$grub_theme_source" ]]; then
-            log_info "Copying bundled GRUB themes to target system..."
+            log_info "Copying bundled HyperFluent theme to target system..."
             mkdir -p /mnt/root/grub-themes
             cp -r "$grub_theme_source" /mnt/root/grub-themes/ || log_warn "Failed to copy HyperFluent GRUB theme"
         fi
