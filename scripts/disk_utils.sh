@@ -776,45 +776,46 @@ detect_existing_esp() {
     return 0
 }
 
-# Detect if Windows is installed (check for Windows Boot Manager in ESP)
+# Detect if Windows is installed (check for Windows Boot Manager in ALL ESPs)
+# Scans every EFI System Partition on the system, not just the install disk.
+# On multi-disk setups Windows ESP is typically on a different disk.
 # Returns: 0 if Windows found, 1 if not
-# shellcheck disable=SC2120  # Optional argument - may be called with or without ESP device
+# Exports: WINDOWS_DETECTED, WINDOWS_EFI_PATH, WINDOWS_ESP_DEVICE
 detect_windows_installation() {
-    local esp_device="${1:-}"
+    # Gather all ESP partitions across all disks
+    local esp_list
+    esp_list=$(lsblk -rno NAME,PARTTYPE 2>/dev/null \
+        | grep -i "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" \
+        | awk '{print "/dev/"$1}')
 
-    # If no ESP provided, try to find one
-    if [[ -z "$esp_device" ]]; then
-        # shellcheck disable=SC2119  # Intentional call without argument
-        esp_device=$(detect_existing_esp)
-    fi
-
-    if [[ -z "$esp_device" || ! -b "$esp_device" ]]; then
+    if [[ -z "$esp_list" ]]; then
+        log_info "No EFI System Partitions found"
         return 1
     fi
 
-    # Mount ESP temporarily to check contents
     local temp_mount="/tmp/esp_check_$$"
-    mkdir -p "$temp_mount"
 
-    if ! mount -o ro "$esp_device" "$temp_mount" 2>/dev/null; then
+    while IFS= read -r esp_device; do
+        [[ -b "$esp_device" ]] || continue
+
+        mkdir -p "$temp_mount"
+        if mount -o ro "$esp_device" "$temp_mount" 2>/dev/null; then
+            if [[ -d "$temp_mount/EFI/Microsoft/Boot" ]] \
+               && [[ -f "$temp_mount/EFI/Microsoft/Boot/bootmgfw.efi" ]]; then
+                log_info "Windows Boot Manager detected on $esp_device"
+                export WINDOWS_DETECTED="yes"
+                export WINDOWS_EFI_PATH="/EFI/Microsoft/Boot/bootmgfw.efi"
+                export WINDOWS_ESP_DEVICE="$esp_device"
+                umount "$temp_mount" 2>/dev/null
+                rmdir "$temp_mount" 2>/dev/null
+                return 0
+            fi
+            umount "$temp_mount" 2>/dev/null
+        fi
         rmdir "$temp_mount" 2>/dev/null
-        return 1
-    fi
+    done <<< "$esp_list"
 
-    local windows_found=1
-
-    # Check for Windows Boot Manager
-    if [[ -d "$temp_mount/EFI/Microsoft/Boot" ]] && [[ -f "$temp_mount/EFI/Microsoft/Boot/bootmgfw.efi" ]]; then
-        log_info "Windows Boot Manager detected in ESP"
-        windows_found=0
-        export WINDOWS_DETECTED="yes"
-        export WINDOWS_EFI_PATH="/EFI/Microsoft/Boot/bootmgfw.efi"
-    fi
-
-    umount "$temp_mount" 2>/dev/null
-    rmdir "$temp_mount" 2>/dev/null
-
-    return $windows_found
+    return 1
 }
 
 # Detect any other operating systems (for os-prober recommendation)

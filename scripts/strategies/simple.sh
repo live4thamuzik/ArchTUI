@@ -31,14 +31,16 @@ execute_simple_partitioning() {
 
     # Check for existing ESP (dual-boot scenario)
     existing_esp=$(detect_existing_esp "$INSTALL_DISK")
-    if [[ -n "$existing_esp" ]]; then
-        # Check if Windows is on this ESP
-        if detect_windows_installation "$existing_esp"; then
-            log_warn "Windows installation detected on $existing_esp"
+
+    # detect_other_os already called detect_windows_installation internally
+    if [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+        log_warn "Windows installation detected on ${WINDOWS_ESP_DEVICE:-unknown}"
+        # If Windows ESP is on the install disk, preserve it
+        if [[ -n "$existing_esp" && "${WINDOWS_ESP_DEVICE:-}" == "$existing_esp" ]]; then
             log_warn "Will preserve existing ESP for dual-boot chainloading"
             use_existing_esp="yes"
-            export DUAL_BOOT_WINDOWS="yes"
         fi
+        export DUAL_BOOT_WINDOWS="yes"
     fi
 
     # Same-disk dual-boot check

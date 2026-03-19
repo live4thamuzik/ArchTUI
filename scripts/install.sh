@@ -983,6 +983,7 @@ configure_chroot() {
         printf 'export ROOT_FILESYSTEM_TYPE=%q\n' "$ROOT_FILESYSTEM_TYPE"
         printf 'export WINDOWS_DETECTED=%q\n' "${WINDOWS_DETECTED:-}"
         printf 'export WINDOWS_EFI_PATH=%q\n' "${WINDOWS_EFI_PATH:-}"
+        printf 'export WINDOWS_ESP_DEVICE=%q\n' "${WINDOWS_ESP_DEVICE:-}"
         printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
         printf 'export LOG_LEVEL=%q\n' "${LOG_LEVEL:-INFO}"
     } > /mnt/install_config.sh

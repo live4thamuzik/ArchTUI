@@ -18,12 +18,34 @@ execute_simple_luks_partitioning() {
     # Validate requirements
     validate_partitioning_requirements
 
-    # Dual-boot detection
+    # --- Dual-boot detection ---
+    local use_existing_esp="no"
+    local existing_esp=""
+
     if detect_other_os; then
+        log_warn "Other OS detected - enabling os-prober for dual-boot"
         export OS_PROBER="yes"
     fi
 
-    # Wipe disk with explicit confirmation
+    existing_esp=$(detect_existing_esp "$INSTALL_DISK")
+
+    # detect_other_os already called detect_windows_installation internally
+    if [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+        log_warn "Windows installation detected on ${WINDOWS_ESP_DEVICE:-unknown}"
+        if [[ -n "$existing_esp" && "${WINDOWS_ESP_DEVICE:-}" == "$existing_esp" ]]; then
+            log_warn "Will preserve existing ESP for dual-boot chainloading"
+            use_existing_esp="yes"
+        fi
+        export DUAL_BOOT_WINDOWS="yes"
+    fi
+
+    if [[ "$use_existing_esp" == "yes" && "$existing_esp" == "${INSTALL_DISK}"* ]]; then
+        log_error "Same-disk dual-boot detected: Windows ESP is on target disk!"
+        log_error "Automatic partitioning would destroy Windows. Use 'manual' strategy instead."
+        log_error "See: https://wiki.archlinux.org/title/Dual_boot_with_Windows"
+        return 1
+    fi
+
     wipe_disk "$INSTALL_DISK" "CONFIRMED"
 
     local current_start_mib=1

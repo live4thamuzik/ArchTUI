@@ -1211,19 +1211,17 @@ configure_grub_settings() {
 
     # Preload GRUB modules for RAID (ensures GRUB can read RAID boot partitions)
     if [[ "${PARTITIONING_STRATEGY:-}" == *"raid"* ]]; then
-        if ! grep -q "^GRUB_PRELOAD_MODULES=" "$grub_default"; then
-            echo 'GRUB_PRELOAD_MODULES="mdraid09 mdraid1x part_gpt"' >> "$grub_default"
-            log_info "Added GRUB_PRELOAD_MODULES for RAID"
-        fi
+        sed -i '/^GRUB_PRELOAD_MODULES=/c\GRUB_PRELOAD_MODULES="mdraid09 mdraid1x part_gpt"' "$grub_default" \
+            || log_warn "Failed to set GRUB_PRELOAD_MODULES"
+        log_info "Set GRUB_PRELOAD_MODULES for RAID"
     fi
 
     # Enable os-prober if requested OR if other OS was detected during partitioning
     # This ensures dual-boot is properly configured even if user forgot to enable it
     if [[ "${OS_PROBER:-No}" == "Yes" ]] || [[ "${OTHER_OS_DETECTED:-}" == "yes" ]] || [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
         log_info "Enabling os-prober for dual-boot detection"
-        if ! grep -q "^GRUB_DISABLE_OS_PROBER=false" "$grub_default"; then
-            echo "GRUB_DISABLE_OS_PROBER=false" >> "$grub_default"
-        fi
+        sed -i '/^#\?GRUB_DISABLE_OS_PROBER/c\GRUB_DISABLE_OS_PROBER=false' "$grub_default" \
+            || log_warn "Failed to set GRUB_DISABLE_OS_PROBER"
 
         # Install os-prober if not present
         if ! command -v os-prober &>/dev/null; then
@@ -1232,26 +1230,15 @@ configure_grub_settings() {
     fi
 
     # Add explicit Windows chainload entry if Windows was detected
-    # This provides a fallback if os-prober doesn't detect it
+    # This provides a fallback when os-prober can't detect Windows
+    # (common on multi-disk setups where Windows ESP is on a different disk)
     if [[ "${WINDOWS_DETECTED:-}" == "yes" && -n "${WINDOWS_EFI_PATH:-}" ]]; then
         log_info "Adding Windows Boot Manager chainload entry"
         if [[ ! -f /etc/grub.d/40_custom ]] || ! grep -q "Windows Boot Manager" /etc/grub.d/40_custom; then
-            # Detect the EFI partition UUID for the search command
+            # Use the Windows ESP device directly (detected during partitioning)
             local efi_part_uuid=""
-            local esp_mount=""
-            # Find the ESP mount point
-            for mp in /boot/efi /boot /efi; do
-                if mountpoint -q "$mp" 2>/dev/null; then
-                    esp_mount="$mp"
-                    break
-                fi
-            done
-            if [[ -n "$esp_mount" ]]; then
-                local esp_dev
-                esp_dev=$(findmnt -n -o SOURCE "$esp_mount" 2>/dev/null || true)
-                if [[ -n "$esp_dev" ]]; then
-                    efi_part_uuid=$(blkid -s UUID -o value "$esp_dev" 2>/dev/null || true)
-                fi
+            if [[ -n "${WINDOWS_ESP_DEVICE:-}" ]]; then
+                efi_part_uuid=$(blkid -s UUID -o value "$WINDOWS_ESP_DEVICE" 2>/dev/null || true)
             fi
 
             if [[ -n "$efi_part_uuid" ]]; then
@@ -1267,22 +1254,19 @@ if [ "\${grub_platform}" == "efi" ]; then
     }
 fi
 WINEOF
-                log_info "Added Windows chainload entry with EFI UUID: $efi_part_uuid"
+                log_info "Added Windows chainload entry with EFI UUID: $efi_part_uuid (from $WINDOWS_ESP_DEVICE)"
             else
-                log_warn "Could not detect EFI partition UUID — skipping Windows chainload entry"
-                log_warn "os-prober should still detect Windows automatically"
+                log_warn "Could not detect EFI partition UUID for Windows ESP — skipping chainload entry"
             fi
         fi
     fi
 
-    # Enable GRUB crypto support unconditionally for any LUKS layout.
-    # Required for os-prober to detect other OSes on encrypted systems,
-    # even when /boot is on a separate unencrypted partition.
+    # Enable GRUB crypto support for any LUKS layout.
+    # Required so GRUB can unlock encrypted /boot or detect other OSes.
     if [[ "${ENCRYPTION:-No}" == "Yes" ]] || [[ "${PARTITIONING_STRATEGY:-}" == *"luks"* ]]; then
-        if ! grep -q "^GRUB_ENABLE_CRYPTODISK=y" "$grub_default"; then
-            echo "GRUB_ENABLE_CRYPTODISK=y" >> "$grub_default"
-            log_info "Enabled GRUB_ENABLE_CRYPTODISK for LUKS layout"
-        fi
+        sed -i '/^#\?GRUB_ENABLE_CRYPTODISK/c\GRUB_ENABLE_CRYPTODISK=y' "$grub_default" \
+            || log_warn "Failed to set GRUB_ENABLE_CRYPTODISK"
+        log_info "Enabled GRUB_ENABLE_CRYPTODISK for LUKS layout"
     fi
 
     # Disable GRUB's internal shim_lock verifier unconditionally.
@@ -1291,6 +1275,7 @@ WINEOF
     # active even when unmanaged, triggering the verifier and dropping to
     # grub rescue. Safe to disable — only needed with shim-signed.
     # https://wiki.archlinux.org/title/GRUB#Secure_Boot
+    # Not in stock /etc/default/grub — must append
     if ! grep -q "^GRUB_DISABLE_SHIM_LOCK=y" "$grub_default"; then
         echo "GRUB_DISABLE_SHIM_LOCK=y" >> "$grub_default" || {
             log_error "Failed to write GRUB_DISABLE_SHIM_LOCK to $grub_default"
@@ -1443,17 +1428,9 @@ configure_grub_theme() {
 
     # Verify theme was installed and has theme.txt
     if [[ -f "${theme_dir}/theme.txt" ]]; then
-        # Update GRUB config to use the theme
-        if grep -q "^GRUB_THEME=" "$grub_default"; then
-            sed -i "s|^GRUB_THEME=.*|GRUB_THEME=\"${theme_dir}/theme.txt\"|" "$grub_default" || log_warn "Failed to update GRUB_THEME in $grub_default"
-        else
-            echo "GRUB_THEME=\"${theme_dir}/theme.txt\"" >> "$grub_default" || log_warn "Failed to append GRUB_THEME to $grub_default"
-        fi
-
-        # Also set gfxmode for better theme rendering
-        if ! grep -q "^GRUB_GFXMODE=" "$grub_default"; then
-            echo "GRUB_GFXMODE=auto" >> "$grub_default" || log_warn "Failed to set GRUB_GFXMODE"
-        fi
+        # Uncomment/replace GRUB_THEME in stock config
+        sed -i "/^#\?GRUB_THEME=/c\GRUB_THEME=\"${theme_dir}/theme.txt\"" "$grub_default" \
+            || log_warn "Failed to set GRUB_THEME in $grub_default"
 
         log_success "GRUB theme configured: $theme_name"
     else

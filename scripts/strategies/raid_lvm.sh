@@ -22,7 +22,30 @@ execute_raid_lvm_partitioning() {
     if [[ ${#RAID_DEVICES[@]} -lt 2 ]]; then
         error_exit "RAID + LVM requires at least 2 disks, but only ${#RAID_DEVICES[@]} provided"
     fi
-    
+
+    # --- Dual-boot detection ---
+    if detect_other_os; then
+        log_warn "Other OS detected - enabling os-prober for dual-boot"
+        export OS_PROBER="yes"
+    fi
+
+    # detect_other_os already called detect_windows_installation internally
+    if [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+        log_warn "Windows installation detected on ${WINDOWS_ESP_DEVICE:-unknown}"
+        export DUAL_BOOT_WINDOWS="yes"
+        local win_esp_disk
+        win_esp_disk=$(lsblk -ndo PKNAME "${WINDOWS_ESP_DEVICE}" 2>/dev/null || true)
+        if [[ -n "$win_esp_disk" ]]; then
+            for disk in "${RAID_DEVICES[@]}"; do
+                if [[ "$disk" == "/dev/$win_esp_disk" ]]; then
+                    log_error "Windows ESP ($WINDOWS_ESP_DEVICE) is on RAID member disk $disk!"
+                    log_error "RAID partitioning would destroy Windows. Remove $disk from RAID devices."
+                    return 1
+                fi
+            done
+        fi
+    fi
+
     # Detect boot mode — use local vars to avoid writing to readonly constants from disk_utils.sh
     local esp_type xbootldr_type
     if [[ "$BOOT_MODE" == "UEFI" ]]; then
