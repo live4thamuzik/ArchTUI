@@ -2400,16 +2400,23 @@ configure_numlock() {
 
     # Install mkinitcpio-numlock via the configured AUR helper
     local _user="${MAIN_USERNAME:?MAIN_USERNAME not set}"
-    if command -v "$_aur_helper" &>/dev/null; then
-        log_cmd "runuser -u $_user -- $_aur_helper -S --noconfirm mkinitcpio-numlock"
-        runuser -u "$_user" -- "$_aur_helper" -S --noconfirm mkinitcpio-numlock || {
-            log_warn "Failed to install mkinitcpio-numlock — numlock will not activate on boot"
-            return 0
-        }
-    else
+    if ! command -v "$_aur_helper" &>/dev/null; then
         log_warn "AUR helper '$_aur_helper' not found — skipping mkinitcpio-numlock"
         return 0
     fi
+
+    # NOPASSWD needed — AUR helpers call sudo pacman internally,
+    # which hangs waiting for password since stdin is not a terminal
+    local sudoers_drop="/etc/sudoers.d/temp-numlock"
+    echo "$_user ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
+    chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 0; }
+    trap 'rm -f /etc/sudoers.d/temp-numlock' RETURN
+
+    log_cmd "runuser -u $_user -- $_aur_helper -S --noconfirm mkinitcpio-numlock"
+    timeout 300 runuser -u "$_user" -- "$_aur_helper" -S --noconfirm mkinitcpio-numlock || {
+        log_warn "Failed to install mkinitcpio-numlock — numlock will not activate on boot"
+        return 0
+    }
 
     # Insert numlock hook between modconf and block in mkinitcpio.conf
     if [[ -f /etc/mkinitcpio.conf ]]; then
