@@ -883,24 +883,15 @@ configure_chroot() {
         local _pt="${PLYMOUTH_THEME:-bgrt}"
         case "$_pt" in
             arch-glow|arch-mac-style)
-                local _pt_src="$SCRIPT_DIR/../Source/${_pt}"
-                if [[ -d "$_pt_src" ]]; then
-                    # Local copy exists (development/git clone with Source/)
-                    log_info "Copying Plymouth theme '$_pt' from local Source/..."
+                log_info "Downloading Plymouth theme '$_pt'..."
+                log_cmd "curl -fsSL https://github.com/live4thamuzik/ArchTUI/releases/latest/download/${_pt}.tar.gz"
+                if curl -fsSL -o "/tmp/${_pt}.tar.gz" \
+                    "https://github.com/live4thamuzik/ArchTUI/releases/latest/download/${_pt}.tar.gz"; then
                     mkdir -p /mnt/usr/share/plymouth/themes
-                    cp -r "$_pt_src" /mnt/usr/share/plymouth/themes/ || log_warn "Failed to copy Plymouth theme: $_pt"
+                    tar xzf "/tmp/${_pt}.tar.gz" -C /mnt/usr/share/plymouth/themes/ || log_warn "Failed to extract Plymouth theme: $_pt"
+                    rm -f "/tmp/${_pt}.tar.gz"
                 else
-                    # Download from release assets
-                    log_info "Downloading Plymouth theme '$_pt'..."
-                    log_cmd "curl -fsSL https://github.com/live4thamuzik/ArchTUI/releases/latest/download/${_pt}.tar.gz"
-                    if curl -fsSL -o "/tmp/${_pt}.tar.gz" \
-                        "https://github.com/live4thamuzik/ArchTUI/releases/latest/download/${_pt}.tar.gz"; then
-                        mkdir -p /mnt/usr/share/plymouth/themes
-                        tar xzf "/tmp/${_pt}.tar.gz" -C /mnt/usr/share/plymouth/themes/ || log_warn "Failed to extract Plymouth theme: $_pt"
-                        rm -f "/tmp/${_pt}.tar.gz"
-                    else
-                        log_warn "Failed to download Plymouth theme '$_pt' — Plymouth will use default theme"
-                    fi
+                    log_warn "Failed to download Plymouth theme '$_pt' — Plymouth will use default theme"
                 fi
                 ;;
         esac
@@ -908,24 +899,15 @@ configure_chroot() {
 
     # Download and install HyperFluent GRUB theme only when selected
     if [[ "${GRUB_THEME_SELECTION:-}" =~ ^(HyperFluent|hyperfluent)$ ]]; then
-        local grub_theme_source="$SCRIPT_DIR/../Source/HyperFluent-GRUB-Theme"
-        if [[ -d "$grub_theme_source" ]]; then
-            # Local copy exists (development/git clone with Source/)
-            log_info "Copying bundled HyperFluent theme from local Source/..."
-            mkdir -p /mnt/root/grub-themes
-            cp -r "$grub_theme_source" /mnt/root/grub-themes/ || log_warn "Failed to copy HyperFluent GRUB theme"
+        log_info "Downloading HyperFluent GRUB theme..."
+        log_cmd "curl -fsSL https://github.com/live4thamuzik/ArchTUI/releases/latest/download/HyperFluent-arch.tar.gz"
+        if curl -fsSL -o "/tmp/HyperFluent-arch.tar.gz" \
+            "https://github.com/live4thamuzik/ArchTUI/releases/latest/download/HyperFluent-arch.tar.gz"; then
+            mkdir -p /mnt/root/grub-themes/HyperFluent-GRUB-Theme
+            tar xzf "/tmp/HyperFluent-arch.tar.gz" -C /mnt/root/grub-themes/HyperFluent-GRUB-Theme/ || log_warn "Failed to extract HyperFluent GRUB theme"
+            rm -f "/tmp/HyperFluent-arch.tar.gz"
         else
-            # Download arch variant from release assets
-            log_info "Downloading HyperFluent GRUB theme..."
-            log_cmd "curl -fsSL https://github.com/live4thamuzik/ArchTUI/releases/latest/download/HyperFluent-arch.tar.gz"
-            if curl -fsSL -o "/tmp/HyperFluent-arch.tar.gz" \
-                "https://github.com/live4thamuzik/ArchTUI/releases/latest/download/HyperFluent-arch.tar.gz"; then
-                mkdir -p /mnt/root/grub-themes/HyperFluent-GRUB-Theme
-                tar xzf "/tmp/HyperFluent-arch.tar.gz" -C /mnt/root/grub-themes/HyperFluent-GRUB-Theme/ || log_warn "Failed to extract HyperFluent GRUB theme"
-                rm -f "/tmp/HyperFluent-arch.tar.gz"
-            else
-                log_warn "Failed to download HyperFluent GRUB theme — theme will not be applied"
-            fi
+            log_warn "Failed to download HyperFluent GRUB theme — theme will not be applied"
         fi
     fi
 

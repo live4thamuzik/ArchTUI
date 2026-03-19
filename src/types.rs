@@ -442,7 +442,7 @@ pub enum EncryptionKeyType {
 
 /// Plymouth theme selection
 /// Stock themes ship with the plymouth package.
-/// arch-glow and arch-mac-style are custom themes bundled in Source/.
+/// arch-glow and arch-mac-style are custom themes downloaded from GitHub release assets.
 #[derive(
     Debug,
     Clone,
