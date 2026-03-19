@@ -1836,10 +1836,10 @@ install_de_aur_packages() {
 
     log_info "Installing AUR packages for $de: ${aur_packages[*]}"
 
-    local sudoers_drop="/etc/sudoers.d/temp-de-aur"
+    local sudoers_drop="/etc/sudoers.d/archtui_temp_de_aur"
     echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
     chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
-    trap 'rm -f /etc/sudoers.d/temp-de-aur' RETURN
+    trap 'rm -f /etc/sudoers.d/archtui_temp_de_aur' RETURN
 
     timeout 600 runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some DE AUR packages may have failed to install"
 }
@@ -2031,10 +2031,10 @@ install_aur_helper() {
 
     # Grant temporary passwordless sudo — makepkg -si calls sudo pacman internally,
     # which would hang waiting for a password since stdin is not a terminal
-    local sudoers_drop="/etc/sudoers.d/temp-aur-build"
+    local sudoers_drop="/etc/sudoers.d/archtui_temp_aur_build"
     echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
     chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
-    trap 'rm -f /etc/sudoers.d/temp-aur-build' RETURN
+    trap 'rm -f /etc/sudoers.d/archtui_temp_aur_build' RETURN
 
     case "$helper" in
         "paru")
@@ -2146,10 +2146,10 @@ install_additional_packages() {
 
             if [[ ${#aur_packages[@]} -gt 0 ]]; then
                 # NOPASSWD needed — AUR helpers call sudo pacman internally
-                local sudoers_drop="/etc/sudoers.d/temp-aur-packages"
+                local sudoers_drop="/etc/sudoers.d/archtui_temp_aur_packages"
                 echo "$MAIN_USERNAME ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
                 chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 1; }
-                trap 'rm -f /etc/sudoers.d/temp-aur-packages' RETURN
+                trap 'rm -f /etc/sudoers.d/archtui_temp_aur_packages' RETURN
 
                 timeout 600 runuser -u "$MAIN_USERNAME" -- "$helper" -S "${aur_packages[@]}" --noconfirm || log_warn "Some AUR packages may have failed to install"
             fi
@@ -2407,10 +2407,10 @@ configure_numlock() {
 
     # NOPASSWD needed — AUR helpers call sudo pacman internally,
     # which hangs waiting for password since stdin is not a terminal
-    local sudoers_drop="/etc/sudoers.d/temp-numlock"
+    local sudoers_drop="/etc/sudoers.d/archtui_temp_numlock"
     echo "$_user ALL=(ALL) NOPASSWD: ALL" > "$sudoers_drop"
     chmod 440 "$sudoers_drop" || { log_error "Failed to set sudoers permissions"; rm -f "$sudoers_drop"; return 0; }
-    trap 'rm -f /etc/sudoers.d/temp-numlock' RETURN
+    trap 'rm -f /etc/sudoers.d/archtui_temp_numlock' RETURN
 
     log_cmd "runuser -u $_user -- $_aur_helper -S --noconfirm mkinitcpio-numlock"
     timeout 300 runuser -u "$_user" -- "$_aur_helper" -S --noconfirm mkinitcpio-numlock || {

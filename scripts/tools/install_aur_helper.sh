@@ -21,7 +21,7 @@ cleanup() {
         log_info "Cleaned up partial build directory"
     fi
     # Revoke temporary passwordless sudo if it was created
-    rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
+    rm -f "${ROOT:-}/etc/sudoers.d/archtui_temp_aur_build"
     exit 130
 }
 # shellcheck disable=SC2317  # Trap handler is invoked indirectly via signal
@@ -31,7 +31,7 @@ cleanup_term() {
         rm -rf "${ROOT:?}/${BUILD_DIR}"
         log_info "Cleaned up partial build directory"
     fi
-    rm -f "${ROOT:-}/etc/sudoers.d/temp-aur-build"
+    rm -f "${ROOT:-}/etc/sudoers.d/archtui_temp_aur_build"
     exit 143
 }
 trap cleanup_term SIGTERM SIGHUP
@@ -132,14 +132,14 @@ fi
 log_info "Step 2/3: Building and installing $HELPER (makepkg -si --noconfirm)..."
 
 # Grant temporary passwordless sudo — makepkg -si calls sudo pacman internally
-echo "$USER ALL=(ALL) NOPASSWD: ALL" > "$ROOT/etc/sudoers.d/temp-aur-build"
-chmod 440 "$ROOT/etc/sudoers.d/temp-aur-build"
+echo "$USER ALL=(ALL) NOPASSWD: ALL" > "$ROOT/etc/sudoers.d/archtui_temp_aur_build"
+chmod 440 "$ROOT/etc/sudoers.d/archtui_temp_aur_build"
 
 log_cmd "arch-chroot $ROOT runuser -u $USER -- makepkg -si --noconfirm (in $BUILD_DIR)"
 arch-chroot "$ROOT" runuser -u "$USER" -- bash -c "cd $(printf '%q' "$BUILD_DIR") && timeout 300 makepkg -si --noconfirm"
 
 # Revoke temporary passwordless sudo
-rm -f "$ROOT/etc/sudoers.d/temp-aur-build"
+rm -f "$ROOT/etc/sudoers.d/archtui_temp_aur_build"
 
 # --- Step 3: Verify installation ---
 log_info "Step 3/3: Verifying $HELPER installation..."
