@@ -322,8 +322,6 @@ The binary is dynamically linked against glibc, built on Arch Linux. The bash sc
 
 ## Current status
 
-**v1.0.0 — release.** Validated on real hardware with most partitioning strategies including the full RAID+LVM+LUKS stack.
-
 - TUI framework, navigation, menus, dialogs, embedded PTY terminal
 - Full CLI with subcommands for all 28 tools
 - Typed argument system for all script categories
@@ -339,7 +337,5 @@ The binary is dynamically linked against glibc, built on Arch Linux. The bash sc
 - 524 tests (338 Rust + 186 BATS)
 - CI pipeline (shellcheck + BATS + cargo clippy + cargo test + cargo audit + safety linter)
 
-Known limitations:
-- Secure boot is still in testing (added for users who dual-boot with Windows and have secure boot enabled already)
 
 
