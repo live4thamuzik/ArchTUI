@@ -31,6 +31,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::stdout;
 use std::path::PathBuf;
+use anyhow::Context;
 use tracing::{debug, error, info};
 
 use crate::cli::Cli;
@@ -94,7 +95,7 @@ fn init_logger_tui() {
 }
 
 /// Main application entry point
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     // Parse CLI first to determine if we're in TUI or CLI mode
     let cli = Cli::parse_args();
 
@@ -208,7 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Run the TUI installer
-fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
+fn run_tui_installer() -> anyhow::Result<()> {
     debug!("Initializing terminal for TUI mode");
 
     // Detect hardware environment before entering TUI
@@ -234,13 +235,13 @@ fn run_tui_installer() -> Result<(), Box<dyn std::error::Error>> {
     let _ = disable_raw_mode();
     let _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
 
-    result
+    result.map_err(|e| anyhow::anyhow!("{}", e))
 }
 
 /// Run installer with configuration file (headless mode)
 fn run_installer_with_config(
     config_path: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     use std::fs::{self, OpenOptions};
     use std::io::{BufRead, BufReader, Write};
     use std::process::{Command, Stdio};
@@ -330,9 +331,7 @@ fn run_installer_with_config(
     // Always wait for the child process to finish
     let output = child
         .wait_with_output()
-        .map_err(|e| -> Box<dyn std::error::Error> {
-            format!("Failed to wait for installer subprocess: {}", e).into()
-        })?;
+        .context("Failed to wait for installer subprocess")?;
 
     // Death Pact: unregister child now that it has exited
     if let Ok(mut registry) = ChildRegistry::global().lock() {
@@ -377,7 +376,7 @@ fn run_installer_with_config(
 /// Run TUI installer and save configuration when done
 fn run_tui_installer_with_save(
     save_path: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     println!(
         "🎯 TUI installer will save configuration to: {}",
         save_path.display()
@@ -396,7 +395,7 @@ fn run_tui_installer_with_save(
 /// Run TUI installer with save path
 fn run_tui_installer_with_save_path(
     save_path: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     // Detect hardware environment before entering TUI
     let hw = hardware::HardwareInfo::detect();
     info!("Hardware detected: {}", hw);
@@ -420,13 +419,22 @@ fn run_tui_installer_with_save_path(
     let _ = disable_raw_mode();
     let _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
 
-    result
+    result.map_err(|e| anyhow::anyhow!("{}", e))
 }
 
-/// Run tool command
-fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::error::Error>> {
+/// Run tool command — dispatches to category-specific handlers
+fn run_tool_command(tool: &crate::cli::ToolCommands) -> anyhow::Result<()> {
     match tool {
-        crate::cli::ToolCommands::Disk { disk_tool } => match disk_tool {
+        crate::cli::ToolCommands::Disk { disk_tool } => dispatch_disk_tool(disk_tool),
+        crate::cli::ToolCommands::System { system_tool } => dispatch_system_tool(system_tool),
+        crate::cli::ToolCommands::User { user_tool } => dispatch_user_tool(user_tool),
+        crate::cli::ToolCommands::Network { network_tool } => dispatch_network_tool(network_tool),
+    }
+}
+
+/// Dispatch disk tool subcommands
+fn dispatch_disk_tool(disk_tool: &crate::cli::DiskToolCommands) -> anyhow::Result<()> {
+    match disk_tool {
             crate::cli::DiskToolCommands::Format {
                 device,
                 filesystem,
@@ -512,17 +520,12 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                         // Password is read from stdin for CLI
                         eprintln!("Enter LUKS passphrase:");
                         let mut password = String::new();
-                        std::io::stdin().read_line(&mut password).map_err(
-                            |e| -> Box<dyn std::error::Error> {
-                                format!("Failed to read LUKS passphrase from stdin: {}", e).into()
-                            },
-                        )?;
+                        std::io::stdin()
+                            .read_line(&mut password)
+                            .context("Failed to read LUKS passphrase from stdin")?;
                         let password = password.trim().to_string();
-                        let secret_file = SecretFile::new(&password).map_err(
-                            |e| -> Box<dyn std::error::Error> {
-                                format!("Failed to create temporary keyfile: {}", e).into()
-                            },
-                        )?;
+                        let secret_file = SecretFile::new(&password)
+                            .context("Failed to create temporary keyfile")?;
                         let format_args = LuksFormatArgs {
                             device: PathBuf::from(dev),
                             key_file: secret_file.path().to_path_buf(),
@@ -540,17 +543,12 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                         });
                         eprintln!("Enter LUKS passphrase:");
                         let mut password = String::new();
-                        std::io::stdin().read_line(&mut password).map_err(
-                            |e| -> Box<dyn std::error::Error> {
-                                format!("Failed to read LUKS passphrase from stdin: {}", e).into()
-                            },
-                        )?;
+                        std::io::stdin()
+                            .read_line(&mut password)
+                            .context("Failed to read LUKS passphrase from stdin")?;
                         let password = password.trim().to_string();
-                        let secret_file = SecretFile::new(&password).map_err(
-                            |e| -> Box<dyn std::error::Error> {
-                                format!("Failed to create temporary keyfile: {}", e).into()
-                            },
-                        )?;
+                        let secret_file = SecretFile::new(&password)
+                            .context("Failed to create temporary keyfile")?;
                         let open_args = LuksOpenArgs {
                             device: PathBuf::from(dev),
                             key_file: secret_file.path().to_path_buf(),
@@ -570,8 +568,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                     }
                 }
             }
-        },
-        crate::cli::ToolCommands::System { system_tool } => match system_tool {
+    }
+    Ok(())
+}
+
+/// Dispatch system tool subcommands
+fn dispatch_system_tool(system_tool: &crate::cli::SystemToolCommands) -> anyhow::Result<()> {
+    match system_tool {
             crate::cli::SystemToolCommands::Bootloader {
                 r#type,
                 disk,
@@ -638,8 +641,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&aur_args)?;
             }
-        },
-        crate::cli::ToolCommands::User { user_tool } => match user_tool {
+    }
+    Ok(())
+}
+
+/// Dispatch user tool subcommands
+fn dispatch_user_tool(user_tool: &crate::cli::UserToolCommands) -> anyhow::Result<()> {
+    match user_tool {
             crate::cli::UserToolCommands::Add {
                 username,
                 full_name,
@@ -727,8 +735,13 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&run_args)?;
             }
-        },
-        crate::cli::ToolCommands::Network { network_tool } => match network_tool {
+    }
+    Ok(())
+}
+
+/// Dispatch network tool subcommands
+fn dispatch_network_tool(network_tool: &crate::cli::NetworkToolCommands) -> anyhow::Result<()> {
+    match network_tool {
             crate::cli::NetworkToolCommands::Configure {
                 interface,
                 ip,
@@ -804,15 +817,15 @@ fn run_tool_command(tool: &crate::cli::ToolCommands) -> Result<(), Box<dyn std::
                 };
                 execute_tool(&mirrors_args)?;
             }
-        },
     }
     Ok(())
 }
+
 /// Execute a tool script with typed arguments and print output (CLI helper).
 ///
 /// This wraps the shared `run_script_safe` from `script_runner` module
 /// to provide CLI-friendly output and process exit on failure.
-fn execute_tool<T: ScriptArgs>(args: &T) -> Result<(), Box<dyn std::error::Error>> {
+fn execute_tool<T: ScriptArgs>(args: &T) -> anyhow::Result<()> {
     let script_name = args.script_name();
     let cli_args = args.to_cli_args();
     let env_vars = args.get_env_vars();

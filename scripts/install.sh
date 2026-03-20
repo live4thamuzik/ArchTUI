@@ -2,7 +2,7 @@
 # install.sh - Complete Arch Linux Installation Engine (TUI-Only)
 # This script handles the entire installation process from partitioning to completion
 
-set -euo pipefail
+set -eEuo pipefail
 
 # Cleanup function for unmounting on failure
 cleanup_on_exit() {
@@ -61,7 +61,7 @@ trap cleanup_on_exit EXIT
 trap 'exit 143' SIGTERM
 trap 'exit 130' SIGINT
 # ERR trap: print file:line context before set -e kills the script
-trap 'echo "FATAL: Command failed at ${BASH_SOURCE[0]}:${LINENO}: $(sed -n "${LINENO}p" "${BASH_SOURCE[0]}" 2>/dev/null || echo "unknown")" >&2' ERR
+trap 'echo "FATAL: ${FUNCNAME[0]:-main}() failed at ${BASH_SOURCE[0]}:${LINENO}: $(sed -n "${LINENO}p" "${BASH_SOURCE[0]}" 2>/dev/null || echo "unknown")" >&2' ERR
 
 # Debug: Show script startup
 echo "=== INSTALLATION ENGINE STARTED ==="
@@ -75,23 +75,13 @@ echo "=========================================="
 # Source utility functions and strategies via source_or_die
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
-# Inline source_or_die before utils.sh is loaded
-_source_or_die() {
-    local script_path="$1"
-    if [[ ! -f "$script_path" ]]; then
-        echo "FATAL: Required script not found: $script_path" >&2
-        exit 1
-    fi
-    # shellcheck source=/dev/null
-    if ! source "$script_path"; then
-        echo "FATAL: Failed to source: $script_path" >&2
-        exit 1
-    fi
-}
+# Bootstrap source_or_die before utils.sh is loaded
+# shellcheck source=bootstrap.sh
+source "$SCRIPT_DIR/bootstrap.sh" || { echo "FATAL: Cannot source bootstrap.sh" >&2; exit 1; }
 
-_source_or_die "$SCRIPT_DIR/utils.sh"
-_source_or_die "$SCRIPT_DIR/disk_strategies.sh"
-_source_or_die "$SCRIPT_DIR/config_loader.sh"
+source_or_die "$SCRIPT_DIR/utils.sh"
+source_or_die "$SCRIPT_DIR/disk_strategies.sh"
+source_or_die "$SCRIPT_DIR/config_loader.sh"
 
 # --- Credential Validation ---
 # ENVIRONMENT CONTRACT: Passwords MUST be passed via environment variables

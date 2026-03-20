@@ -31,21 +31,10 @@ cleanup_and_exit() {
 trap 'cleanup_and_exit SIGTERM' SIGTERM
 trap 'cleanup_and_exit SIGINT' SIGINT
 
-# Source common utilities
+# Source common utilities via bootstrap
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-source_or_die() {
-    local script_path="$1"
-    local error_msg="${2:-Failed to source required script: $script_path}"
-    if [[ ! -f "$script_path" ]]; then
-        echo "FATAL: $error_msg (file not found)" >&2
-        exit 1
-    fi
-    # shellcheck source=/dev/null
-    if ! source "$script_path"; then
-        echo "FATAL: $error_msg (source failed)" >&2
-        exit 1
-    fi
-}
+# shellcheck source=../bootstrap.sh
+source "$SCRIPT_DIR/../bootstrap.sh" || { echo "FATAL: Cannot source bootstrap.sh" >&2; exit 1; }
 source_or_die "$SCRIPT_DIR/../utils.sh"
 
 require_root

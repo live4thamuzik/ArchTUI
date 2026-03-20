@@ -17,7 +17,7 @@
 // Library API - consumed by installer logic
 #![allow(dead_code)]
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::fmt;
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
@@ -198,13 +198,17 @@ pub fn detect_firmware_mode() -> FirmwareMode {
 /// - Any other I/O error occurs
 pub fn detect_internet() -> NetworkState {
     // archlinux.org HTTPS — reliable, always up, firewall-friendly
-    let addr: SocketAddr = match "147.75.81.97:443".parse() {
-        Ok(a) => a,
-        Err(e) => {
-            tracing::warn!("Failed to parse socket address: {}", e);
-            return NetworkState::Offline;
-        }
-    };
+    // Try DNS resolution first, fall back to hardcoded IP if DNS is unavailable
+    let addr: SocketAddr = std::net::ToSocketAddrs::to_socket_addrs(&"archlinux.org:443")
+        .ok()
+        .and_then(|mut addrs| addrs.next())
+        .unwrap_or_else(|| {
+            tracing::debug!(
+                "DNS resolution failed for archlinux.org, using hardcoded IP fallback"
+            );
+            // SAFETY: hardcoded valid IP:port literal — parse is infallible
+            "147.75.81.97:443".parse().unwrap()
+        });
 
     let timeout = Duration::from_secs(2);
 
@@ -257,9 +261,12 @@ pub fn detect_firmware_mode_strict() -> Result<FirmwareMode> {
 ///
 /// Returns `Ok(true)` if online, `Ok(false)` if offline, `Err` if detection itself failed.
 pub fn detect_internet_strict() -> Result<bool> {
-    let addr: SocketAddr = "147.75.81.97:443"
-        .parse()
-        .context("Failed to parse archlinux.org socket address")?;
+    // Try DNS resolution first, fall back to hardcoded IP
+    let addr: SocketAddr = std::net::ToSocketAddrs::to_socket_addrs(&"archlinux.org:443")
+        .ok()
+        .and_then(|mut addrs| addrs.next())
+        // SAFETY: hardcoded valid IP:port literal — parse is infallible
+        .unwrap_or_else(|| "147.75.81.97:443".parse().unwrap());
 
     let timeout = Duration::from_secs(2);
 

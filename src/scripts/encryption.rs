@@ -79,14 +79,19 @@ impl SecretFile {
     /// - Uses `/tmp` which is tmpfs on Arch live ISO (RAM-backed)
     /// - Unique filename prevents collision attacks
     pub fn new(secret: &str) -> std::io::Result<Self> {
-        // Generate unique filename with cryptographic randomness
-        let random_suffix: u64 = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0)
-            ^ std::process::id() as u64;
+        // Generate unique filename with cryptographic randomness from /dev/urandom
+        let mut rand_bytes = [0u8; 16];
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut f| {
+                use std::io::Read;
+                f.read_exact(&mut rand_bytes)
+            })
+            .map_err(|e| {
+                std::io::Error::new(e.kind(), format!("Failed to read /dev/urandom: {}", e))
+            })?;
+        let random_suffix = u128::from_ne_bytes(rand_bytes);
 
-        let path = PathBuf::from(format!("/tmp/.archinstall_keyfile_{:016x}", random_suffix));
+        let path = PathBuf::from(format!("/tmp/.archinstall_keyfile_{:032x}", random_suffix));
 
         // Create file with restricted permissions (0600)
         // CRITICAL: Use OpenOptionsExt::mode() to set permissions atomically

@@ -21,7 +21,7 @@
 //! Non-destructive scripts (like `lsblk` or network checks) still execute
 //! so the dry-run produces realistic output.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 /// Global dry-run flag.
 ///
@@ -30,15 +30,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 ///
 /// # Thread Safety
 ///
-/// Uses `AtomicBool` with `Ordering::SeqCst` for correct cross-thread visibility.
-/// Set once at startup based on `--dry-run` CLI flag.
+/// Uses `AtomicBool` with `Ordering::Relaxed` since the flag is set once at
+/// startup before any concurrent reads. No happens-before relationship needed.
 static DRY_RUN: AtomicBool = AtomicBool::new(false);
 
 /// Enable dry-run mode globally.
 ///
 /// Called at startup if `--dry-run` CLI flag is present.
 pub fn enable_dry_run() {
-    DRY_RUN.store(true, Ordering::SeqCst);
+    DRY_RUN.store(true, Relaxed);
     tracing::info!("[DRY RUN] Mode enabled - destructive operations will be skipped");
 }
 
@@ -47,20 +47,23 @@ pub fn enable_dry_run() {
 /// Used in tests and when toggling dry-run mode dynamically.
 #[allow(dead_code)] // Test utility: Complements enable_dry_run() for test cleanup
 pub fn disable_dry_run() {
-    DRY_RUN.store(false, Ordering::SeqCst);
+    DRY_RUN.store(false, Relaxed);
 }
 
 /// Check if dry-run mode is enabled.
 pub fn is_dry_run() -> bool {
-    DRY_RUN.load(Ordering::SeqCst)
+    DRY_RUN.load(Relaxed)
 }
 
 /// Check if a string is safe to pass to a shell command.
 ///
 /// Rejects characters that could enable shell injection attacks.
+///
+/// Blocks: semicolons, pipes, backticks, dollar signs, parentheses,
+/// braces, redirects, quotes, comment chars, and control characters.
 pub fn shell_safe(s: &str) -> bool {
     !s.contains([
-        ';', '|', '`', '$', '(', ')', '{', '}', '>', '<', '\n', '\r', '\0',
+        ';', '|', '`', '$', '(', ')', '{', '}', '>', '<', '\'', '"', '#', '\n', '\r', '\0',
     ])
 }
 
@@ -177,6 +180,9 @@ mod tests {
         assert!(!shell_safe("`id`"));
         assert!(!shell_safe("foo\nbar"));
         assert!(!shell_safe("foo\0bar"));
+        assert!(!shell_safe("it's"));
+        assert!(!shell_safe("foo\"bar"));
+        assert!(!shell_safe("foo#comment"));
     }
 
     #[test]

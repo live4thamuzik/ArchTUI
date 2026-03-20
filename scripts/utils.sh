@@ -86,7 +86,8 @@ CYAN='\033[36m'
 log_debug() {
     if [[ "${LOG_LEVEL:-INFO}" == "DEBUG" ]]; then
         local message="$1"
-        local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+        local timestamp
+        printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
         # Use direct color variables - fail-safe and strict-mode compliant
         echo -e "${BLUE}[$timestamp] DEBUG: $message${RESET}"
         echo "[$timestamp] DEBUG: $message" >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
@@ -95,14 +96,16 @@ log_debug() {
 
 log_info() {
     local message="$1"
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     echo -e "${RESET}[$timestamp] INFO: $message${RESET}"
     echo "[$timestamp] INFO: $message" >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
 }
 
 log_warn() {
     local message="$1"
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     echo -e "${YELLOW}[$timestamp] WARN: $message${RESET}" >&2
     echo "[$timestamp] WARN: $message" >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
 }
@@ -111,21 +114,24 @@ log_warning() { log_warn "$1"; }
 
 log_error() {
     local message="$1"
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     echo -e "${RED}[$timestamp] ERROR: $message${RESET}" >&2
     echo "[$timestamp] ERROR: $message" >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
 }
 
 log_success() {
     local message="$1"
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     echo -e "${GREEN}[$timestamp] SUCCESS: $message${RESET}"
     echo "[$timestamp] SUCCESS: $message" >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
 }
 
 log_phase() {
     local message="$1"
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     echo -e "${BOLD}${CYAN}[$timestamp] === $message ===${RESET}"
     echo "[$timestamp] === $message ===" >> "${LOG_FILE:-/dev/null}" 2>/dev/null || true
 }
@@ -197,7 +203,7 @@ setup_logging() {
         log_dir="/tmp"
     fi
     local timestamp
-    timestamp="$(date +%Y%m%d-%H%M%S)"
+    printf -v timestamp '%(%Y%m%d-%H%M%S)T' -1
     export LOG_FILE="${log_dir}/install-${timestamp}.log"
     log_info "Logging initialized: $LOG_FILE"
 
@@ -218,7 +224,7 @@ setup_logging() {
 # Called after setup_logging to capture the full config snapshot
 dump_config() {
     local timestamp
-    timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+    printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     {
         echo "[$timestamp] === CONFIGURATION DUMP ==="
         local var
@@ -348,13 +354,13 @@ check_and_install_dependencies() {
         esac
     done
 
-    # Deduplicate
+    # Deduplicate using associative array (prevents false positives from substring matching)
+    local -A seen_packages=()
     local -a unique_packages=()
-    local seen=""
     for pkg in "${packages_to_install[@]}"; do
-        if [[ "$seen" != *"$pkg"* ]]; then
+        if [[ -z "${seen_packages[$pkg]:-}" ]]; then
             unique_packages+=("$pkg")
-            seen="$seen $pkg"
+            seen_packages[$pkg]=1
         fi
     done
 

@@ -12,25 +12,14 @@ cleanup_disk_strategies() {
 trap 'cleanup_disk_strategies SIGTERM' SIGTERM
 trap 'cleanup_disk_strategies SIGINT' SIGINT
 
-# Source utility functions using source_or_die pattern
+# Source utility functions via bootstrap
 _STRAT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
-# Inline source_or_die before utils.sh is loaded
-_source_or_die() {
-    local script_path="$1"
-    if [[ ! -f "$script_path" ]]; then
-        echo "FATAL: Required script not found: $script_path" >&2
-        exit 1
-    fi
-    # shellcheck source=/dev/null
-    if ! source "$script_path"; then
-        echo "FATAL: Failed to source: $script_path" >&2
-        exit 1
-    fi
-}
+# shellcheck source=bootstrap.sh
+source "$_STRAT_DIR/bootstrap.sh" || { echo "FATAL: Cannot source bootstrap.sh" >&2; exit 1; }
 
-_source_or_die "$_STRAT_DIR/utils.sh"
-_source_or_die "$_STRAT_DIR/disk_utils.sh"
+source_or_die "$_STRAT_DIR/utils.sh"
+source_or_die "$_STRAT_DIR/disk_utils.sh"
 
 # Constants are defined in disk_utils.sh
 

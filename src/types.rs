@@ -194,8 +194,11 @@ pub enum DesktopEnvironment {
 
 impl DesktopEnvironment {
     /// Whether this DE/WM has packages that are only available in the AUR
+    ///
+    /// Note: Hyprland moved to the official `extra` repository in 2024
+    /// and no longer requires the AUR.
     pub fn requires_aur(&self) -> bool {
-        matches!(self, Self::Hyprland)
+        false
     }
 }
 

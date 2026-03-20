@@ -62,7 +62,7 @@ if ! declare -f log_info > /dev/null 2>&1; then
         local message="$2"
         local timestamp
         local color="${LOG_COLORS[$level]:-${COLORS[WHITE]}}"
-        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
         echo -e "${color}[$timestamp] $level: $message${COLORS[RESET]}"
     }
 

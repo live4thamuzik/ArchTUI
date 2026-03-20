@@ -18,12 +18,12 @@ use nix::libc;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// Global registry of child process IDs
-/// Using OnceLock for safe lazy initialization
-static CHILD_REGISTRY: OnceLock<Arc<Mutex<ChildRegistry>>> = OnceLock::new();
+/// Using OnceLock for safe lazy initialization (no Arc needed — OnceLock provides &'static)
+static CHILD_REGISTRY: OnceLock<Mutex<ChildRegistry>> = OnceLock::new();
 
 /// Registry tracking all spawned child processes
 #[derive(Debug, Default)]
@@ -36,10 +36,8 @@ pub struct ChildRegistry {
 
 impl ChildRegistry {
     /// Get or create the global child registry
-    pub fn global() -> Arc<Mutex<ChildRegistry>> {
-        CHILD_REGISTRY
-            .get_or_init(|| Arc::new(Mutex::new(ChildRegistry::default())))
-            .clone()
+    pub fn global() -> &'static Mutex<ChildRegistry> {
+        CHILD_REGISTRY.get_or_init(|| Mutex::new(ChildRegistry::default()))
     }
 
     /// Register a new child process
@@ -220,7 +218,7 @@ fn is_process_alive(pid: u32) -> bool {
 /// RAII guard that terminates all children on drop
 /// Attach this to the App struct to ensure cleanup on any exit path
 pub struct ProcessGuard {
-    registry: Arc<Mutex<ChildRegistry>>,
+    registry: &'static Mutex<ChildRegistry>,
 }
 
 impl ProcessGuard {
@@ -300,6 +298,14 @@ pub fn init_signal_handlers() -> Result<(), std::io::Error> {
             if let Ok(mut registry) = ChildRegistry::global().lock() {
                 registry.terminate_all(Duration::from_secs(3));
             }
+
+            // Restore terminal state before exiting to prevent leaving the
+            // terminal in raw mode (which makes the shell unusable)
+            let _ = crossterm::terminal::disable_raw_mode();
+            let _ = crossterm::execute!(
+                std::io::stdout(),
+                crossterm::terminal::LeaveAlternateScreen
+            );
 
             // Exit with appropriate code (128 + signal number)
             // EXCEPTION: process::exit in signal handler — RAII is already bypassed
