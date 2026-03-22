@@ -1411,13 +1411,13 @@ configure_grub_theme() {
                 ;;
             "HyperFluent"|"hyperfluent")
                 # HyperFluent arch variant — copied to /root/grub-themes by install.sh
-                local _hf_src="/root/grub-themes/HyperFluent-GRUB-Theme"
-                if [[ -d "$_hf_src/arch" ]]; then
+                local _hf_src="/root/grub-themes"
+                if [[ -d "$_hf_src/HyperFluent-GRUB-Theme/arch" ]]; then
                     mkdir -p "$theme_dir"
-                    cp -r "$_hf_src/arch/"* "$theme_dir/" || log_warn "Failed to copy HyperFluent theme"
+                    cp -r "$_hf_src/HyperFluent-GRUB-Theme/arch/"* "$theme_dir/" || log_warn "Failed to copy HyperFluent theme"
                     log_info "Installed HyperFluent theme from bundled source"
                 else
-                    log_warn "HyperFluent theme not found at $_hf_src — theme will not be applied"
+                    log_warn "HyperFluent theme not found at $_hf_src/HyperFluent-GRUB-Theme/arch — theme will not be applied"
                 fi
                 ;;
             *)
