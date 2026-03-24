@@ -88,10 +88,19 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         mkdir -p themes
-        for theme in arch-glow arch-mac-style HyperFluent-arch; do
-          gh release download --repo "${{ github.repository }}" --pattern "${theme}.tar.gz" --dir themes 2>/dev/null || \
-            echo "::warning::Theme asset ${theme}.tar.gz not found in previous release"
-        done
+        prev_tag=$(gh release list --repo "${{ github.repository }}" \
+          --exclude-drafts --exclude-pre-releases --limit 2 \
+          --json tagName -q '.[1].tagName // empty')
+        if [[ -z "$prev_tag" ]]; then
+          echo "::warning::No previous release found — theme assets will not be carried forward"
+        else
+          echo "Downloading theme assets from release $prev_tag"
+          for theme in arch-glow arch-mac-style HyperFluent-arch; do
+            gh release download "$prev_tag" --repo "${{ github.repository }}" \
+              --pattern "${theme}.tar.gz" --dir themes || \
+              echo "::warning::Theme asset ${theme}.tar.gz not found in release $prev_tag"
+          done
+        fi
 
     - name: Create GitHub release
       uses: softprops/action-gh-release@v2
