@@ -3,7 +3,15 @@
 set -euo pipefail
 
 REPO="live4thamuzik/ArchTUI"
-BASE_URL="https://github.com/${REPO}/releases/latest/download"
+
+# Detect if running from the dev branch and pull from the dev pre-release
+BRANCH=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+if [[ "$BRANCH" == "archtui-dev" ]]; then
+    BASE_URL="https://github.com/${REPO}/releases/download/dev"
+    echo "=== DEV BUILD — for testing only ==="
+else
+    BASE_URL="https://github.com/${REPO}/releases/latest/download"
+fi
 
 echo "Downloading ArchTUI binary..."
 if ! curl -fsSL "${BASE_URL}/archtui" -o archtui; then
