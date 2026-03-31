@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, archtui-dev]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -62,7 +62,7 @@ jobs:
         cargo audit
 
     - name: Upload binary artifact
-      if: startsWith(github.ref, 'refs/tags/v')
+      if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/archtui-dev'
       uses: actions/upload-artifact@v5
       with:
         name: archtui
@@ -109,3 +109,33 @@ jobs:
           archtui
           archtui.sha256
           themes/*.tar.gz
+
+  dev-release:
+    if: github.ref == 'refs/heads/archtui-dev'
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Download binary artifact
+      uses: actions/download-artifact@v5
+      with:
+        name: archtui
+
+    - name: Generate SHA256 checksum
+      run: sha256sum archtui > archtui.sha256
+
+    - name: Create or update dev pre-release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # Delete existing dev release if present (rolling pre-release)
+        gh release delete dev --repo "${{ github.repository }}" --yes 2>/dev/null || true
+        gh api repos/${{ github.repository }}/git/refs/tags/dev -X DELETE 2>/dev/null || true
+        gh release create dev \
+          --repo "${{ github.repository }}" \
+          --title "archtui-dev (latest)" \
+          --notes "Pre-release build from \`archtui-dev\` branch. For testing only — do not use on production systems." \
+          --prerelease \
+          --target archtui-dev \
+          archtui archtui.sha256
