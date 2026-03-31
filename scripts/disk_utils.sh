@@ -852,6 +852,8 @@ detect_other_os() {
                     log_info "Found other Linux installation: $os_name on $part"
                     other_os_found=0
                     export OTHER_LINUX_DETECTED="yes"
+                    export OTHER_LINUX_NAME="$os_name"
+                    export OTHER_LINUX_DEVICE="$part"
                 fi
             fi
             umount "$temp_mount" 2>/dev/null

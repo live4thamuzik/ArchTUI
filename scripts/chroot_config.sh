@@ -201,6 +201,7 @@ main() {
 
     configure_numlock || log_warn "Numlock configuration failed — continuing"
     deploy_dotfiles || log_warn "Dotfiles deployment failed — continuing"
+    generate_chainload_helper || log_warn "Chainload helper generation failed — continuing"
     final_cleanup || true
 
     log_success "Chroot configuration complete!"
@@ -1438,6 +1439,146 @@ configure_grub_theme() {
         return 1
     fi
 
+    return 0
+}
+
+# Generate a helper script that prints a GRUB menuentry for chainloading this
+# install from another system's bootloader. The script resolves all UUIDs at
+# runtime so it remains correct even when device paths change between boots.
+# Only generated when another Linux installation was detected during partitioning.
+generate_chainload_helper() {
+    if [[ "${OTHER_LINUX_DETECTED:-}" != "yes" ]]; then
+        log_info "No other Linux installation detected — skipping chainload helper"
+        return 0
+    fi
+
+    log_info "Generating chainload helper script at /root/setup-chainload.sh"
+
+    cat > /root/setup-chainload.sh << 'CHAINLOAD_EOF'
+#!/bin/bash
+# setup-chainload.sh — Generate GRUB menuentry for chainloading this install
+#
+# Run this ON the system you want to chainload (not on the host system).
+# The output is a GRUB menuentry to append to /etc/grub.d/40_custom on your
+# MAIN system (the one whose bootloader you boot from).
+#
+# After appending, run on the main system:
+#   sudo grub-mkconfig -o /boot/grub/grub.cfg
+#
+# This script does NOT modify anything — output only.
+set -euo pipefail
+
+# ─── Resolve system identity at runtime ──────────────────────────────
+ROOT_UUID=$(findmnt -no UUID / 2>/dev/null) || { echo "ERROR: Cannot determine root UUID" >&2; exit 1; }
+BOOT_UUID=$(findmnt -no UUID /boot 2>/dev/null || echo "")
+OS_NAME=$(grep "^NAME=" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
+OS_NAME="${OS_NAME:-Linux}"
+
+# ─── Detect kernel and initramfs ─────────────────────────────────────
+KERNEL=""
+INITRAMFS=""
+for k in /boot/vmlinuz-*; do
+    [[ -f "$k" ]] || continue
+    KERNEL="$k"
+    break
+done
+# Prefer the standard initramfs over fallback
+for i in /boot/initramfs-linux.img /boot/initramfs-*-fallback.img /boot/initramfs-*.img; do
+    [[ -f "$i" ]] || continue
+    INITRAMFS="$i"
+    break
+done
+
+if [[ -z "$KERNEL" || -z "$INITRAMFS" ]]; then
+    echo "ERROR: Cannot find kernel or initramfs in /boot" >&2
+    exit 1
+fi
+
+# ─── Detect LUKS encryption ─────────────────────────────────────────
+LUKS_PARAM=""
+root_source=$(findmnt -no SOURCE / 2>/dev/null)
+if [[ "$root_source" == /dev/mapper/* ]]; then
+    mapper_name=$(basename "$root_source")
+    # Walk back from the mapper to find the underlying LUKS partition
+    for slave in /sys/block/dm-*/slaves/*; do
+        [[ -e "$slave" ]] || continue
+        parent_dev="/dev/$(basename "$slave")"
+        luks_uuid=$(cryptsetup luksUUID "$parent_dev" 2>/dev/null || true)
+        if [[ -n "$luks_uuid" ]]; then
+            LUKS_PARAM="cryptdevice=UUID=${luks_uuid}:${mapper_name}"
+            break
+        fi
+    done
+fi
+
+# ─── Detect LVM ─────────────────────────────────────────────────────
+LVM_ROOT=""
+if [[ "$root_source" == /dev/mapper/* ]] && lvs "$root_source" &>/dev/null; then
+    # Root is on an LVM logical volume — use the mapper path directly
+    LVM_ROOT="$root_source"
+fi
+
+# ─── Detect btrfs subvolume ──────────────────────────────────────────
+BTRFS_FLAGS=""
+if findmnt -no FSTYPE / 2>/dev/null | grep -q btrfs; then
+    subvol=$(findmnt -no OPTIONS / 2>/dev/null | grep -oP 'subvol=\K[^,]+' || true)
+    [[ -n "$subvol" ]] && BTRFS_FLAGS="rootflags=subvol=${subvol}"
+fi
+
+# ─── Build root= parameter ──────────────────────────────────────────
+if [[ -n "$LVM_ROOT" && -n "$LUKS_PARAM" ]]; then
+    # LVM on LUKS: cryptdevice unlocks, root points to LV
+    root_param="${LUKS_PARAM} root=${LVM_ROOT}"
+elif [[ -n "$LUKS_PARAM" ]]; then
+    # Plain LUKS: cryptdevice unlocks, root points to mapper
+    root_param="${LUKS_PARAM} root=/dev/mapper/${mapper_name}"
+elif [[ -n "$LVM_ROOT" ]]; then
+    # Plain LVM (no encryption)
+    root_param="root=${LVM_ROOT}"
+else
+    root_param="root=UUID=${ROOT_UUID}"
+fi
+
+# ─── Build kernel command line ───────────────────────────────────────
+cmdline="${root_param} rw"
+[[ -n "$BTRFS_FLAGS" ]] && cmdline="${cmdline} ${BTRFS_FLAGS}"
+
+# ─── Determine search UUID ──────────────────────────────────────────
+# Use /boot UUID if separate partition, otherwise root UUID
+search_uuid="${BOOT_UUID:-$ROOT_UUID}"
+
+# Strip /boot prefix for GRUB paths (GRUB's root is the boot partition)
+kernel_path="${KERNEL#/boot}"
+initramfs_path="${INITRAMFS#/boot}"
+# If /boot is not a separate partition, paths stay as-is under GRUB's root
+if [[ -z "$BOOT_UUID" ]]; then
+    kernel_path="${KERNEL}"
+    initramfs_path="${INITRAMFS}"
+fi
+
+# ─── Output ──────────────────────────────────────────────────────────
+cat <<EOF
+
+# ─── Chainload entry for: ${OS_NAME} ───────────────────────────────
+# Generated by: setup-chainload.sh (ArchTUI)
+# Root UUID: ${ROOT_UUID}
+#
+# Append this to /etc/grub.d/40_custom on your MAIN system, then run:
+#   sudo grub-mkconfig -o /boot/grub/grub.cfg
+
+menuentry "${OS_NAME} (${ROOT_UUID:0:8})" {
+    insmod part_gpt
+    insmod ext2
+    insmod btrfs
+    search --no-floppy --fs-uuid --set=root ${search_uuid}
+    linux ${kernel_path} ${cmdline}
+    initrd ${initramfs_path}
+}
+EOF
+CHAINLOAD_EOF
+
+    chmod +x /root/setup-chainload.sh
+    log_success "Chainload helper script generated at /root/setup-chainload.sh"
     return 0
 }
 

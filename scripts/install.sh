@@ -314,6 +314,28 @@ main() {
     echo ""
     echo "You can now reboot into your new Arch Linux system."
     echo "Don't forget to remove the installation media."
+
+    # Multi-boot guidance when other Linux installations were detected
+    if [[ "${OTHER_LINUX_DETECTED:-}" == "yes" ]]; then
+        echo ""
+        echo "=========================================="
+        echo "  MULTI-BOOT: Other Linux installation detected"
+        [[ -n "${OTHER_LINUX_NAME:-}" ]] && echo "  Detected: ${OTHER_LINUX_NAME} on ${OTHER_LINUX_DEVICE:-unknown}"
+        echo "=========================================="
+        echo ""
+        echo "  To chainload this install from your existing bootloader:"
+        echo ""
+        echo "  Option 1: Boot this disk via BIOS/UEFI firmware boot menu,"
+        echo "            then run: /root/setup-chainload.sh"
+        echo ""
+        echo "  Option 2: Use ArchTUI System Tools from this live session"
+        echo "            to mount and configure your existing bootloader."
+        echo ""
+        echo "  The script prints a GRUB menuentry — it does not modify anything."
+        echo "  Append its output to /etc/grub.d/40_custom on your main system,"
+        echo "  then run: sudo grub-mkconfig -o /boot/grub/grub.cfg"
+        echo "=========================================="
+    fi
 }
 
 # --- Validation Functions ---
@@ -975,6 +997,8 @@ configure_chroot() {
         printf 'export WINDOWS_EFI_PATH=%q\n' "${WINDOWS_EFI_PATH:-}"
         printf 'export WINDOWS_ESP_DEVICE=%q\n' "${WINDOWS_ESP_DEVICE:-}"
         printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
+        printf 'export OTHER_LINUX_DETECTED=%q\n' "${OTHER_LINUX_DETECTED:-}"
+        printf 'export OTHER_LINUX_NAME=%q\n' "${OTHER_LINUX_NAME:-}"
         printf 'export LOG_LEVEL=%q\n' "${LOG_LEVEL:-INFO}"
     } > /mnt/install_config.sh
 
