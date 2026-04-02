@@ -1862,7 +1862,16 @@ impl App {
                 // Show confirmation dialog before starting
                 let mut state = self.lock_state();
                 state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
-                state.confirm_dialog = Some(start_install_confirm());
+                let detected_os = state.detected_os.as_ref();
+                let strategy = state
+                    .config
+                    .options
+                    .iter()
+                    .find(|o| o.name == "Partitioning Strategy")
+                    .map(|o| o.get_value())
+                    .unwrap_or_default();
+                state.confirm_dialog =
+                    Some(start_install_confirm(detected_os, &strategy));
                 state.set_mode(AppMode::ConfirmDialog);
             } else {
                 // Validation failed - status message already set in validate_configuration_for_installation
@@ -3536,6 +3545,11 @@ impl App {
         // Handle dependent option updates
         self.handle_dependent_options(&option_name, &value)?;
 
+        // Run definitive OS detection probe when disk is confirmed
+        if option_name == "Disk" {
+            self.run_os_detection_probe()?;
+        }
+
         // Move to next step
         {
             {
@@ -3549,6 +3563,103 @@ impl App {
 
         Ok(())
     } // Close the update_configuration_value function
+
+    /// Run the definitive OS detection probe after disk selection.
+    ///
+    /// Calls `detect_os.sh` synchronously (<3s), stores results in AppState,
+    /// then applies cascading effects (auto-set OS Prober, warnings).
+    fn run_os_detection_probe(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let disk_path = {
+            let state = self.lock_state();
+            state
+                .config
+                .options
+                .iter()
+                .find(|opt| opt.name == "Disk")
+                .map(|opt| opt.get_value())
+                .unwrap_or_default()
+        };
+
+        if disk_path.is_empty() || disk_path == "N/A" {
+            return Ok(());
+        }
+
+        // Strip to first disk for comma-separated RAID configs
+        let base_disk = disk_path.split(',').next().unwrap_or(&disk_path).to_string();
+
+        {
+            let mut state = self.lock_state();
+            state.status_message = "Scanning for existing operating systems...".to_string();
+        }
+
+        let results = crate::hardware::detect_os_definitive(&base_disk);
+
+        {
+            let mut state = self.lock_state();
+            state.detected_os = Some(results);
+        }
+
+        self.apply_os_detection_cascades();
+        Ok(())
+    }
+
+    /// Apply cascading config changes based on OS detection results.
+    ///
+    /// - Auto-sets OS Prober = Yes when OS detected and bootloader is GRUB
+    /// - Shows warning when auto strategy selected on disk with same-disk OS
+    fn apply_os_detection_cascades(&mut self) {
+        let mut state = self.lock_state();
+
+        let detected = match state.detected_os {
+            Some(ref d) if d.has_any() => d.clone(),
+            _ => {
+                state.status_message = "No existing operating systems detected.".to_string();
+                return;
+            }
+        };
+
+        // Auto-set OS Prober when OS detected AND bootloader is GRUB
+        let bootloader = state
+            .config
+            .options
+            .iter()
+            .find(|o| o.name == "Bootloader")
+            .map(|o| o.get_value().to_lowercase())
+            .unwrap_or_default();
+
+        if bootloader == "grub"
+            && let Some(prober) = state
+                .config
+                .options
+                .iter_mut()
+                .find(|o| o.name == "OS Prober")
+        {
+            prober.value = "Yes".to_string();
+        }
+
+        // Check if auto strategy on disk with same-disk OS → destructive warning
+        let strategy = state
+            .config
+            .options
+            .iter()
+            .find(|o| o.name == "Partitioning Strategy")
+            .map(|o| o.get_value())
+            .unwrap_or_default();
+
+        let same = detected.same_disk_os();
+        if !same.is_empty() && strategy != "manual" && strategy != "pre_mounted" {
+            let names: Vec<&str> = same.iter().map(|o| o.name.as_str()).collect();
+            state.status_message = format!(
+                "WARNING: {} on target disk — auto strategy will DESTROY it! OS Prober auto-enabled.",
+                names.join(", ")
+            );
+        } else {
+            state.status_message = format!(
+                "Detected: {}. OS Prober auto-enabled.",
+                detected.summary_line()
+            );
+        }
+    }
 
     /// Auto-set encryption based on partitioning strategy
     fn auto_set_encryption(
@@ -3885,6 +3996,22 @@ impl App {
                             }
                         }
                     }
+
+                    // Warn when switching TO auto strategy with same-disk OS detected
+                    if value != "manual"
+                        && value != "pre_mounted"
+                        && let Some(ref detected) = state.detected_os
+                    {
+                        let same = detected.same_disk_os();
+                        if !same.is_empty() {
+                            let names: Vec<&str> =
+                                same.iter().map(|o| o.name.as_str()).collect();
+                            state.status_message = format!(
+                                "WARNING: {} on target disk — auto strategy will DESTROY it!",
+                                names.join(", ")
+                            );
+                        }
+                    }
                 }
                 "Root Filesystem" => {
                     if value.to_lowercase() != "btrfs" {
@@ -4060,6 +4187,8 @@ impl App {
                 "Disk" => {
                     // Clear stale manual partition assignments on disk change
                     state.manual_partition_map = None;
+                    // Clear stale OS detection results — re-run after lock is dropped
+                    state.detected_os = None;
                 }
                 "Git Repository" => {
                     if value.to_lowercase() == "no" {
@@ -4113,6 +4242,28 @@ impl App {
                             .find(|opt| opt.name == "OS Prober")
                         {
                             prober_option.value = "No".to_string();
+                        }
+                    } else {
+                        // Switching TO grub: auto-enable OS Prober if OS detected
+                        let os_summary = state
+                            .detected_os
+                            .as_ref()
+                            .filter(|d| d.has_any())
+                            .map(|d| d.summary_line());
+
+                        if os_summary.is_some()
+                            && let Some(prober_option) = state
+                                .config
+                                .options
+                                .iter_mut()
+                                .find(|opt| opt.name == "OS Prober")
+                        {
+                            prober_option.value = "Yes".to_string();
+                        }
+
+                        if let Some(summary) = os_summary {
+                            state.status_message =
+                                format!("OS Prober auto-enabled — detected: {}", summary);
                         }
                     }
                 }

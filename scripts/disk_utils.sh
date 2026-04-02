@@ -821,6 +821,12 @@ detect_windows_installation() {
 # Detect any other operating systems (for os-prober recommendation)
 # Returns: 0 if other OS found, 1 if not
 detect_other_os() {
+    # If TUI already provided detection results, skip redundant scan
+    if [[ "${OTHER_OS_DETECTED:-}" == "yes" ]] || [[ "${WINDOWS_DETECTED:-}" == "yes" ]]; then
+        log_info "OS detection provided by TUI — skipping redundant scan"
+        return 0
+    fi
+
     log_info "Scanning for other operating systems..."
 
     local other_os_found=1
@@ -835,10 +841,16 @@ detect_other_os() {
     local linux_roots
     linux_roots=$(lsblk -rno NAME,FSTYPE 2>/dev/null | grep -E "ext4|btrfs|xfs" | awk '{print "/dev/"$1}')
 
+    # Strip to first disk for comma-separated RAID configs
+    local base_disk="${INSTALL_DISK%%,*}"
+
     for part in $linux_roots; do
-        # Skip if it's our target disk
-        if [[ "$part" == "${INSTALL_DISK}"* ]]; then
-            continue
+        # Skip install disk partitions for auto strategies (they get wiped).
+        # Manual partitioning preserves existing partitions, so scan same-disk too.
+        if [[ "$part" == "${base_disk}"* ]]; then
+            if [[ "${PARTITIONING_STRATEGY:-}" != "manual" ]]; then
+                continue
+            fi
         fi
 
         local temp_mount="/tmp/linux_check_$$"

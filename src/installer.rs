@@ -217,6 +217,32 @@ impl Installer {
                     env_vars.insert("MANUAL_SWAP_PARTITION".to_string(), map.swap.clone());
                 }
             }
+
+            // Inject OS detection results from TUI-side probe
+            if let Some(ref detected) = state.detected_os {
+                if detected.has_windows() {
+                    env_vars.insert("WINDOWS_DETECTED".to_string(), "yes".to_string());
+                    if let Some(esp) = detected.windows_esp_device() {
+                        env_vars.insert("WINDOWS_ESP_DEVICE".to_string(), esp.to_string());
+                    }
+                    env_vars.insert(
+                        "WINDOWS_EFI_PATH".to_string(),
+                        "/EFI/Microsoft/Boot/bootmgfw.efi".to_string(),
+                    );
+                }
+                if detected.has_linux() {
+                    env_vars.insert("OTHER_OS_DETECTED".to_string(), "yes".to_string());
+                    env_vars.insert("OTHER_LINUX_DETECTED".to_string(), "yes".to_string());
+                    if let Some(linux) = detected.first_linux() {
+                        env_vars.insert("OTHER_LINUX_NAME".to_string(), linux.name.clone());
+                        env_vars.insert("OTHER_LINUX_DEVICE".to_string(), linux.device.clone());
+                    }
+                }
+                // Distinguish same-disk vs different-disk for completion messages
+                if !detected.same_disk_os().is_empty() {
+                    env_vars.insert("OTHER_LINUX_SAME_DISK".to_string(), "yes".to_string());
+                }
+            }
         }
 
         // --- Master Log File ---

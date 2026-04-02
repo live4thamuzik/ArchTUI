@@ -22,6 +22,12 @@ execute_manual_partitioning() {
     echo "=== PHASE 1: Manual Partitioning ==="
     log_info "Starting manual partitioning (format + mount)..."
 
+    # --- Dual-boot detection (safety net for non-TUI paths) ---
+    if detect_other_os; then
+        log_warn "Other OS detected — enabling os-prober for dual-boot"
+        export OS_PROBER="yes"
+    fi
+
     # --- Validate required env vars ---
     if [[ -z "${MANUAL_ROOT_PARTITION:-}" ]]; then
         error_exit "MANUAL_ROOT_PARTITION is not set (TUI must assign root partition)"

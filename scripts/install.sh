@@ -315,25 +315,35 @@ main() {
     echo "You can now reboot into your new Arch Linux system."
     echo "Don't forget to remove the installation media."
 
-    # Multi-boot guidance when other Linux installations were detected
+    # Multi-boot guidance when other operating systems were detected
     if [[ "${OTHER_LINUX_DETECTED:-}" == "yes" ]]; then
         echo ""
         echo "=========================================="
         echo "  MULTI-BOOT: Other Linux installation detected"
         [[ -n "${OTHER_LINUX_NAME:-}" ]] && echo "  Detected: ${OTHER_LINUX_NAME} on ${OTHER_LINUX_DEVICE:-unknown}"
         echo "=========================================="
-        echo ""
-        echo "  To chainload this install from your existing bootloader:"
-        echo ""
-        echo "  Option 1: Boot this disk via BIOS/UEFI firmware boot menu,"
-        echo "            then run: /root/setup-chainload.sh"
-        echo ""
-        echo "  Option 2: Use ArchTUI System Tools from this live session"
-        echo "            to mount and configure your existing bootloader."
-        echo ""
-        echo "  The script prints a GRUB menuentry — it does not modify anything."
-        echo "  Append its output to /etc/grub.d/40_custom on your main system,"
-        echo "  then run: sudo grub-mkconfig -o /boot/grub/grub.cfg"
+
+        if [[ "${OTHER_LINUX_SAME_DISK:-}" == "yes" ]]; then
+            # Same-disk dual boot: os-prober handles it automatically
+            echo ""
+            echo "  Same-disk dual boot detected."
+            echo "  os-prober will auto-detect ${OTHER_LINUX_NAME:-the other Linux} during boot."
+            echo "  No manual steps needed — just boot normally."
+        else
+            # Different-disk: chainload helper instructions
+            echo ""
+            echo "  To chainload this install from your existing bootloader:"
+            echo ""
+            echo "  Option 1: Boot this disk via BIOS/UEFI firmware boot menu,"
+            echo "            then run: /root/setup-chainload.sh"
+            echo ""
+            echo "  Option 2: Use ArchTUI System Tools from this live session"
+            echo "            to mount and configure your existing bootloader."
+            echo ""
+            echo "  The script prints a GRUB menuentry — it does not modify anything."
+            echo "  Append its output to /etc/grub.d/40_custom on your main system,"
+            echo "  then run: sudo grub-mkconfig -o /boot/grub/grub.cfg"
+        fi
         echo "=========================================="
     fi
 }
@@ -999,6 +1009,7 @@ configure_chroot() {
         printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
         printf 'export OTHER_LINUX_DETECTED=%q\n' "${OTHER_LINUX_DETECTED:-}"
         printf 'export OTHER_LINUX_NAME=%q\n' "${OTHER_LINUX_NAME:-}"
+        printf 'export OTHER_LINUX_SAME_DISK=%q\n' "${OTHER_LINUX_SAME_DISK:-}"
         printf 'export LOG_LEVEL=%q\n' "${LOG_LEVEL:-INFO}"
     } > /mnt/install_config.sh
 

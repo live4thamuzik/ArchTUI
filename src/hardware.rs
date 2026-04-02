@@ -23,6 +23,8 @@ use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
 use std::time::Duration;
 
+use crate::process_guard::CommandProcessGroup;
+
 /// Detected firmware mode of the system.
 ///
 /// Determined by checking for the existence of `/sys/firmware/efi`.
@@ -151,6 +153,337 @@ impl HardwareInfo {
 impl fmt::Display for HardwareInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Firmware: {}, Network: {}", self.firmware, self.network)
+    }
+}
+
+// ============================================================================
+// OS Detection Types
+// ============================================================================
+
+/// Type of operating system detected on a partition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetectedOsType {
+    /// Windows Boot Manager found on an ESP
+    Windows,
+    /// Linux distribution found (has /etc/os-release)
+    Linux,
+}
+
+impl fmt::Display for DetectedOsType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Windows => write!(f, "Windows"),
+            Self::Linux => write!(f, "Linux"),
+        }
+    }
+}
+
+/// A single operating system detected on a disk partition.
+#[derive(Debug, Clone)]
+pub struct DetectedOs {
+    /// Human-readable name (e.g., "Ubuntu 24.04", "Windows Boot Manager")
+    pub name: String,
+    /// Device path of the partition (e.g., "/dev/sda2")
+    pub device: String,
+    /// Whether this is on the same disk as the install target
+    pub same_disk: bool,
+    /// OS category
+    pub os_type: DetectedOsType,
+}
+
+/// Aggregated OS detection results for all scanned disks.
+///
+/// Populated at disk selection time in the TUI. Results are relative
+/// to a specific install disk (same_disk field on each entry).
+#[derive(Debug, Clone, Default)]
+pub struct OsDetectionResults {
+    /// All detected operating systems
+    pub entries: Vec<DetectedOs>,
+    /// The install disk these results are relative to
+    pub install_disk: String,
+}
+
+impl OsDetectionResults {
+    /// Returns true if any operating system was detected.
+    pub fn has_any(&self) -> bool {
+        !self.entries.is_empty()
+    }
+
+    /// Returns true if Windows was detected on any disk.
+    pub fn has_windows(&self) -> bool {
+        self.entries.iter().any(|e| e.os_type == DetectedOsType::Windows)
+    }
+
+    /// Returns true if a Linux installation was detected on any disk.
+    pub fn has_linux(&self) -> bool {
+        self.entries.iter().any(|e| e.os_type == DetectedOsType::Linux)
+    }
+
+    /// Returns OSes detected on the same disk as the install target.
+    pub fn same_disk_os(&self) -> Vec<&DetectedOs> {
+        self.entries.iter().filter(|e| e.same_disk).collect()
+    }
+
+    /// Returns OSes detected on disks other than the install target.
+    pub fn other_disk_os(&self) -> Vec<&DetectedOs> {
+        self.entries.iter().filter(|e| !e.same_disk).collect()
+    }
+
+    /// First detected Windows ESP device path (for env export).
+    pub fn windows_esp_device(&self) -> Option<&str> {
+        self.entries
+            .iter()
+            .find(|e| e.os_type == DetectedOsType::Windows)
+            .map(|e| e.device.as_str())
+    }
+
+    /// First detected Linux entry (for env export).
+    pub fn first_linux(&self) -> Option<&DetectedOs> {
+        self.entries.iter().find(|e| e.os_type == DetectedOsType::Linux)
+    }
+
+    /// Human-readable summary for status_message display.
+    pub fn summary_line(&self) -> String {
+        let names: Vec<String> = self
+            .entries
+            .iter()
+            .map(|e| {
+                let location = if e.same_disk { "same disk" } else { "other disk" };
+                format!("{} on {} ({})", e.name, e.device, location)
+            })
+            .collect();
+        names.join(", ")
+    }
+}
+
+// ============================================================================
+// OS Detection — Heuristic (lsblk-based, no mounting)
+// ============================================================================
+
+/// ESP partition type GUID (EFI System Partition).
+const ESP_PARTTYPE_GUID: &str = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
+
+/// Generate OS hints per disk using lsblk heuristics only (no mounting).
+///
+/// Returns a map of disk path → hint strings. Fast and non-blocking.
+/// Used to enrich the disk selection right-panel preview.
+pub fn detect_os_heuristic() -> std::collections::HashMap<String, Vec<String>> {
+    use std::collections::HashMap;
+    use std::process::Command;
+
+    let mut hints: HashMap<String, Vec<String>> = HashMap::new();
+
+    // Get partition-level info: NAME, FSTYPE, PARTTYPE, SIZE, PKNAME (parent disk)
+    let output = match Command::new("lsblk")
+        .args(["-rno", "NAME,FSTYPE,PARTTYPE,SIZE,PKNAME"])
+        .in_new_process_group()
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::warn!("lsblk failed for OS heuristic scan: {}", e);
+            return hints;
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    for line in stdout.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 5 {
+            continue;
+        }
+
+        let fstype = fields[1];
+        let parttype = fields[2].to_lowercase();
+        let size_str = fields[3];
+        let parent = format!("/dev/{}", fields[4]);
+
+        // Parse size — lsblk uses human-readable (e.g., "953.9G", "512M")
+        let size_gb = parse_lsblk_size_gb(size_str);
+
+        // ESP detection
+        if parttype.contains(ESP_PARTTYPE_GUID) {
+            hints
+                .entry(parent.clone())
+                .or_default()
+                .push("EFI System Partition found".to_string());
+        }
+
+        // Possible Windows (ntfs partition > 10GB)
+        if fstype == "ntfs" && size_gb > 10.0 {
+            let entry = hints.entry(parent.clone()).or_default();
+            if !entry.iter().any(|h| h.contains("Windows")) {
+                entry.push("Possible Windows installation (ntfs)".to_string());
+            }
+        }
+
+        // Possible Linux (ext4/btrfs/xfs partition > 4GB)
+        if matches!(fstype, "ext4" | "btrfs" | "xfs") && size_gb > 4.0 {
+            let entry = hints.entry(parent.clone()).or_default();
+            if !entry.iter().any(|h| h.contains("Linux")) {
+                entry.push(format!("Possible Linux installation ({})", fstype));
+            }
+        }
+    }
+
+    hints
+}
+
+/// Parse lsblk human-readable size string to approximate GB.
+fn parse_lsblk_size_gb(s: &str) -> f64 {
+    let s = s.trim();
+    if s.is_empty() {
+        return 0.0;
+    }
+
+    // Find where the numeric part ends
+    let num_end = s
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(s.len());
+    let (num_str, suffix) = s.split_at(num_end);
+    let value: f64 = num_str.parse().unwrap_or(0.0);
+
+    match suffix.to_uppercase().as_str() {
+        "T" => value * 1024.0,
+        "G" => value,
+        "M" => value / 1024.0,
+        "K" => value / (1024.0 * 1024.0),
+        _ => value, // assume bytes-ish, negligible
+    }
+}
+
+// ============================================================================
+// OS Detection — Definitive (mount-based probe via bash script)
+// ============================================================================
+
+/// Run the definitive OS detection probe (mount + check).
+///
+/// Calls `scripts/tools/detect_os.sh` synchronously and parses JSON output.
+/// Returns `OsDetectionResults` — empty on any failure (best-effort).
+///
+/// Expected JSON: `{"os":[{"name":"...","device":"...","type":"linux|windows","same_disk":true|false}]}`
+pub fn detect_os_definitive(install_disk: &str) -> OsDetectionResults {
+    use std::process::Command;
+
+    let script_path = crate::script_runner::scripts_base_dir()
+        .join("tools")
+        .join("detect_os.sh");
+
+    if !script_path.exists() {
+        tracing::warn!(
+            path = %script_path.display(),
+            "detect_os.sh not found — skipping definitive OS probe"
+        );
+        return OsDetectionResults {
+            install_disk: install_disk.to_string(),
+            ..Default::default()
+        };
+    }
+
+    tracing::info!(disk = %install_disk, "Running definitive OS detection probe");
+
+    let output = match Command::new("bash")
+        .arg(script_path.as_os_str())
+        .args(["--install-disk", install_disk])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .in_new_process_group()
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::warn!("Failed to run detect_os.sh: {}", e);
+            return OsDetectionResults {
+                install_disk: install_disk.to_string(),
+                ..Default::default()
+            };
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::warn!(
+            exit_code = ?output.status.code(),
+            stderr = %stderr,
+            "detect_os.sh exited with non-zero status"
+        );
+        return OsDetectionResults {
+            install_disk: install_disk.to_string(),
+            ..Default::default()
+        };
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_detect_os_json(&stdout, install_disk)
+}
+
+/// Parse JSON output from detect_os.sh into `OsDetectionResults`.
+fn parse_detect_os_json(json_str: &str, install_disk: &str) -> OsDetectionResults {
+    // Find the JSON line (skip any log output on stderr/stdout preamble)
+    let json_line = json_str
+        .lines()
+        .find(|line| line.trim_start().starts_with('{'))
+        .unwrap_or(json_str.trim());
+
+    let parsed: serde_json::Value = match serde_json::from_str(json_line) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(json = %json_line, err = %e, "Failed to parse detect_os.sh JSON output");
+            return OsDetectionResults {
+                install_disk: install_disk.to_string(),
+                ..Default::default()
+            };
+        }
+    };
+
+    let mut entries = Vec::new();
+
+    if let Some(os_array) = parsed.get("os").and_then(|v| v.as_array()) {
+        for entry in os_array {
+            let name = entry
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown")
+                .to_string();
+            let device = entry
+                .get("device")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let os_type_str = entry
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("linux");
+            let same_disk = entry
+                .get("same_disk")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            let os_type = match os_type_str {
+                "windows" => DetectedOsType::Windows,
+                _ => DetectedOsType::Linux,
+            };
+
+            entries.push(DetectedOs {
+                name,
+                device,
+                same_disk,
+                os_type,
+            });
+        }
+    }
+
+    tracing::info!(
+        count = entries.len(),
+        disk = %install_disk,
+        "Definitive OS probe complete"
+    );
+
+    OsDetectionResults {
+        entries,
+        install_disk: install_disk.to_string(),
     }
 }
 
@@ -364,5 +697,179 @@ mod tests {
         let info = HardwareInfo::detect();
         // Must be one or the other
         assert!(info.firmware.is_uefi() || info.firmware.is_bios());
+    }
+
+    // ── OS Detection Tests ──────────────────────────────────────────
+
+    fn make_test_results() -> OsDetectionResults {
+        OsDetectionResults {
+            install_disk: "/dev/sda".to_string(),
+            entries: vec![
+                DetectedOs {
+                    name: "Ubuntu 24.04".to_string(),
+                    device: "/dev/sda2".to_string(),
+                    same_disk: true,
+                    os_type: DetectedOsType::Linux,
+                },
+                DetectedOs {
+                    name: "Windows Boot Manager".to_string(),
+                    device: "/dev/sdb1".to_string(),
+                    same_disk: false,
+                    os_type: DetectedOsType::Windows,
+                },
+                DetectedOs {
+                    name: "Fedora 41".to_string(),
+                    device: "/dev/sdc3".to_string(),
+                    same_disk: false,
+                    os_type: DetectedOsType::Linux,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn test_os_detection_has_any() {
+        let results = make_test_results();
+        assert!(results.has_any());
+
+        let empty = OsDetectionResults::default();
+        assert!(!empty.has_any());
+    }
+
+    #[test]
+    fn test_os_detection_has_windows() {
+        let results = make_test_results();
+        assert!(results.has_windows());
+
+        let linux_only = OsDetectionResults {
+            install_disk: "/dev/sda".to_string(),
+            entries: vec![DetectedOs {
+                name: "Arch".to_string(),
+                device: "/dev/sdb1".to_string(),
+                same_disk: false,
+                os_type: DetectedOsType::Linux,
+            }],
+        };
+        assert!(!linux_only.has_windows());
+    }
+
+    #[test]
+    fn test_os_detection_has_linux() {
+        let results = make_test_results();
+        assert!(results.has_linux());
+    }
+
+    #[test]
+    fn test_os_detection_same_disk_os() {
+        let results = make_test_results();
+        let same = results.same_disk_os();
+        assert_eq!(same.len(), 1);
+        assert_eq!(same[0].name, "Ubuntu 24.04");
+        assert_eq!(same[0].device, "/dev/sda2");
+    }
+
+    #[test]
+    fn test_os_detection_other_disk_os() {
+        let results = make_test_results();
+        let other = results.other_disk_os();
+        assert_eq!(other.len(), 2);
+    }
+
+    #[test]
+    fn test_os_detection_windows_esp_device() {
+        let results = make_test_results();
+        assert_eq!(results.windows_esp_device(), Some("/dev/sdb1"));
+
+        let empty = OsDetectionResults::default();
+        assert_eq!(empty.windows_esp_device(), None);
+    }
+
+    #[test]
+    fn test_os_detection_first_linux() {
+        let results = make_test_results();
+        let first = results.first_linux();
+        assert!(first.is_some());
+        assert_eq!(first.unwrap().name, "Ubuntu 24.04");
+    }
+
+    #[test]
+    fn test_os_detection_summary_line() {
+        let results = make_test_results();
+        let summary = results.summary_line();
+        assert!(summary.contains("Ubuntu 24.04"));
+        assert!(summary.contains("same disk"));
+        assert!(summary.contains("Windows Boot Manager"));
+        assert!(summary.contains("other disk"));
+    }
+
+    #[test]
+    fn test_os_detection_default_empty() {
+        let results = OsDetectionResults::default();
+        assert!(!results.has_any());
+        assert!(!results.has_windows());
+        assert!(!results.has_linux());
+        assert!(results.same_disk_os().is_empty());
+        assert!(results.other_disk_os().is_empty());
+        assert_eq!(results.windows_esp_device(), None);
+        assert!(results.first_linux().is_none());
+        assert!(results.summary_line().is_empty());
+    }
+
+    #[test]
+    fn test_detected_os_type_display() {
+        assert_eq!(DetectedOsType::Windows.to_string(), "Windows");
+        assert_eq!(DetectedOsType::Linux.to_string(), "Linux");
+    }
+
+    // ── JSON Parsing Tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_parse_detect_os_json_full() {
+        let json = r#"{"os":[{"name":"Ubuntu 24.04","device":"/dev/sdb2","type":"linux","same_disk":false},{"name":"Windows Boot Manager","device":"/dev/sda1","type":"windows","same_disk":true}]}"#;
+        let results = parse_detect_os_json(json, "/dev/sda");
+
+        assert_eq!(results.entries.len(), 2);
+        assert_eq!(results.install_disk, "/dev/sda");
+
+        assert_eq!(results.entries[0].name, "Ubuntu 24.04");
+        assert_eq!(results.entries[0].device, "/dev/sdb2");
+        assert_eq!(results.entries[0].os_type, DetectedOsType::Linux);
+        assert!(!results.entries[0].same_disk);
+
+        assert_eq!(results.entries[1].name, "Windows Boot Manager");
+        assert_eq!(results.entries[1].device, "/dev/sda1");
+        assert_eq!(results.entries[1].os_type, DetectedOsType::Windows);
+        assert!(results.entries[1].same_disk);
+    }
+
+    #[test]
+    fn test_parse_detect_os_json_empty() {
+        let json = r#"{"os":[]}"#;
+        let results = parse_detect_os_json(json, "/dev/sda");
+        assert!(!results.has_any());
+    }
+
+    #[test]
+    fn test_parse_detect_os_json_invalid() {
+        let results = parse_detect_os_json("not json at all", "/dev/sda");
+        assert!(!results.has_any());
+        assert_eq!(results.install_disk, "/dev/sda");
+    }
+
+    #[test]
+    fn test_parse_detect_os_json_with_log_preamble() {
+        // detect_os.sh may output log lines before JSON
+        let output = "[INFO] Scanning for Linux...\n[INFO] Found Ubuntu\n{\"os\":[{\"name\":\"Ubuntu\",\"device\":\"/dev/sda2\",\"type\":\"linux\",\"same_disk\":true}]}";
+        let results = parse_detect_os_json(output, "/dev/sda");
+        assert_eq!(results.entries.len(), 1);
+        assert_eq!(results.entries[0].name, "Ubuntu");
+    }
+
+    #[test]
+    fn test_parse_lsblk_size_gb() {
+        assert!((parse_lsblk_size_gb("953.9G") - 953.9).abs() < 0.01);
+        assert!((parse_lsblk_size_gb("512M") - 0.5).abs() < 0.01);
+        assert!((parse_lsblk_size_gb("2T") - 2048.0).abs() < 0.01);
+        assert!((parse_lsblk_size_gb("") - 0.0).abs() < 0.01);
     }
 }

@@ -645,6 +645,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
             crate::input::InputType::DiskSelection {
                 available_disks,
                 disk_layouts,
+                os_hints,
                 ..
             } => {
                 // Split content area: 40% disk list, 60% partition preview
@@ -710,32 +711,51 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     .and_then(|d| d.split_whitespace().next())
                     .unwrap_or("");
 
-                let preview_lines: Vec<Line> = if let Some(layout) = disk_layouts.get(selected_dev)
+                let mut preview_lines: Vec<Line> =
+                    if let Some(layout) = disk_layouts.get(selected_dev) {
+                        layout
+                            .iter()
+                            .map(|line| {
+                                let style = if line.contains("part")
+                                    || line.contains("lvm")
+                                    || line.contains("crypt")
+                                {
+                                    Style::default().fg(Colors::FG_PRIMARY)
+                                } else if line.starts_with("NAME") {
+                                    Style::default()
+                                        .fg(Colors::FG_MUTED)
+                                        .add_modifier(Modifier::BOLD)
+                                } else {
+                                    Style::default().fg(Colors::FG_SECONDARY)
+                                };
+                                Line::from(Span::styled(line.as_str(), style))
+                            })
+                            .collect()
+                    } else {
+                        vec![Line::from(Span::styled(
+                            "No layout data",
+                            Style::default().fg(Colors::FG_MUTED),
+                        ))]
+                    };
+
+                // Append OS detection hints if any exist for this disk
+                if let Some(hints) = os_hints.get(selected_dev)
+                    && !hints.is_empty()
                 {
-                    layout
-                        .iter()
-                        .map(|line| {
-                            let style = if line.contains("part")
-                                || line.contains("lvm")
-                                || line.contains("crypt")
-                            {
-                                Style::default().fg(Colors::FG_PRIMARY)
-                            } else if line.starts_with("NAME") {
-                                Style::default()
-                                    .fg(Colors::FG_MUTED)
-                                    .add_modifier(Modifier::BOLD)
-                            } else {
-                                Style::default().fg(Colors::FG_SECONDARY)
-                            };
-                            Line::from(Span::styled(line.as_str(), style))
-                        })
-                        .collect()
-                } else {
-                    vec![Line::from(Span::styled(
-                        "No layout data",
-                        Style::default().fg(Colors::FG_MUTED),
-                    ))]
-                };
+                    preview_lines.push(Line::from(""));
+                    preview_lines.push(Line::from(Span::styled(
+                        "\u{2500}\u{2500} Detected \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
+                        Style::default()
+                            .fg(Colors::WARNING)
+                            .add_modifier(Modifier::BOLD),
+                    )));
+                    for hint in hints {
+                        preview_lines.push(Line::from(Span::styled(
+                            format!("  ! {}", hint),
+                            Style::default().fg(Colors::WARNING),
+                        )));
+                    }
+                }
 
                 let preview = Paragraph::new(preview_lines)
                     .style(Style::default().bg(Colors::BG_PRIMARY))

@@ -99,6 +99,8 @@ pub enum InputType {
         scroll_state: crate::scrolling::ScrollState,
         /// Cached partition layouts keyed by disk path (e.g. "/dev/sda")
         disk_layouts: std::collections::HashMap<String, Vec<String>>,
+        /// Heuristic OS detection hints keyed by disk path
+        os_hints: std::collections::HashMap<String, Vec<String>>,
     },
     /// Multi-disk selection for RAID and manual partitioning
     MultiDiskSelection {
@@ -1257,12 +1259,14 @@ impl InputHandler {
         scroll_state.set_selected(selected_index);
 
         let disk_layouts = Self::cache_disk_layouts(&available_disks);
+        let os_hints = crate::hardware::detect_os_heuristic();
 
         let input_type = InputType::DiskSelection {
             current_value,
             available_disks,
             scroll_state,
             disk_layouts,
+            os_hints,
         };
 
         self.current_dialog = Some(InputDialog::new(

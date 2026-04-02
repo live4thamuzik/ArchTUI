@@ -176,6 +176,8 @@ pub struct AppState {
     pub disk_layout: Vec<String>,
     /// Loaded file-based InstallationConfig (for Automated Install flow)
     pub loaded_file_config: Option<InstallationConfig>,
+    /// Detected operating systems on the system (populated after disk selection)
+    pub detected_os: Option<crate::hardware::OsDetectionResults>,
 }
 
 /// Application operating modes
@@ -260,6 +262,7 @@ impl Default for AppState {
             config_edit: ConfigEditState::None,
             disk_layout: Vec::new(),
             loaded_file_config: None,
+            detected_os: None,
         }
     }
 }

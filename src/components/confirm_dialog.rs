@@ -253,9 +253,16 @@ pub fn bootloader_confirm(bootloader: &str, disk: &str) -> ConfirmDialogState {
     .with_action_data(disk)
 }
 
-/// Create a confirmation dialog for starting installation
-pub fn start_install_confirm() -> ConfirmDialogState {
-    ConfirmDialogState::new(
+/// Create a confirmation dialog for starting installation.
+///
+/// When OS detection results are available, adds context-aware details:
+/// - Same-disk OS with auto strategy → Danger severity, "WILL DESTROY" warnings
+/// - Other-disk OS → informational "Preserved" notes
+pub fn start_install_confirm(
+    detected_os: Option<&crate::hardware::OsDetectionResults>,
+    strategy: &str,
+) -> ConfirmDialogState {
+    let mut dialog = ConfirmDialogState::new(
         "Start Installation",
         "Begin Arch Linux installation?",
         ConfirmSeverity::Warning,
@@ -263,5 +270,26 @@ pub fn start_install_confirm() -> ConfirmDialogState {
     )
     .with_detail("The target disk will be formatted")
     .with_detail("This process may take several minutes")
-    .with_detail("Do not power off during installation")
+    .with_detail("Do not power off during installation");
+
+    if let Some(detected) = detected_os {
+        let same = detected.same_disk_os();
+        if !same.is_empty() && strategy != "manual" {
+            dialog.severity = ConfirmSeverity::Danger;
+            for os in &same {
+                dialog = dialog.with_detail(&format!(
+                    "WILL DESTROY: {} on {}",
+                    os.name, os.device
+                ));
+            }
+        }
+        for os in detected.other_disk_os() {
+            dialog = dialog.with_detail(&format!(
+                "Preserved (other disk): {} on {}",
+                os.name, os.device
+            ));
+        }
+    }
+
+    dialog
 }

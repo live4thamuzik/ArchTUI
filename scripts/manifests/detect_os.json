@@ -1,0 +1,10 @@
+{
+  "script": "scripts/tools/detect_os.sh",
+  "description": "Scan all disks for existing operating systems (Linux and Windows). Non-destructive read-only probe using temporary mounts. Outputs JSON to stdout.",
+  "destructive": false,
+  "version": "1.0",
+  "needs_stdin": false,
+  "valid_exit_codes": [0],
+  "required_env": [],
+  "optional_env": []
+}
