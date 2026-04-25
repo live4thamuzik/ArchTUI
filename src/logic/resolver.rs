@@ -198,11 +198,22 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         packages.push("plymouth");
     }
 
-    // 16. Additional user-specified packages
+    // 16. Opt-in package groups (Network Tools / System Utilities / Dev Tools)
+    let opt_ins: Vec<String> = [
+        config.network_tools.as_str(),
+        config.system_utilities.as_str(),
+        config.dev_tools.as_str(),
+    ]
+    .iter()
+    .flat_map(|s| parse_package_list(s))
+    .collect();
+
+    // 17. Additional user-specified packages
     let additional = parse_package_list(&config.additional_packages);
 
     // Deduplicate and sort
     let mut result: Vec<String> = packages.iter().map(|s| s.to_string()).collect();
+    result.extend(opt_ins);
     result.extend(additional);
     result.sort();
     result.dedup();
@@ -641,6 +652,33 @@ mod tests {
         let services = resolve_services(&config);
         assert!(!services.contains(&"bluetooth".to_string()));
         assert!(!services.contains(&"avahi-daemon".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_opt_in_groups_merge() {
+        let mut config = test_config();
+        config.network_tools = "openssh wget".to_string();
+        config.system_utilities = "htop".to_string();
+        config.dev_tools = "base-devel gcc".to_string();
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"openssh".to_string()));
+        assert!(packages.contains(&"wget".to_string()));
+        assert!(packages.contains(&"htop".to_string()));
+        assert!(packages.contains(&"base-devel".to_string()));
+        assert!(packages.contains(&"gcc".to_string()));
+        // Ones not selected stay out
+        assert!(!packages.contains(&"curl".to_string()));
+        assert!(!packages.contains(&"btop".to_string()));
+        assert!(!packages.contains(&"gdb".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_opt_in_groups_empty_no_addition() {
+        let config = test_config();
+        let packages = resolve_packages(&config);
+        assert!(!packages.contains(&"openssh".to_string()));
+        assert!(!packages.contains(&"htop".to_string()));
+        assert!(!packages.contains(&"base-devel".to_string()));
     }
 
     #[test]

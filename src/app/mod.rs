@@ -2838,6 +2838,11 @@ impl App {
                     .start_package_selection(option.name.clone(), option.get_value());
                 self.sync_config_edit_from_input();
             }
+            "Network Tools" | "System Utilities" | "Dev Tools" => {
+                self.input_handler
+                    .start_multi_select_group(&option.name, &option.get_value());
+                self.sync_config_edit_from_input();
+            }
             "Timezone Region" => {
                 let options = InputHandler::get_predefined_options(&option.name);
                 self.set_inline_selection(options, option.get_value());
@@ -3045,9 +3050,10 @@ impl App {
                 // rather than the inline right-panel editor. ConfigEditState::None
                 // lets keys flow through to InputHandler::handle_input which already
                 // handles Up/Down/Space/Enter correctly for both single and multi-disk.
-                InputType::DiskSelection { .. } | InputType::MultiDiskSelection { .. } => {
-                    ConfigEditState::None
-                }
+                // MultiSelectGroup uses the same popup overlay flow.
+                InputType::DiskSelection { .. }
+                | InputType::MultiDiskSelection { .. }
+                | InputType::MultiSelectGroup { .. } => ConfigEditState::None,
                 InputType::PackageSelection {
                     current_input,
                     output_lines,

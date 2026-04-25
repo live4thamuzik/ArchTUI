@@ -110,6 +110,13 @@ pub enum InputType {
         min_disks: usize,
         max_disks: usize,
     },
+    /// Multi-select checkbox list for opt-in package groups (Network Tools, etc.)
+    MultiSelectGroup {
+        field_name: String,
+        available: Vec<String>,
+        selected: Vec<String>,
+        scroll_state: crate::scrolling::ScrollState,
+    },
     /// Package selection (for additional packages)
     PackageSelection {
         field_name: String,
@@ -296,6 +303,36 @@ impl InputDialog {
                 crossterm::event::KeyCode::Esc => {
                     return InputResult::Cancel;
                 }
+                _ => {}
+            },
+            InputType::MultiSelectGroup {
+                available,
+                selected,
+                scroll_state,
+                ..
+            } => match key_event.code {
+                crossterm::event::KeyCode::Up => scroll_state.move_up(),
+                crossterm::event::KeyCode::Down => scroll_state.move_down(),
+                crossterm::event::KeyCode::Char(' ') => {
+                    if let Some(item) = available.get(scroll_state.selected_index) {
+                        if selected.contains(item) {
+                            selected.retain(|s| s != item);
+                        } else {
+                            selected.push(item.clone());
+                        }
+                    }
+                }
+                crossterm::event::KeyCode::Enter => {
+                    // Stable order: keep results in the same order as `available`
+                    let value: String = available
+                        .iter()
+                        .filter(|p| selected.contains(p))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    return InputResult::Confirm(value);
+                }
+                crossterm::event::KeyCode::Esc => return InputResult::Cancel,
                 _ => {}
             },
             InputType::PackageSelection {
@@ -623,6 +660,13 @@ impl InputDialog {
                     )
                 }
             }
+            InputType::MultiSelectGroup { selected, .. } => {
+                if selected.is_empty() {
+                    "(none selected)".to_string()
+                } else {
+                    selected.join(" ")
+                }
+            }
             InputType::PackageSelection { package_list, .. } => package_list.clone(),
             InputType::Warning { .. } => "Press Enter to acknowledge".to_string(),
             InputType::PasswordInput {
@@ -647,6 +691,7 @@ impl InputType {
             InputType::Selection { scroll_state, .. } => scroll_state.selected_index,
             InputType::DiskSelection { scroll_state, .. } => scroll_state.selected_index,
             InputType::MultiDiskSelection { scroll_state, .. } => scroll_state.selected_index,
+            InputType::MultiSelectGroup { scroll_state, .. } => scroll_state.selected_index,
             InputType::PackageSelection { list_state, .. } => list_state.selected().unwrap_or(0),
             _ => 0,
         }
@@ -1723,6 +1768,47 @@ impl InputHandler {
             title.to_string(),
             "Use ↑↓ to navigate, Space to select/deselect, Enter to confirm, Esc to cancel"
                 .to_string(),
+        ));
+    }
+
+    /// Curated package list for an opt-in group ConfigOption.
+    ///
+    /// Returns `None` if `field_name` is not a recognized opt-in group.
+    pub fn get_opt_in_group(field_name: &str) -> Option<&'static [&'static str]> {
+        match field_name {
+            "Network Tools" => Some(&["openssh", "wget", "curl"]),
+            "System Utilities" => Some(&["htop", "btop", "fastfetch"]),
+            "Dev Tools" => Some(&["base-devel", "gcc", "make", "gdb"]),
+            _ => None,
+        }
+    }
+
+    /// Open a multi-select checkbox dialog for an opt-in package group.
+    ///
+    /// `current_value` is the space-separated string previously stored in the ConfigOption,
+    /// so we can pre-check what the user selected last time.
+    pub fn start_multi_select_group(&mut self, field_name: &str, current_value: &str) {
+        let Some(available) = Self::get_opt_in_group(field_name) else {
+            tracing::warn!(field_name, "Unknown opt-in group; ignoring");
+            return;
+        };
+        let available_vec: Vec<String> = available.iter().map(|s| s.to_string()).collect();
+        let selected: Vec<String> = current_value
+            .split_whitespace()
+            .filter(|p| available_vec.iter().any(|a| a == p))
+            .map(|s| s.to_string())
+            .collect();
+        let scroll_state = crate::scrolling::ScrollState::new(available_vec.len(), 10);
+        let input_type = InputType::MultiSelectGroup {
+            field_name: field_name.to_string(),
+            available: available_vec,
+            selected,
+            scroll_state,
+        };
+        self.current_dialog = Some(InputDialog::new(
+            input_type,
+            field_name.to_string(),
+            "Use ↑↓ to navigate, Space to toggle, Enter to confirm, Esc to cancel".to_string(),
         ));
     }
 

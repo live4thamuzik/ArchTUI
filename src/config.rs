@@ -295,6 +295,25 @@ impl Default for Configuration {
                     "Default text editor for the installed system",
                     "nano",
                 ),
+                // Opt-in package groups (49-51) — multi-select checkboxes, all default off
+                ConfigOption::new(
+                    "Network Tools",
+                    false,
+                    "Optional networking utilities (openssh, wget, curl)",
+                    "",
+                ),
+                ConfigOption::new(
+                    "System Utilities",
+                    false,
+                    "Optional system utilities (htop, btop, fastfetch)",
+                    "",
+                ),
+                ConfigOption::new(
+                    "Dev Tools",
+                    false,
+                    "Optional development tools (base-devel, gcc, make, gdb)",
+                    "",
+                ),
             ],
         }
     }
@@ -364,6 +383,9 @@ impl Configuration {
                 "Encryption Key Type" => "ENCRYPTION_KEY_TYPE",
                 "Network Manager" => "NETWORK_MANAGER",
                 "Editor" => "EDITOR",
+                "Network Tools" => "NETWORK_TOOLS",
+                "System Utilities" => "SYSTEM_UTILITIES",
+                "Dev Tools" => "DEV_TOOLS",
                 _ => continue, // Skip unknown options
             };
 

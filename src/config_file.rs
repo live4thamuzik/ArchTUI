@@ -102,6 +102,14 @@ pub struct InstallationConfig {
     pub network_manager: NetworkManager,
     #[serde(default)]
     pub editor: Editor,
+
+    // Opt-in package groups (space-separated lists; empty = none selected)
+    #[serde(default)]
+    pub network_tools: String,
+    #[serde(default)]
+    pub system_utilities: String,
+    #[serde(default)]
+    pub dev_tools: String,
 }
 
 // Custom Debug impl redacts password fields to prevent accidental leaks
@@ -551,6 +559,9 @@ impl InstallationConfig {
             ),
             ("NETWORK_MANAGER".to_string(), self.network_manager.to_string()),
             ("EDITOR".to_string(), self.editor.to_string()),
+            ("NETWORK_TOOLS".to_string(), self.network_tools.clone()),
+            ("SYSTEM_UTILITIES".to_string(), self.system_utilities.clone()),
+            ("DEV_TOOLS".to_string(), self.dev_tools.clone()),
         ]
     }
 }
@@ -608,6 +619,9 @@ impl Default for InstallationConfig {
             encryption_key_type: EncryptionKeyType::Password,
             network_manager: NetworkManager::NetworkManager,
             editor: Editor::Nano,
+            network_tools: String::new(),
+            system_utilities: String::new(),
+            dev_tools: String::new(),
         }
     }
 }
@@ -693,6 +707,9 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             encryption_key_type: parse_or_default(&get_value("Encryption Key Type")),
             network_manager: parse_or_default(&get_value("Network Manager")),
             editor: parse_or_default(&get_value("Editor")),
+            network_tools: get_value("Network Tools"),
+            system_utilities: get_value("System Utilities"),
+            dev_tools: get_value("Dev Tools"),
         }
     }
 }

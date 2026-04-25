@@ -941,6 +941,62 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     multi_chunks[1],
                 );
             }
+            crate::input::InputType::MultiSelectGroup {
+                available,
+                selected,
+                scroll_state,
+                ..
+            } => {
+                let counter_text = format!(
+                    " Selected: {}/{} ",
+                    selected.len(),
+                    available.len()
+                );
+                let counter_block = Block::default()
+                    .borders(Borders::BOTTOM)
+                    .border_style(Style::default().fg(Colors::FG_MUTED))
+                    .title_top(Span::styled(
+                        counter_text,
+                        Style::default()
+                            .fg(Colors::PRIMARY)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .style(Style::default().bg(Colors::BG_PRIMARY));
+                let multi_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(2), Constraint::Min(0)])
+                    .split(content_area);
+                f.render_widget(counter_block, multi_chunks[0]);
+                let items: Vec<ListItem> = available
+                    .iter()
+                    .enumerate()
+                    .map(|(i, pkg)| {
+                        let is_selected = selected.contains(pkg);
+                        let is_cursor = i == scroll_state.selected_index;
+                        let indicator = if is_cursor { "\u{25b8} " } else { "  " };
+                        let checkbox = if is_selected { "[x]" } else { "[ ]" };
+                        let item_text = format!("{}{} {}", indicator, checkbox, pkg);
+                        let style = if is_cursor && is_selected {
+                            Style::default()
+                                .fg(Colors::SUCCESS)
+                                .add_modifier(Modifier::BOLD)
+                        } else if is_cursor {
+                            Style::default()
+                                .fg(Colors::SECONDARY)
+                                .add_modifier(Modifier::BOLD)
+                        } else if is_selected {
+                            Style::default().fg(Colors::SUCCESS)
+                        } else {
+                            Style::default().fg(Colors::FG_PRIMARY)
+                        };
+                        ListItem::new(item_text).style(style)
+                    })
+                    .collect();
+                f.render_widget(
+                    List::new(items).style(Style::default().bg(Colors::BG_PRIMARY)),
+                    multi_chunks[1],
+                );
+            }
         }
 
         f.render_widget(

@@ -730,6 +730,15 @@ install_base_system() {
         fi
     fi
 
+    # Opt-in package groups (multi-select TUI options). Each var is space-separated
+    # or empty. Bash word-splitting expands them into individual array entries.
+    # shellcheck disable=SC2206
+    [[ -n "${NETWORK_TOOLS:-}" ]] && essential_packages+=(${NETWORK_TOOLS})
+    # shellcheck disable=SC2206
+    [[ -n "${SYSTEM_UTILITIES:-}" ]] && essential_packages+=(${SYSTEM_UTILITIES})
+    # shellcheck disable=SC2206
+    [[ -n "${DEV_TOOLS:-}" ]] && essential_packages+=(${DEV_TOOLS})
+
     # Add filesystem tools based on selected filesystems
     local -a fs_packages=()
     local _fs
