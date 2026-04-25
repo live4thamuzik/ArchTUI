@@ -559,11 +559,10 @@ impl App {
             // Handle input events
             if crossterm::event::poll(Duration::from_millis(50))? {
                 match crossterm::event::read()? {
-                    Event::Key(key_event) => {
-                        if self.handle_key_event(key_event)? {
+                    Event::Key(key_event)
+                        if self.handle_key_event(key_event)? => {
                             break; // Exit requested
                         }
-                    }
                     Event::Resize(width, height) => {
                         // Handle window resize - update scroll state
                         self.handle_resize(width, height)?;
@@ -1086,11 +1085,10 @@ impl App {
             KeyCode::End => {
                 self.move_to_last();
             }
-            KeyCode::Enter => {
-                if self.handle_enter()? {
+            KeyCode::Enter
+                if self.handle_enter()? => {
                     return Ok(true);
                 }
-            }
             _ => {}
         }
 
@@ -1111,20 +1109,18 @@ impl App {
         {
             let mut state = self.lock_state();
             match state.mode {
-                AppMode::MainMenu => {
-                    if state.main_menu_selection > 0 {
+                AppMode::MainMenu
+                    if state.main_menu_selection > 0 => {
                         state.main_menu_selection -= 1;
                     }
-                }
                 AppMode::ToolsMenu
                 | AppMode::DiskTools
                 | AppMode::SystemTools
                 | AppMode::UserTools
-                | AppMode::NetworkTools => {
-                    if state.tools_menu_selection > 0 {
+                | AppMode::NetworkTools
+                    if state.tools_menu_selection > 0 => {
                         state.tools_menu_selection -= 1;
                     }
-                }
                 AppMode::ToolDialog => {
                     if let Some(ref mut dialog) = state.tool_dialog
                         && dialog.current_param > 0
@@ -1159,42 +1155,36 @@ impl App {
         {
             let mut state = self.lock_state();
             match state.mode {
-                AppMode::MainMenu => {
-                    if state.main_menu_selection < 3 {
+                AppMode::MainMenu
+                    if state.main_menu_selection < 3 => {
                         // 4 items total (0-3)
                         state.main_menu_selection += 1;
                     }
-                }
-                AppMode::ToolsMenu => {
-                    if state.tools_menu_selection < 4 {
+                AppMode::ToolsMenu
+                    if state.tools_menu_selection < 4 => {
                         // 5 items total (0-4)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::DiskTools => {
-                    if state.tools_menu_selection < 6 {
+                AppMode::DiskTools
+                    if state.tools_menu_selection < 6 => {
                         // 7 items total (0-6)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::SystemTools => {
-                    if state.tools_menu_selection < 9 {
+                AppMode::SystemTools
+                    if state.tools_menu_selection < 9 => {
                         // 10 items total (0-9)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::UserTools => {
-                    if state.tools_menu_selection < 7 {
+                AppMode::UserTools
+                    if state.tools_menu_selection < 7 => {
                         // 8 items total (0-7)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::NetworkTools => {
-                    if state.tools_menu_selection < 5 {
+                AppMode::NetworkTools
+                    if state.tools_menu_selection < 5 => {
                         // 6 items total (0-5)
                         state.tools_menu_selection += 1;
                     }
-                }
                 AppMode::ToolDialog => {
                     if let Some(ref mut dialog) = state.tool_dialog
                         && dialog.current_param < dialog.parameters.len().saturating_sub(1)
@@ -3254,17 +3244,15 @@ impl App {
                         value.insert(cursor, c);
                         cursor += 1;
                     }
-                    KeyCode::Backspace => {
-                        if cursor > 0 {
+                    KeyCode::Backspace
+                        if cursor > 0 => {
                             value.remove(cursor - 1);
                             cursor -= 1;
                         }
-                    }
-                    KeyCode::Delete => {
-                        if cursor < value.len() {
+                    KeyCode::Delete
+                        if cursor < value.len() => {
                             value.remove(cursor);
                         }
-                    }
                     KeyCode::Left => {
                         cursor = cursor.saturating_sub(1);
                     }
@@ -4064,8 +4052,8 @@ impl App {
                         }
                     }
                 }
-                "Root Filesystem" => {
-                    if value.to_lowercase() != "btrfs" {
+                "Root Filesystem"
+                    if value.to_lowercase() != "btrfs" => {
                         // Disable all btrfs options when not using btrfs
                         for name in &[
                             "Btrfs Snapshots",
@@ -4086,7 +4074,6 @@ impl App {
                             }
                         }
                     }
-                }
                 "Btrfs Snapshots" => {
                     if value.to_lowercase() == "no" {
                         // Disable frequency, keep count, and snapshot tool when snapshots disabled
@@ -4222,8 +4209,8 @@ impl App {
                         }
                     }
                 }
-                "Plymouth" => {
-                    if value.to_lowercase() == "no" {
+                "Plymouth"
+                    if value.to_lowercase() == "no" => {
                         // Set plymouth theme to none when plymouth is disabled
                         if let Some(theme_option) = state
                             .config
@@ -4234,15 +4221,14 @@ impl App {
                             theme_option.value = "none".to_string();
                         }
                     }
-                }
                 "Disk" => {
                     // Clear stale manual partition assignments on disk change
                     state.manual_partition_map = None;
                     // Clear stale OS detection results — re-run after lock is dropped
                     state.detected_os = None;
                 }
-                "Git Repository" => {
-                    if value.to_lowercase() == "no" {
+                "Git Repository"
+                    if value.to_lowercase() == "no" => {
                         // Clear git repository URL when git is disabled
                         if let Some(url_option) = state
                             .config
@@ -4253,9 +4239,8 @@ impl App {
                             url_option.value = String::new();
                         }
                     }
-                }
-                "GRUB Theme" => {
-                    if value.to_lowercase() == "no" {
+                "GRUB Theme"
+                    if value.to_lowercase() == "no" => {
                         // Set GRUB theme selection to none when themes are disabled
                         if let Some(theme_option) = state
                             .config
@@ -4266,7 +4251,6 @@ impl App {
                             theme_option.value = "none".to_string();
                         }
                     }
-                }
                 "Bootloader" => {
                     if value.to_lowercase() != "grub" {
                         // Reset GRUB-specific options when switching away from GRUB

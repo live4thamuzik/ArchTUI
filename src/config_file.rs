@@ -415,15 +415,14 @@ impl InstallationConfig {
 
         // Validate UEFI-only bootloaders are not selected with BIOS boot mode
         match self.bootloader {
-            Bootloader::SystemdBoot | Bootloader::Refind | Bootloader::Efistub => {
-                if self.boot_mode == BootMode::Bios {
+            Bootloader::SystemdBoot | Bootloader::Refind | Bootloader::Efistub
+                if self.boot_mode == BootMode::Bios => {
                     tracing::error!(bootloader = %self.bootloader, "UEFI-only bootloader with BIOS mode");
                     anyhow::bail!(
                         "{} requires UEFI firmware (BIOS is not supported)",
                         self.bootloader
                     );
                 }
-            }
             _ => {}
         }
 

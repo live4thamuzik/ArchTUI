@@ -101,7 +101,7 @@ impl ScrollState {
         // Ensure offset doesn't exceed bounds
         let max_offset = self.total_items.saturating_sub(self.visible_items);
         if self.offset > max_offset {
-            self.offset = max_offset.max(0);
+            self.offset = max_offset;
         }
     }
 
