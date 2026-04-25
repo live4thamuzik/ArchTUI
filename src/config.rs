@@ -282,6 +282,19 @@ impl Default for Configuration {
                     "Git repository URL to clone",
                     "",
                 ),
+                // System base choices (47-48)
+                ConfigOption::new(
+                    "Network Manager",
+                    false,
+                    "Network configuration tool (NetworkManager/iwd/dhcpcd/none)",
+                    "NetworkManager",
+                ),
+                ConfigOption::new(
+                    "Editor",
+                    false,
+                    "Default text editor for the installed system",
+                    "nano",
+                ),
             ],
         }
     }
@@ -349,6 +362,8 @@ impl Configuration {
                 "Git Repository URL" => "GIT_REPOSITORY_URL",
                 "Unified Kernel Image" => "UNIFIED_KERNEL_IMAGE",
                 "Encryption Key Type" => "ENCRYPTION_KEY_TYPE",
+                "Network Manager" => "NETWORK_MANAGER",
+                "Editor" => "EDITOR",
                 _ => continue, // Skip unknown options
             };
 

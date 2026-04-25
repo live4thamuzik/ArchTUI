@@ -67,6 +67,14 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     // 1. Base system — always installed
     packages.extend_from_slice(BASE_PACKAGES);
 
+    // 1b. Network manager (user choice)
+    packages.extend_from_slice(config.network_manager.packages());
+
+    // 1c. Default editor (user choice; may be None)
+    if let Some(editor_pkg) = config.editor.package() {
+        packages.push(editor_pkg);
+    }
+
     // 2. Kernel
     let kernel_pkgs = match config.kernel {
         Kernel::Linux => kernel_packages::LINUX,
@@ -214,8 +222,18 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
     tracing::info!(de = %config.desktop_environment, dm = %config.display_manager, "Resolving services");
     let mut services: Vec<&str> = Vec::new();
 
-    // NetworkManager — always enabled
-    services.push("NetworkManager");
+    // Network manager service (user choice).
+    // Wiki: https://wiki.archlinux.org/title/Network_configuration
+    match config.network_manager {
+        crate::types::NetworkManager::NetworkManager => services.push("NetworkManager"),
+        crate::types::NetworkManager::Iwd => {
+            services.push("systemd-networkd");
+            services.push("iwd");
+            services.push("systemd-resolved");
+        }
+        crate::types::NetworkManager::Dhcpcd => services.push("dhcpcd"),
+        crate::types::NetworkManager::None => {}
+    }
 
     // Display manager — prefer user's explicit choice, fall back to profile default
     let profile = desktop_to_profile(config.desktop_environment);
@@ -325,10 +343,16 @@ mod tests {
         let config = test_config();
         let packages = resolve_packages(&config);
 
+        // Wiki-aligned minimum: base-devel is no longer in BASE_PACKAGES (moved to Dev Tools opt-in).
         assert!(packages.contains(&"base".to_string()));
-        assert!(packages.contains(&"base-devel".to_string()));
         assert!(packages.contains(&"linux-firmware".to_string()));
         assert!(packages.contains(&"sudo".to_string()));
+        assert!(packages.contains(&"git".to_string()));
+        assert!(packages.contains(&"man-db".to_string()));
+        assert!(packages.contains(&"pciutils".to_string()));
+        // Default network manager/editor are user-selectable; default values include them.
+        assert!(packages.contains(&"networkmanager".to_string()));
+        assert!(packages.contains(&"nano".to_string()));
     }
 
     #[test]
@@ -494,10 +518,65 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_services_always_has_networkmanager() {
+    fn test_resolve_services_default_is_networkmanager() {
         let config = test_config();
         let services = resolve_services(&config);
         assert!(services.contains(&"NetworkManager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_iwd_dispatch() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::Iwd;
+        let services = resolve_services(&config);
+        assert!(services.contains(&"systemd-networkd".to_string()));
+        assert!(services.contains(&"iwd".to_string()));
+        assert!(services.contains(&"systemd-resolved".to_string()));
+        assert!(!services.contains(&"NetworkManager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_dhcpcd_dispatch() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::Dhcpcd;
+        let services = resolve_services(&config);
+        assert!(services.contains(&"dhcpcd".to_string()));
+        assert!(!services.contains(&"NetworkManager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_none_no_network_service() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::None;
+        let services = resolve_services(&config);
+        assert!(!services.contains(&"NetworkManager".to_string()));
+        assert!(!services.contains(&"iwd".to_string()));
+        assert!(!services.contains(&"dhcpcd".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_editor_choice() {
+        let mut config = test_config();
+        config.editor = crate::types::Editor::Vim;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"vim".to_string()));
+        assert!(!packages.contains(&"nano".to_string()));
+
+        config.editor = crate::types::Editor::None;
+        let packages = resolve_packages(&config);
+        assert!(!packages.contains(&"vim".to_string()));
+        assert!(!packages.contains(&"nano".to_string()));
+        assert!(!packages.contains(&"neovim".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_iwd_pulls_resolvconf() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::Iwd;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"iwd".to_string()));
+        assert!(packages.contains(&"systemd-resolvconf".to_string()));
+        assert!(!packages.contains(&"networkmanager".to_string()));
     }
 
     #[test]

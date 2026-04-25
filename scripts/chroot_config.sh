@@ -338,13 +338,37 @@ configure_sudoers() {
 enable_base_services() {
     log_info "Enabling base services..."
 
-    # NetworkManager
-    log_cmd "systemctl enable NetworkManager.service"
-    systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+    # Network manager service (user choice via NETWORK_MANAGER env var).
+    # Wiki: https://wiki.archlinux.org/title/Network_configuration
+    case "${NETWORK_MANAGER:-NetworkManager}" in
+        "NetworkManager")
+            log_cmd "systemctl enable NetworkManager.service"
+            systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+            ;;
+        "iwd")
+            log_cmd "systemctl enable systemd-networkd.service iwd.service systemd-resolved.service"
+            systemctl enable systemd-networkd.service 2>/dev/null || log_warn "systemd-networkd not found"
+            systemctl enable iwd.service 2>/dev/null || log_warn "iwd service not found"
+            systemctl enable systemd-resolved.service 2>/dev/null || log_warn "systemd-resolved not found"
+            ;;
+        "dhcpcd")
+            log_cmd "systemctl enable dhcpcd.service"
+            systemctl enable dhcpcd.service 2>/dev/null || log_warn "dhcpcd service not found"
+            ;;
+        "none")
+            log_info "No network manager selected — skipping service enable"
+            ;;
+        *)
+            log_warn "Unknown NETWORK_MANAGER='${NETWORK_MANAGER}', enabling NetworkManager.service as fallback"
+            systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+            ;;
+    esac
 
-    # SSH (optional, but useful)
-    log_cmd "systemctl enable sshd.service"
-    systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
+    # SSH — only enable if openssh is actually installed (now opt-in via Network Tools group)
+    if pacman -Qq openssh >/dev/null 2>&1; then
+        log_cmd "systemctl enable sshd.service"
+        systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
+    fi
 
     # Time synchronization
     case "${TIME_SYNC:-No}" in

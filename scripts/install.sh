@@ -661,38 +661,62 @@ install_base_system() {
     log_info "Installing base system with pacstrap..."
 
     # Build package list as array
+    # Wiki: https://wiki.archlinux.org/title/Installation_guide#Install_essential_packages
     local -a base_packages=(
         "base"
-        "base-devel"
         "linux-firmware"
-        "sof-firmware"  # For modern onboard audio (Sound Open Firmware)
+        "sof-firmware"  # Sound Open Firmware (modern onboard audio)
         "$KERNEL"
         "${KERNEL}-headers"
     )
 
-    # Add essential packages
+    # Wiki-aligned essentials: sudo (required for non-root admin), git (Arch-cultural),
+    # docs (wiki philosophy), pciutils (GPU auto-detection in chroot).
+    # base-devel is intentionally NOT here — it moves to the Dev Tools opt-in group.
+    # nano/neovim/networkmanager/openssh/htop/curl/wget/bluez/avahi/nss-mdns are NOT here —
+    # network manager and editor are explicit user choices below; the rest are opt-in groups
+    # or DE-tier plumbing.
     local -a essential_packages=(
-        "nano"
-        "neovim"
         "sudo"
-        "networkmanager"
-        "openssh"
         "git"
-        "curl"
-        "wget"
-        "htop"
         "man-db"
         "man-pages"
         "texinfo"
-        # Bluetooth support
-        "bluez"
-        "bluez-utils"
-        # Network discovery (mDNS/Bonjour)
-        "avahi"
-        "nss-mdns"
-        # PCI detection (required for GPU auto-detection in chroot)
         "pciutils"
     )
+
+    # Network configuration tool (user choice via NETWORK_MANAGER env var).
+    # Wiki: https://wiki.archlinux.org/title/Network_configuration
+    case "${NETWORK_MANAGER:-NetworkManager}" in
+        "NetworkManager")
+            essential_packages+=("networkmanager")
+            ;;
+        "iwd")
+            essential_packages+=("iwd" "systemd-resolvconf")
+            ;;
+        "dhcpcd")
+            essential_packages+=("dhcpcd")
+            ;;
+        "none")
+            log_warn "No network manager selected — user must configure networking post-install"
+            ;;
+        *)
+            log_warn "Unknown NETWORK_MANAGER='${NETWORK_MANAGER}', falling back to NetworkManager"
+            essential_packages+=("networkmanager")
+            ;;
+    esac
+
+    # Default editor (user choice via EDITOR env var).
+    case "${EDITOR:-nano}" in
+        "nano") essential_packages+=("nano") ;;
+        "vim") essential_packages+=("vim") ;;
+        "neovim") essential_packages+=("neovim") ;;
+        "none") log_info "No default editor selected — user can install one post-install" ;;
+        *)
+            log_warn "Unknown EDITOR='${EDITOR}', falling back to nano"
+            essential_packages+=("nano")
+            ;;
+    esac
 
     # Add filesystem tools based on selected filesystems
     local -a fs_packages=()

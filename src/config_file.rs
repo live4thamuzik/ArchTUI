@@ -9,9 +9,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::types::{
-    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager,
-    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
-    SnapshotFrequency, SnapshotTool, Toggle,
+    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager, Editor,
+    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, NetworkManager, PartitionScheme,
+    PlymouthTheme, SnapshotFrequency, SnapshotTool, Toggle,
 };
 
 /// Installation configuration that can be saved/loaded
@@ -96,6 +96,12 @@ pub struct InstallationConfig {
     // Encryption key type
     #[serde(default)]
     pub encryption_key_type: EncryptionKeyType,
+
+    // System base choices
+    #[serde(default)]
+    pub network_manager: NetworkManager,
+    #[serde(default)]
+    pub editor: Editor,
 }
 
 // Custom Debug impl redacts password fields to prevent accidental leaks
@@ -543,6 +549,8 @@ impl InstallationConfig {
                 "ENCRYPTION_KEY_TYPE".to_string(),
                 sanitize(self.encryption_key_type.to_string()),
             ),
+            ("NETWORK_MANAGER".to_string(), self.network_manager.to_string()),
+            ("EDITOR".to_string(), self.editor.to_string()),
         ]
     }
 }
@@ -598,6 +606,8 @@ impl Default for InstallationConfig {
             git_repository_url: String::new(),
             unified_kernel_image: Toggle::No,
             encryption_key_type: EncryptionKeyType::Password,
+            network_manager: NetworkManager::NetworkManager,
+            editor: Editor::Nano,
         }
     }
 }
@@ -681,6 +691,8 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             git_repository_url: get_value("Git Repository URL"),
             unified_kernel_image: parse_or_default(&get_value("Unified Kernel Image")),
             encryption_key_type: parse_or_default(&get_value("Encryption Key Type")),
+            network_manager: parse_or_default(&get_value("Network Manager")),
+            editor: parse_or_default(&get_value("Editor")),
         }
     }
 }
@@ -718,6 +730,32 @@ mod tests {
         assert!(config.username.is_empty());
         assert_eq!(config.boot_mode, BootMode::Auto);
         assert_eq!(config.root_filesystem, Filesystem::Ext4);
+        // Wiki-aligned defaults: NetworkManager + nano are the historical defaults users expect.
+        assert_eq!(config.network_manager, NetworkManager::NetworkManager);
+        assert_eq!(config.editor, Editor::Nano);
+    }
+
+    #[test]
+    fn test_network_manager_and_editor_in_env_vars() {
+        let mut config = create_test_config();
+        config.network_manager = NetworkManager::Iwd;
+        config.editor = Editor::Vim;
+        let env_vars = config.to_env_vars();
+
+        assert!(env_vars.contains(&("NETWORK_MANAGER".to_string(), "iwd".to_string())));
+        assert!(env_vars.contains(&("EDITOR".to_string(), "vim".to_string())));
+    }
+
+    #[test]
+    fn test_network_manager_none_passes_through() {
+        // "none" is a valid choice; bash side handles the empty package list.
+        let mut config = create_test_config();
+        config.network_manager = NetworkManager::None;
+        config.editor = Editor::None;
+        let env_vars = config.to_env_vars();
+
+        assert!(env_vars.contains(&("NETWORK_MANAGER".to_string(), "none".to_string())));
+        assert!(env_vars.contains(&("EDITOR".to_string(), "none".to_string())));
     }
 
     #[test]

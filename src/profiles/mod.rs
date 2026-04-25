@@ -154,12 +154,9 @@ impl Profile {
     /// Services must be enabled separately via `systemctl enable`.
     pub fn get_packages(&self) -> &'static [&'static str] {
         match self {
-            Profile::Minimal => &[
-                // No GUI packages - just ensure basic tools
-                "networkmanager",
-                "vim",
-                "sudo",
-            ],
+            // Minimal profile has no extras of its own. The base system (BASE_PACKAGES) plus the
+            // user's chosen network manager and editor already cover the TTY install needs.
+            Profile::Minimal => &[],
 
             Profile::Gnome => &[
                 // Core GNOME
@@ -169,7 +166,6 @@ impl Profile {
                 // Display manager
                 "gdm",
                 // Network
-                "networkmanager",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -188,7 +184,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -234,7 +229,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -273,7 +267,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -310,7 +303,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -339,7 +331,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -366,7 +357,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -388,7 +378,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -416,7 +405,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -446,7 +434,6 @@ impl Profile {
                 // Display manager
                 "cosmic-greeter",
                 // Network
-                "networkmanager",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -467,7 +454,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -486,7 +472,6 @@ impl Profile {
                 // Display manager
                 "lxdm",
                 // Network
-                "networkmanager",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -503,7 +488,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -539,7 +523,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -576,7 +559,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -616,7 +598,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -655,7 +636,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -694,7 +674,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -733,7 +712,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -774,7 +752,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -813,7 +790,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "networkmanager",
                 "network-manager-applet",
                 // Audio
                 "pipewire",
@@ -862,10 +838,11 @@ impl Profile {
 
     /// Get additional services to enable for this profile.
     ///
-    /// Returns service names for systemctl enable.
+    /// Returns profile-specific service names for systemctl enable.
+    /// Network manager service is determined by the user's `NetworkManager` choice
+    /// and resolved separately in `resolve_services`.
     pub fn get_services(&self) -> &'static [&'static str] {
-        // All profiles need NetworkManager
-        &["NetworkManager"]
+        &[]
     }
 
     /// Check if this profile uses Wayland.
@@ -1007,15 +984,20 @@ pub mod kernel_packages {
 }
 
 /// Base system packages always installed.
+///
+/// Wiki-aligned minimum: https://wiki.archlinux.org/title/Installation_guide#Install_essential_packages
+/// User choices for editor (`Editor`) and network manager (`NetworkManager`) are added by the
+/// installer at pacstrap time and are not present in this constant. base-devel is no longer
+/// always installed; it moves into the `Dev Tools` opt-in group.
 pub const BASE_PACKAGES: &[&str] = &[
     "base",
-    "base-devel",
     "linux-firmware",
-    "networkmanager",
-    "vim",
     "sudo",
-    "git",
-    "pciutils", // lspci — required for GPU auto-detection in chroot
+    "git",        // Culturally unavoidable on Arch (AUR clones, dotfiles, every wiki tutorial)
+    "man-db",     // Wiki philosophy: offline man pages > googling
+    "man-pages",  // ditto
+    "texinfo",    // GNU info pages, wiki-recommended for many tools
+    "pciutils",   // lspci — required for GPU auto-detection in chroot
 ];
 
 /// Bootloader packages.

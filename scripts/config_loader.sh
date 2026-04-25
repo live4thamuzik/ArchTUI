@@ -113,6 +113,8 @@ load_config_from_json() {
     export SNAPSHOT_TOOL="$(jq -r '.snapshot_tool // .btrfs_assistant // "none"' "$config_file")"
     export UNIFIED_KERNEL_IMAGE="$(jq -r '.unified_kernel_image // "No"' "$config_file")"
     export ENCRYPTION_KEY_TYPE="$(jq -r '.encryption_key_type // "Password"' "$config_file")"
+    export NETWORK_MANAGER="$(jq -r '.network_manager // "NetworkManager"' "$config_file")"
+    export EDITOR="$(jq -r '.editor // "nano"' "$config_file")"
 
     # Convert TUI variables to internal Bash variables (as done in install.sh)
     export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"
