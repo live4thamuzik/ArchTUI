@@ -3000,6 +3000,31 @@ impl App {
                             .to_string();
                 }
             }
+            "DE Variant" => {
+                let de = {
+                    let state = self.lock_state();
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Desktop Environment")
+                        .map(|opt| opt.get_value().to_lowercase())
+                        .unwrap_or_default()
+                };
+                let has_variant = matches!(
+                    de.as_str(),
+                    "gnome" | "kde" | "xfce" | "mate" | "lxqt"
+                );
+                if has_variant {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "DE Variant only applies to GNOME, KDE, XFCE, MATE, and LXQt."
+                            .to_string();
+                }
+            }
             "AUR Helper" => {
                 let de_requires_aur = {
                     let state = self.lock_state();
@@ -3760,6 +3785,9 @@ impl App {
 
         let de: DesktopEnvironment = desktop_env.parse().unwrap_or_default();
 
+        // Whether this DE has a meaningful Full/Minimal split (only the 5 meta-group DEs).
+        let has_full_variant = matches!(desktop_env, "gnome" | "kde" | "xfce" | "mate" | "lxqt");
+
         {
             let mut state = self.lock_state();
             // Auto-set display manager
@@ -3771,6 +3799,23 @@ impl App {
                     .find(|opt| opt.name == "Display Manager")
             {
                 dm_opt.value = display_manager.to_string();
+            }
+
+            // Cascade DE Variant: meaningful only for meta-group DEs.
+            if let Some(variant_opt) = state
+                .config
+                .options
+                .iter_mut()
+                .find(|opt| opt.name == "DE Variant")
+            {
+                if has_full_variant {
+                    // If the previous value was N/A (DE was non-meta before), default to Full.
+                    if variant_opt.get_value() == "N/A" {
+                        variant_opt.value = "Full".to_string();
+                    }
+                } else {
+                    variant_opt.value = "N/A".to_string();
+                }
             }
 
             // Auto-set AUR helper when DE requires AUR packages

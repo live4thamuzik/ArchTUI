@@ -119,6 +119,13 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     packages.extend_from_slice(profile_pkgs);
     tracing::debug!(de = %config.desktop_environment, count = profile_pkgs.len(), "Resolved profile packages");
 
+    // 5a. Full-variant extras (only meta-group DEs have meaningful extras)
+    if profile.has_full_variant() && config.de_variant == crate::types::DeVariant::Full {
+        let extras = profile.get_full_extras();
+        packages.extend_from_slice(extras);
+        tracing::debug!(de = %config.desktop_environment, count = extras.len(), "Added Full-variant extras");
+    }
+
     // 5b. DE-tier plumbing: bluetooth + mDNS for any DE (TTY installs skip this).
     // Wiki: https://wiki.archlinux.org/title/Bluetooth and https://wiki.archlinux.org/title/Avahi
     if config.desktop_environment != DesktopEnvironment::None {
@@ -679,6 +686,39 @@ mod tests {
         assert!(!packages.contains(&"openssh".to_string()));
         assert!(!packages.contains(&"htop".to_string()));
         assert!(!packages.contains(&"base-devel".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_gnome_full_includes_extras() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        config.de_variant = crate::types::DeVariant::Full;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"gnome-shell".to_string())); // baseline
+        assert!(packages.contains(&"gnome".to_string())); // full extra
+        assert!(packages.contains(&"gnome-extra".to_string())); // full extra
+    }
+
+    #[test]
+    fn test_resolve_packages_gnome_minimal_excludes_extras() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        config.de_variant = crate::types::DeVariant::Minimal;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"gnome-shell".to_string())); // baseline kept
+        assert!(!packages.contains(&"gnome".to_string()));
+        assert!(!packages.contains(&"gnome-extra".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_hyprland_ignores_de_variant() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Hyprland;
+        // Setting Minimal should be a no-op for Hyprland — its package list is curated already.
+        config.de_variant = crate::types::DeVariant::Minimal;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"hyprland".to_string()));
+        assert!(packages.contains(&"waybar".to_string()));
     }
 
     #[test]

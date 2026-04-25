@@ -314,6 +314,15 @@ impl Default for Configuration {
                     "Optional development tools (base-devel, gcc, make, gdb)",
                     "",
                 ),
+                // DE Variant (52) — only meaningful for meta-group DEs (GNOME/KDE/XFCE/MATE/LXQt).
+                // Default is N/A; cascade in handle_dependent_options sets it to Full when a meta
+                // DE is chosen, leaves it N/A for WMs and other DEs that have curated stacks.
+                ConfigOption::new(
+                    "DE Variant",
+                    false,
+                    "Full = meta-group + extras (everything); Minimal = just the desktop shell",
+                    "N/A",
+                ),
             ],
         }
     }
@@ -386,6 +395,7 @@ impl Configuration {
                 "Network Tools" => "NETWORK_TOOLS",
                 "System Utilities" => "SYSTEM_UTILITIES",
                 "Dev Tools" => "DEV_TOOLS",
+                "DE Variant" => "DE_VARIANT",
                 _ => continue, // Skip unknown options
             };
 

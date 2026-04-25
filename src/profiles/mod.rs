@@ -158,39 +158,38 @@ impl Profile {
             // user's chosen network manager and editor already cover the TTY install needs.
             Profile::Minimal => &[],
 
+            // GNOME baseline (Minimal): just enough to boot a usable desktop.
+            // Full extras (`gnome` + `gnome-extra`) live in get_full_extras().
+            // Wiki: https://wiki.archlinux.org/title/GNOME
             Profile::Gnome => &[
-                // Core GNOME
-                "gnome",
-                "gnome-tweaks",
+                "gnome-shell",
+                "gnome-control-center",
                 "gnome-terminal",
-                // Display manager
+                "nautilus",
+                "gnome-keyring",
                 "gdm",
-                // Network
-                // Audio
                 "pipewire",
                 "pipewire-pulse",
                 "wireplumber",
-                // Utilities
                 "firefox",
-                "file-roller",
             ],
 
+            // KDE Plasma baseline (Minimal): plasma-desktop + core apps.
+            // Full extras (plasma-meta + kde-applications-meta) live in get_full_extras().
+            // Wiki: https://wiki.archlinux.org/title/KDE
             Profile::Kde => &[
-                // Core KDE Plasma
-                "plasma-meta",
-                "kde-applications-meta",
+                "plasma-desktop",
                 "konsole",
                 "dolphin",
-                // Display manager
+                "kate",
+                "kwallet",
+                "plasma-nm",
+                "plasma-pa",
                 "sddm",
-                // Network
-                // Audio
                 "pipewire",
                 "pipewire-pulse",
                 "wireplumber",
-                // Utilities
                 "firefox",
-                "ark",
             ],
 
             Profile::Hyprland => &[
@@ -317,25 +316,19 @@ impl Profile {
                 "feh", // Wallpaper
             ],
 
+            // XFCE baseline (Minimal): xfce4 group + DM only. Full extras add xfce4-goodies.
+            // Wiki: https://wiki.archlinux.org/title/Xfce
             Profile::Xfce => &[
-                // XFCE desktop
                 "xfce4",
-                "xfce4-goodies",
-                // X11 essentials
                 "xorg-server",
                 "xorg-xinit",
-                // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
-                // Network
-                // Audio
                 "pipewire",
                 "pipewire-pulse",
                 "wireplumber",
                 "pavucontrol",
-                // Utilities
                 "firefox",
-                "thunar-archive-plugin",
             ],
 
             Profile::Cinnamon => &[
@@ -362,23 +355,18 @@ impl Profile {
                 "firefox",
             ],
 
+            // MATE baseline (Minimal): mate group + DM only. Full extras add mate-extra.
+            // Wiki: https://wiki.archlinux.org/title/MATE
             Profile::Mate => &[
-                // MATE desktop
                 "mate",
-                "mate-extra",
-                // X11 essentials
                 "xorg-server",
                 "xorg-xinit",
-                // Display manager
                 "lightdm",
                 "lightdm-gtk-greeter",
-                // Network
-                // Audio
                 "pipewire",
                 "pipewire-pulse",
                 "wireplumber",
                 "pavucontrol",
-                // Utilities
                 "firefox",
             ],
 
@@ -474,19 +462,16 @@ impl Profile {
                 "firefox",
             ],
 
+            // LXQt baseline (Minimal): lxqt group + DM only. Full extras add featherpad/etc.
+            // Wiki: https://wiki.archlinux.org/title/LXQt
             Profile::Lxqt => &[
-                // LXQt desktop
                 "lxqt",
                 "breeze-icons",
-                // Display manager
                 "sddm",
-                // Network
-                // Audio
                 "pipewire",
                 "pipewire-pulse",
                 "wireplumber",
                 "pavucontrol",
-                // Utilities
                 "firefox",
             ],
 
@@ -830,6 +815,33 @@ impl Profile {
         &[]
     }
 
+    /// Extra packages added on top of baseline when DE Variant = Full.
+    ///
+    /// Only the 5 meta-group DEs (GNOME / KDE / XFCE / MATE / LXQt) have meaningful
+    /// Full vs Minimal distinctions. Other profiles return an empty slice — their
+    /// package lists are already curated to a wiki-prescribed working desktop.
+    pub fn get_full_extras(&self) -> &'static [&'static str] {
+        match self {
+            // Wiki: https://wiki.archlinux.org/title/GNOME — `gnome` group + `gnome-extra` for full suite
+            Profile::Gnome => &["gnome", "gnome-extra"],
+            // Wiki: https://wiki.archlinux.org/title/KDE — plasma-meta + kde-applications-meta for full suite
+            Profile::Kde => &["plasma-meta", "kde-applications-meta"],
+            // Wiki: https://wiki.archlinux.org/title/Xfce — xfce4-goodies for full suite
+            Profile::Xfce => &["xfce4-goodies", "thunar-archive-plugin"],
+            // Wiki: https://wiki.archlinux.org/title/MATE — mate-extra for full suite
+            Profile::Mate => &["mate-extra"],
+            // Wiki: https://wiki.archlinux.org/title/LXQt — additional curated apps for full suite
+            Profile::Lxqt => &["featherpad", "pavucontrol-qt"],
+            _ => &[],
+        }
+    }
+
+    /// Whether this profile has a meaningful Full/Minimal distinction.
+    /// True only for the 5 meta-group DEs above.
+    pub fn has_full_variant(&self) -> bool {
+        !self.get_full_extras().is_empty()
+    }
+
     /// Check if this profile uses Wayland.
     pub fn is_wayland(&self) -> bool {
         matches!(
@@ -1102,10 +1114,30 @@ mod tests {
     }
 
     #[test]
-    fn test_gnome_packages() {
+    fn test_gnome_packages_baseline() {
+        // Baseline (Minimal) GNOME: shell + control center + DM, no `gnome` group/extras.
         let packages = Profile::Gnome.get_packages();
-        assert!(packages.contains(&"gnome"));
-        assert!(packages.contains(&"gdm")); // Display manager included
+        assert!(packages.contains(&"gnome-shell"));
+        assert!(packages.contains(&"gdm"));
+        assert!(!packages.contains(&"gnome"));
+        assert!(!packages.contains(&"gnome-extra"));
+    }
+
+    #[test]
+    fn test_gnome_full_extras() {
+        let extras = Profile::Gnome.get_full_extras();
+        assert!(extras.contains(&"gnome"));
+        assert!(extras.contains(&"gnome-extra"));
+    }
+
+    #[test]
+    fn test_meta_de_has_full_variant() {
+        for p in [Profile::Gnome, Profile::Kde, Profile::Xfce, Profile::Mate, Profile::Lxqt] {
+            assert!(p.has_full_variant(), "{:?} should have full variant", p);
+        }
+        // Hyprland and Minimal should not
+        assert!(!Profile::Hyprland.has_full_variant());
+        assert!(!Profile::Minimal.has_full_variant());
     }
 
     #[test]

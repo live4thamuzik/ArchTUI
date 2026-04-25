@@ -118,6 +118,7 @@ load_config_from_json() {
     export NETWORK_TOOLS="$(jq -r '.network_tools // ""' "$config_file")"
     export SYSTEM_UTILITIES="$(jq -r '.system_utilities // ""' "$config_file")"
     export DEV_TOOLS="$(jq -r '.dev_tools // ""' "$config_file")"
+    export DE_VARIANT="$(jq -r '.de_variant // "Full"' "$config_file")"
 
     # Convert TUI variables to internal Bash variables (as done in install.sh)
     export ROOT_FILESYSTEM_TYPE="$ROOT_FILESYSTEM"

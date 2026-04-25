@@ -9,9 +9,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::types::{
-    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager, Editor,
-    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, NetworkManager, PartitionScheme,
-    PlymouthTheme, SnapshotFrequency, SnapshotTool, Toggle,
+    AurHelper, AutoToggle, BootMode, Bootloader, DeVariant, DesktopEnvironment, DisplayManager,
+    Editor, EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, NetworkManager,
+    PartitionScheme, PlymouthTheme, SnapshotFrequency, SnapshotTool, Toggle,
 };
 
 /// Installation configuration that can be saved/loaded
@@ -110,6 +110,10 @@ pub struct InstallationConfig {
     pub system_utilities: String,
     #[serde(default)]
     pub dev_tools: String,
+
+    // Meta-group DE variant (Full or Minimal); ignored by non-meta DEs/WMs
+    #[serde(default)]
+    pub de_variant: DeVariant,
 }
 
 // Custom Debug impl redacts password fields to prevent accidental leaks
@@ -562,6 +566,7 @@ impl InstallationConfig {
             ("NETWORK_TOOLS".to_string(), self.network_tools.clone()),
             ("SYSTEM_UTILITIES".to_string(), self.system_utilities.clone()),
             ("DEV_TOOLS".to_string(), self.dev_tools.clone()),
+            ("DE_VARIANT".to_string(), self.de_variant.to_string()),
         ]
     }
 }
@@ -622,6 +627,7 @@ impl Default for InstallationConfig {
             network_tools: String::new(),
             system_utilities: String::new(),
             dev_tools: String::new(),
+            de_variant: DeVariant::Full,
         }
     }
 }
@@ -710,6 +716,14 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             network_tools: get_value("Network Tools"),
             system_utilities: get_value("System Utilities"),
             dev_tools: get_value("Dev Tools"),
+            de_variant: {
+                let v = get_value("DE Variant");
+                if v == "N/A" || v.is_empty() {
+                    DeVariant::Full
+                } else {
+                    parse_or_default(&v)
+                }
+            },
         }
     }
 }

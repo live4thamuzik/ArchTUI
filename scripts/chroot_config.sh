@@ -1852,22 +1852,43 @@ HOOKEOF
 install_desktop_environment() {
     local de="${DESKTOP_ENVIRONMENT:-none}"
     de="${de,,}"  # Convert to lowercase
+    local variant="${DE_VARIANT:-Full}"
 
-    log_info "Installing desktop environment: $de"
+    log_info "Installing desktop environment: $de (variant: $variant)"
 
     case "$de" in
         "kde"|"plasma")
-            install_packages "KDE Plasma" plasma-meta kde-applications-meta konsole dolphin \
-                networkmanager pipewire pipewire-pulse wireplumber firefox ark
+            # Wiki: https://wiki.archlinux.org/title/KDE — Minimal = plasma-desktop + core apps,
+            # Full = + plasma-meta + kde-applications-meta
+            local kde_baseline=(plasma-desktop konsole dolphin kate kwallet plasma-nm plasma-pa \
+                pipewire pipewire-pulse wireplumber firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "KDE Plasma (Minimal)" "${kde_baseline[@]}"
+            else
+                install_packages "KDE Plasma (Full)" "${kde_baseline[@]}" plasma-meta kde-applications-meta
+            fi
             ;;
         "gnome")
-            install_packages "GNOME" gnome gnome-tweaks gnome-terminal \
-                networkmanager pipewire pipewire-pulse wireplumber firefox file-roller
+            # Wiki: https://wiki.archlinux.org/title/GNOME — Minimal = shell + control center +
+            # terminal + nautilus, Full = + `gnome` group + `gnome-extra`
+            local gnome_baseline=(gnome-shell gnome-control-center gnome-terminal nautilus \
+                gnome-keyring pipewire pipewire-pulse wireplumber firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "GNOME (Minimal)" "${gnome_baseline[@]}"
+            else
+                install_packages "GNOME (Full)" "${gnome_baseline[@]}" gnome gnome-extra
+            fi
             ;;
         "xfce")
-            install_packages "XFCE" xfce4 xfce4-goodies xorg-server xorg-xinit \
-                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
-                firefox thunar-archive-plugin
+            # Wiki: https://wiki.archlinux.org/title/Xfce — Minimal = xfce4 group only,
+            # Full = + xfce4-goodies + thunar-archive-plugin
+            local xfce_baseline=(xfce4 xorg-server xorg-xinit \
+                pipewire pipewire-pulse wireplumber pavucontrol firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "XFCE (Minimal)" "${xfce_baseline[@]}"
+            else
+                install_packages "XFCE (Full)" "${xfce_baseline[@]}" xfce4-goodies thunar-archive-plugin
+            fi
             ;;
         "i3"|"i3wm")
             install_packages "i3 Window Manager" i3-wm i3status i3lock dmenu rofi alacritty \
@@ -1895,8 +1916,14 @@ install_desktop_environment() {
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "mate")
-            install_packages "MATE" mate mate-extra xorg-server xorg-xinit \
-                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
+            # Wiki: https://wiki.archlinux.org/title/MATE — Minimal = mate group only, Full = + mate-extra
+            local mate_baseline=(mate xorg-server xorg-xinit \
+                pipewire pipewire-pulse wireplumber pavucontrol firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "MATE (Minimal)" "${mate_baseline[@]}"
+            else
+                install_packages "MATE (Full)" "${mate_baseline[@]}" mate-extra
+            fi
             ;;
         "budgie")
             install_packages "Budgie" budgie-desktop budgie-extras gnome-terminal nautilus gnome-screenshot \
@@ -1919,8 +1946,15 @@ install_desktop_environment() {
                 networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "lxqt")
-            install_packages "LXQt" lxqt breeze-icons \
-                networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
+            # Wiki: https://wiki.archlinux.org/title/LXQt — Minimal = lxqt group + breeze-icons,
+            # Full = + featherpad + pavucontrol-qt
+            local lxqt_baseline=(lxqt breeze-icons \
+                pipewire pipewire-pulse wireplumber pavucontrol firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "LXQt (Minimal)" "${lxqt_baseline[@]}"
+            else
+                install_packages "LXQt (Full)" "${lxqt_baseline[@]}" featherpad pavucontrol-qt
+            fi
             ;;
         "bspwm")
             install_packages "bspwm" bspwm sxhkd xorg-server xorg-xinit alacritty dmenu picom \

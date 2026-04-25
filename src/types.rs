@@ -607,6 +607,30 @@ impl NetworkManager {
     }
 }
 
+/// Variant for meta-group desktop environments (GNOME / KDE / XFCE / MATE / LXQt).
+/// Full = wiki-prescribed meta group + extras; Minimal = just the shell/baseline.
+/// Other DEs/WMs ignore this setting (their package list is already curated).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
+pub enum DeVariant {
+    #[default]
+    #[strum(serialize = "Full")]
+    Full,
+    #[strum(serialize = "Minimal")]
+    Minimal,
+}
+
 /// Default text editor for the installed system.
 /// Wiki: https://wiki.archlinux.org/title/Installation_guide#Initial_configuration
 #[derive(
