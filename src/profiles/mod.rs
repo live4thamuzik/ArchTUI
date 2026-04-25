@@ -229,7 +229,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -267,7 +266,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -303,7 +301,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -331,7 +328,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -357,7 +353,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -378,7 +373,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -405,7 +399,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -523,7 +516,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -559,7 +551,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -598,7 +589,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -636,7 +626,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -674,7 +663,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -712,7 +700,6 @@ impl Profile {
                 // Display manager
                 "sddm",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -752,7 +739,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",
@@ -790,7 +776,6 @@ impl Profile {
                 "lightdm",
                 "lightdm-gtk-greeter",
                 // Network
-                "network-manager-applet",
                 // Audio
                 "pipewire",
                 "pipewire-pulse",

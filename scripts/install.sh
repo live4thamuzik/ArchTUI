@@ -718,6 +718,18 @@ install_base_system() {
             ;;
     esac
 
+    # DE-tier plumbing: only add bluetooth/mDNS when a desktop environment is selected.
+    # Wiki: https://wiki.archlinux.org/title/Bluetooth and https://wiki.archlinux.org/title/Avahi
+    # TTY-only installs (DESKTOP_ENVIRONMENT=none) skip these — wiki philosophy:
+    # don't install what isn't needed.
+    if [[ -n "${DESKTOP_ENVIRONMENT:-}" && "${DESKTOP_ENVIRONMENT}" != "none" ]]; then
+        essential_packages+=("bluez" "bluez-utils" "avahi" "nss-mdns")
+        # NetworkManager applet (system-tray network indicator) — only when NM is chosen
+        if [[ "${NETWORK_MANAGER:-NetworkManager}" == "NetworkManager" ]]; then
+            essential_packages+=("network-manager-applet")
+        fi
+    fi
+
     # Add filesystem tools based on selected filesystems
     local -a fs_packages=()
     local _fs

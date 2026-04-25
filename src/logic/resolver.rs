@@ -119,6 +119,16 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     packages.extend_from_slice(profile_pkgs);
     tracing::debug!(de = %config.desktop_environment, count = profile_pkgs.len(), "Resolved profile packages");
 
+    // 5b. DE-tier plumbing: bluetooth + mDNS for any DE (TTY installs skip this).
+    // Wiki: https://wiki.archlinux.org/title/Bluetooth and https://wiki.archlinux.org/title/Avahi
+    if config.desktop_environment != DesktopEnvironment::None {
+        packages.extend_from_slice(&["bluez", "bluez-utils", "avahi", "nss-mdns"]);
+        // NM applet only makes sense when NetworkManager is the chosen network stack.
+        if config.network_manager == crate::types::NetworkManager::NetworkManager {
+            packages.push("network-manager-applet");
+        }
+    }
+
     // 6. Flatpak
     if config.flatpak == Toggle::Yes {
         packages.push("flatpak");
@@ -256,9 +266,10 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
     // Profile-specific services
     services.extend_from_slice(profile.get_services());
 
-    // Bluetooth for desktop environments
+    // DE-tier plumbing services: bluetooth + avahi-daemon when a DE is installed.
     if config.desktop_environment != DesktopEnvironment::None {
         services.push("bluetooth");
+        services.push("avahi-daemon");
     }
 
     // NTP time sync
@@ -577,6 +588,59 @@ mod tests {
         assert!(packages.contains(&"iwd".to_string()));
         assert!(packages.contains(&"systemd-resolvconf".to_string()));
         assert!(!packages.contains(&"networkmanager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_de_tier_plumbing() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"bluez".to_string()));
+        assert!(packages.contains(&"bluez-utils".to_string()));
+        assert!(packages.contains(&"avahi".to_string()));
+        assert!(packages.contains(&"nss-mdns".to_string()));
+        // NM applet only with NM as the network manager
+        assert!(packages.contains(&"network-manager-applet".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_de_tier_skipped_for_minimal() {
+        let config = test_config();
+        let packages = resolve_packages(&config);
+        // Minimal install — no bluetooth, no mDNS
+        assert!(!packages.contains(&"bluez".to_string()));
+        assert!(!packages.contains(&"avahi".to_string()));
+        assert!(!packages.contains(&"network-manager-applet".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_de_with_iwd_no_nm_applet() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Hyprland;
+        config.network_manager = crate::types::NetworkManager::Iwd;
+        let packages = resolve_packages(&config);
+        // iwd users shouldn't get the NetworkManager applet
+        assert!(!packages.contains(&"network-manager-applet".to_string()));
+        // But still get bluez/avahi (DE-tier baseline)
+        assert!(packages.contains(&"bluez".to_string()));
+        assert!(packages.contains(&"avahi".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_de_tier_plumbing() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        let services = resolve_services(&config);
+        assert!(services.contains(&"bluetooth".to_string()));
+        assert!(services.contains(&"avahi-daemon".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_minimal_no_de_tier() {
+        let config = test_config();
+        let services = resolve_services(&config);
+        assert!(!services.contains(&"bluetooth".to_string()));
+        assert!(!services.contains(&"avahi-daemon".to_string()));
     }
 
     #[test]

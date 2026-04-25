@@ -389,13 +389,46 @@ enable_base_services() {
     # SSD trim timer (good for SSDs)
     systemctl enable fstrim.timer 2>/dev/null || log_warn "Failed to enable fstrim.timer"
 
-    # Bluetooth support
-    systemctl enable bluetooth.service 2>/dev/null || log_warn "bluetooth service not found"
+    # Bluetooth — only if bluez was installed (DE-tier plumbing).
+    if pacman -Qq bluez >/dev/null 2>&1; then
+        log_cmd "systemctl enable bluetooth.service"
+        systemctl enable bluetooth.service 2>/dev/null || log_warn "bluetooth service not found"
+    fi
 
-    # Avahi mDNS/DNS-SD (network discovery)
-    systemctl enable avahi-daemon.service 2>/dev/null || log_warn "avahi-daemon service not found"
+    # Avahi mDNS/DNS-SD — only if avahi was installed.
+    # Wiki: https://wiki.archlinux.org/title/Avahi#Hostname_resolution
+    # Avahi requires nsswitch.conf to include mdns_minimal for .local resolution to work.
+    if pacman -Qq avahi >/dev/null 2>&1; then
+        log_cmd "systemctl enable avahi-daemon.service"
+        systemctl enable avahi-daemon.service 2>/dev/null || log_warn "avahi-daemon service not found"
+        configure_nsswitch_mdns
+    fi
 
     log_success "Base services enabled"
+}
+
+# Insert mdns_minimal into the hosts: line of /etc/nsswitch.conf so that
+# .local hostname resolution actually works when avahi is installed.
+# Wiki: https://wiki.archlinux.org/title/Avahi#Hostname_resolution
+# Idempotent: re-running on an already-edited file is a no-op.
+configure_nsswitch_mdns() {
+    local nsswitch="/etc/nsswitch.conf"
+    if [[ ! -f "$nsswitch" ]]; then
+        log_warn "nsswitch.conf not found — skipping mDNS hosts configuration"
+        return 0
+    fi
+    if grep -qE '^\s*hosts:.*mdns_minimal' "$nsswitch"; then
+        log_info "nsswitch.conf already contains mdns_minimal — no change needed"
+        return 0
+    fi
+    log_cmd "configure nsswitch.conf for mDNS"
+    # Insert mdns_minimal [NOTFOUND=return] before resolve/dns on the hosts line.
+    # Use | as sed delimiter to avoid escaping issues with the brackets.
+    if ! sed -i -E 's|^(hosts:[[:space:]]+)(.*)|\1mdns_minimal [NOTFOUND=return] \2|' "$nsswitch"; then
+        log_warn "Failed to edit nsswitch.conf for mDNS — .local resolution may not work"
+        return 0
+    fi
+    log_success "Configured nsswitch.conf for mDNS"
 }
 
 # =============================================================================
