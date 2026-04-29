@@ -6,8 +6,6 @@ A guided installer and system administration toolkit for Arch Linux. The TUI han
 
 **This is not a replacement for reading the Arch Wiki or understanding how a manual installation works. If you have never installed Arch manually, do that first. The point of the manual install is to understand how the system works.**
 
-**Test in a disposable environment before deploying to systems you care about!**
-
 ---
 
 ## What it does
