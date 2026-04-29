@@ -220,14 +220,28 @@ setup_logging() {
     fi
 }
 
-# Dump all configuration env vars to the log file (passwords redacted)
+# Returns 0 if the env var name is sensitive and must be redacted from logs.
+# Mirrors src/script_runner.rs::is_secret_env: an explicit allowlist of
+# currently-known secret names plus conservative suffix patterns so future
+# names like LUKS_KEY_PASSPHRASE, GITHUB_TOKEN, or SSH_PRIVATE_KEY are
+# redacted by default rather than slipping through a substring match.
+is_secret_env_var() {
+    local upper="${1^^}"
+    case "$upper" in
+        MAIN_USER_PASSWORD|ROOT_PASSWORD|ENCRYPTION_PASSWORD|USER_PASSWORD) return 0 ;;
+        *_PASSWORD|*_PASSPHRASE|*_SECRET|*_TOKEN|*_PRIVATE_KEY|*_KEYFILE) return 0 ;;
+    esac
+    return 1
+}
+
+# Dump all configuration env vars to the log file (secrets redacted)
 # Called after setup_logging to capture the full config snapshot
 dump_config() {
     local timestamp
     printf -v timestamp '%(%Y-%m-%d %H:%M:%S)T' -1
     {
         echo "[$timestamp] === CONFIGURATION DUMP ==="
-        local var
+        local var val
         for var in \
             INSTALL_DISK PARTITIONING_STRATEGY BOOT_MODE ENCRYPTION \
             ROOT_FILESYSTEM HOME_FILESYSTEM SEPARATE_HOME SWAP SWAP_SIZE \
@@ -244,11 +258,11 @@ dump_config() {
             LOG_LEVEL \
             MAIN_USER_PASSWORD ROOT_PASSWORD ENCRYPTION_PASSWORD
         do
-            local val="${!var:-}"
-            # Redact passwords
-            case "$var" in
-                *PASSWORD*) val="********" ;;
-            esac
+            if is_secret_env_var "$var"; then
+                val="********"
+            else
+                val="${!var:-}"
+            fi
             echo "[$timestamp]   $var=$val"
         done
         echo "[$timestamp] === END CONFIGURATION DUMP ==="

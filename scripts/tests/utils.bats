@@ -300,3 +300,62 @@ teardown() {
     [ "$status" -eq 1 ]
     [[ "$output" =~ "NON-CRITICAL: Failing op failed" ]]
 }
+
+# =============================================================================
+# Secret Redaction Tests (mirror src/script_runner.rs::is_secret_env)
+# =============================================================================
+
+@test "is_secret_env_var matches known secret names" {
+    run is_secret_env_var MAIN_USER_PASSWORD
+    [ "$status" -eq 0 ]
+    run is_secret_env_var ROOT_PASSWORD
+    [ "$status" -eq 0 ]
+    run is_secret_env_var ENCRYPTION_PASSWORD
+    [ "$status" -eq 0 ]
+}
+
+@test "is_secret_env_var matches future secret-shaped suffixes" {
+    run is_secret_env_var WIFI_PASSPHRASE
+    [ "$status" -eq 0 ]
+    run is_secret_env_var GITHUB_TOKEN
+    [ "$status" -eq 0 ]
+    run is_secret_env_var API_SECRET
+    [ "$status" -eq 0 ]
+    run is_secret_env_var SSH_PRIVATE_KEY
+    [ "$status" -eq 0 ]
+    run is_secret_env_var LUKS_KEYFILE
+    [ "$status" -eq 0 ]
+}
+
+@test "is_secret_env_var rejects common false-positive shapes" {
+    run is_secret_env_var KEYMAP
+    [ "$status" -eq 1 ]
+    run is_secret_env_var ENCRYPTION_KEY_TYPE
+    [ "$status" -eq 1 ]
+    run is_secret_env_var KEYBOARD_LAYOUT
+    [ "$status" -eq 1 ]
+    run is_secret_env_var MAIN_USERNAME
+    [ "$status" -eq 1 ]
+    run is_secret_env_var INSTALL_DISK
+    [ "$status" -eq 1 ]
+}
+
+@test "dump_config writes redacted secrets and plaintext non-secrets" {
+    MAIN_USER_PASSWORD="userpw_canary"
+    ROOT_PASSWORD="rootpw_canary"
+    ENCRYPTION_PASSWORD="luks_canary"
+    INSTALL_DISK="/dev/null"
+    SYSTEM_HOSTNAME="archbox"
+    dump_config
+    run cat "$LOG_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ "MAIN_USER_PASSWORD=********" ]]
+    [[ "$output" =~ "ROOT_PASSWORD=********" ]]
+    [[ "$output" =~ "ENCRYPTION_PASSWORD=********" ]]
+    [[ "$output" =~ "INSTALL_DISK=/dev/null" ]]
+    [[ "$output" =~ "SYSTEM_HOSTNAME=archbox" ]]
+    # Negative: no canary value survives.
+    [[ ! "$output" =~ "userpw_canary" ]]
+    [[ ! "$output" =~ "rootpw_canary" ]]
+    [[ ! "$output" =~ "luks_canary" ]]
+}
