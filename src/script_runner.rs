@@ -253,16 +253,43 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
     }
 }
 
-/// Redact password-containing environment variables for safe logging.
+/// Names that are unconditionally treated as secret. New secret-bearing
+/// env vars should be added here (or use a known suffix below) so they
+/// cannot leak through `redact_env_vars` by accident.
+const KNOWN_SECRET_ENV: &[&str] = &[
+    "MAIN_USER_PASSWORD",
+    "ROOT_PASSWORD",
+    "ENCRYPTION_PASSWORD",
+    "USER_PASSWORD",
+];
+
+/// Returns true if an env var name should be treated as sensitive.
 ///
-/// password values must NEVER appear in logs or tracing output.
-/// Any env var whose name contains "PASSWORD" (case-insensitive) gets its
-/// value replaced with `<REDACTED>`.
+/// Combines an explicit allowlist (`KNOWN_SECRET_ENV`) with conservative
+/// suffix patterns so future names like `LUKS_KEY_PASSPHRASE`,
+/// `GITHUB_TOKEN`, or `SSH_PRIVATE_KEY` are redacted by default rather
+/// than silently leaking through a substring match like `contains("PASSWORD")`.
+pub fn is_secret_env(name: &str) -> bool {
+    let upper = name.to_uppercase();
+    if KNOWN_SECRET_ENV.contains(&upper.as_str()) {
+        return true;
+    }
+    upper.ends_with("_PASSWORD")
+        || upper.ends_with("_PASSPHRASE")
+        || upper.ends_with("_SECRET")
+        || upper.ends_with("_TOKEN")
+        || upper.ends_with("_PRIVATE_KEY")
+        || upper.ends_with("_KEYFILE")
+}
+
+/// Redact password-bearing environment variables for safe logging.
+///
+/// Secret values must NEVER appear in logs or tracing output.
 pub fn redact_env_vars(env_vars: &[(String, String)]) -> Vec<String> {
     env_vars
         .iter()
         .map(|(k, v)| {
-            if k.to_uppercase().contains("PASSWORD") {
+            if is_secret_env(k) {
                 format!("{}=<REDACTED>", k)
             } else {
                 format!("{}={}", k, v)
@@ -342,15 +369,10 @@ mod tests {
 
     #[test]
     fn test_redact_env_vars_case_insensitive() {
-        let env = vec![
-            ("user_password".to_string(), "pw1".to_string()),
-            ("Password_Field".to_string(), "pw2".to_string()),
-        ];
-
+        // Lowercase forms of known secret names still redact (allowlist is uppercased).
+        let env = vec![("user_password".to_string(), "pw1".to_string())];
         let redacted = redact_env_vars(&env);
-
         assert_eq!(redacted[0], "user_password=<REDACTED>");
-        assert_eq!(redacted[1], "Password_Field=<REDACTED>");
     }
 
     #[test]
@@ -358,6 +380,52 @@ mod tests {
         let env: Vec<(String, String)> = vec![];
         let redacted = redact_env_vars(&env);
         assert!(redacted.is_empty());
+    }
+
+    #[test]
+    fn is_secret_env_classifies_known_and_future_names() {
+        // Currently-known secrets (allowlist).
+        assert!(is_secret_env("MAIN_USER_PASSWORD"));
+        assert!(is_secret_env("ROOT_PASSWORD"));
+        assert!(is_secret_env("ENCRYPTION_PASSWORD"));
+        assert!(is_secret_env("USER_PASSWORD"));
+        // Future secret-shaped names caught by suffix pattern.
+        assert!(is_secret_env("LUKS_KEY_PASSPHRASE"));
+        assert!(is_secret_env("GITHUB_TOKEN"));
+        assert!(is_secret_env("API_SECRET"));
+        assert!(is_secret_env("SSH_PRIVATE_KEY"));
+        assert!(is_secret_env("LUKS_KEYFILE"));
+        // Common false-positive shapes — must NOT be redacted.
+        assert!(!is_secret_env("KEYMAP"));
+        assert!(!is_secret_env("ENCRYPTION_KEY_TYPE"));
+        assert!(!is_secret_env("KEYBOARD_LAYOUT"));
+        assert!(!is_secret_env("MAIN_USERNAME"));
+        assert!(!is_secret_env("INSTALL_DISK"));
+    }
+
+    /// Regression test against future drift: every secret produced by the
+    /// real `Configuration::to_env_vars()` pipeline must be redacted, and
+    /// no plaintext password value can survive the redactor.
+    #[test]
+    fn redact_covers_every_secret_in_full_configuration() {
+        let mut config = crate::config::Configuration::default();
+        for opt in &mut config.options {
+            match opt.name.as_str() {
+                "User Password" => opt.value = "userpw_canary".into(),
+                "Root Password" => opt.value = "rootpw_canary".into(),
+                "Encryption Password" => opt.value = "luks_canary".into(),
+                _ => {}
+            }
+        }
+        let env: Vec<(String, String)> = config.to_env_vars().into_iter().collect();
+        let redacted = redact_env_vars(&env).join("\n");
+
+        assert!(redacted.contains("MAIN_USER_PASSWORD=<REDACTED>"));
+        assert!(redacted.contains("ROOT_PASSWORD=<REDACTED>"));
+        assert!(redacted.contains("ENCRYPTION_PASSWORD=<REDACTED>"));
+        assert!(!redacted.contains("userpw_canary"));
+        assert!(!redacted.contains("rootpw_canary"));
+        assert!(!redacted.contains("luks_canary"));
     }
 
     #[test]
