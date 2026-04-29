@@ -2,6 +2,8 @@
 
 A guided installer and system administration toolkit for Arch Linux. The TUI handles configuration, validation, and sequencing. Bash scripts handle execution. The two layers communicate through typed argument structs and environment contracts — Rust decides what to do, Bash does it.
 
+**Philosophy.** ArchTUI follows the [Arch Wiki Installation guide](https://wiki.archlinux.org/title/Installation_guide) step-by-step. The core pipeline (genfstab, locale-gen, mkinitcpio HOOKS, bootloader install, LUKS/LVM/RAID/Btrfs setup) is wiki-faithful by design. Beyond that, every choice — network manager, editor, desktop variant, optional utilities, AUR helper, snapshot tooling — is an explicit user decision. There are no opinionated defaults; defaults match the wiki minimum where one exists, otherwise the option is presented unset.
+
 **This is not a replacement for reading the Arch Wiki or understanding how a manual installation works. If you have never installed Arch manually, do that first. The point of the manual install is to understand how the system works.**
 
 **Test in a disposable environment before deploying to systems you care about!**
@@ -167,6 +169,22 @@ Run `./archtui tools --help` for the full list. Each subcommand has its own `--h
 
 All automated strategies create an EFI System Partition and an XBOOTLDR partition. RAID strategies require 2+ disks and support RAID level selection (0, 1, 5, 6, 10).
 
+## Default pacstrap set
+
+The base system pacstrap installs only the wiki-aligned minimum plus operationally necessary packages, plus whatever the user picks for network manager and editor. Nothing else is forced.
+
+```
+base linux-firmware sof-firmware <kernel> <kernel>-headers
+sudo git man-db man-pages texinfo pciutils
+<microcode>             # auto-detected (intel-ucode or amd-ucode)
+<network manager>       # user choice (NetworkManager / iwd+systemd-resolvconf / dhcpcd / none)
+<editor>                # user choice (nano / vim / neovim / none)
+```
+
+Beyond that, each addition is an explicit user choice: filesystem tools (added based on selected filesystems), encryption/LVM/RAID plumbing (added based on partitioning strategy), bootloader packages, snapshot tools, secure boot tooling, opt-in package groups, and desktop environment packages.
+
+DE-tier packages (`bluez bluez-utils avahi nss-mdns network-manager-applet`) are added only when a desktop environment is selected. TTY-only installs don't carry them.
+
 ## Supported options
 
 **Filesystems:** ext4, xfs, btrfs (with optional snapshot management via snapper — configurable frequency, keep count, and snapper assistant), f2fs (flash-friendly for SSDs/NVMe)
@@ -175,11 +193,23 @@ All automated strategies create an EFI System Partition and an XBOOTLDR partitio
 
 **Kernels:** linux, linux-lts, linux-zen, linux-hardened
 
+**Network manager:** NetworkManager (default), iwd + systemd-resolvconf, dhcpcd, or none (configure manually post-install). [Wiki](https://wiki.archlinux.org/title/Network_configuration)
+
+**Editor:** nano (default), vim, neovim, or none
+
 **Desktop environments:** GNOME, KDE Plasma, Hyprland, Sway, i3, Xfce, Cinnamon, Mate, Budgie, Cosmic, Deepin, LXDE, LXQt, bspwm, awesome, qtile, river, niri, labwc, xmonad, or none
+
+**DE Variant** *(GNOME / KDE / XFCE / MATE / LXQt only)*: Full installs the wiki-prescribed meta-group + extras (e.g. `gnome` group + `gnome-extra`); Minimal installs just the shell + DM + core apps. Other DEs/WMs ship curated stacks already and ignore this option.
 
 **Display managers:** GDM, SDDM, LightDM, LXDM, Ly, greetd (with tuigreet), or none (auto-selected based on DE, user-overridable)
 
-**AUR helpers:** paru, yay, pikaur, or none
+**Opt-in package groups** (multi-select, all default off):
+
+- **Network Tools:** openssh, wget, curl
+- **System Utilities:** htop, btop, fastfetch
+- **Dev Tools:** base-devel, gcc, make, gdb
+
+**AUR helpers:** paru, yay, pikaur, or none. AUR helper installation pulls its own `base-devel` dependency in chroot — selecting an AUR helper without checking Dev Tools still works.
 
 **GPU drivers:** auto-detect, NVIDIA (proprietary), NVIDIA Open, AMD, Intel, Nouveau, or none
 

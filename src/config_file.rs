@@ -9,9 +9,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::types::{
-    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager,
-    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
-    SnapshotFrequency, SnapshotTool, Toggle,
+    AurHelper, AutoToggle, BootMode, Bootloader, DeVariant, DesktopEnvironment, DisplayManager,
+    Editor, EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, NetworkManager,
+    PartitionScheme, PlymouthTheme, SnapshotFrequency, SnapshotTool, Toggle,
 };
 
 /// Installation configuration that can be saved/loaded
@@ -96,6 +96,24 @@ pub struct InstallationConfig {
     // Encryption key type
     #[serde(default)]
     pub encryption_key_type: EncryptionKeyType,
+
+    // System base choices
+    #[serde(default)]
+    pub network_manager: NetworkManager,
+    #[serde(default)]
+    pub editor: Editor,
+
+    // Opt-in package groups (space-separated lists; empty = none selected)
+    #[serde(default)]
+    pub network_tools: String,
+    #[serde(default)]
+    pub system_utilities: String,
+    #[serde(default)]
+    pub dev_tools: String,
+
+    // Meta-group DE variant (Full or Minimal); ignored by non-meta DEs/WMs
+    #[serde(default)]
+    pub de_variant: DeVariant,
 }
 
 // Custom Debug impl redacts password fields to prevent accidental leaks
@@ -397,15 +415,14 @@ impl InstallationConfig {
 
         // Validate UEFI-only bootloaders are not selected with BIOS boot mode
         match self.bootloader {
-            Bootloader::SystemdBoot | Bootloader::Refind | Bootloader::Efistub => {
-                if self.boot_mode == BootMode::Bios {
+            Bootloader::SystemdBoot | Bootloader::Refind | Bootloader::Efistub
+                if self.boot_mode == BootMode::Bios => {
                     tracing::error!(bootloader = %self.bootloader, "UEFI-only bootloader with BIOS mode");
                     anyhow::bail!(
                         "{} requires UEFI firmware (BIOS is not supported)",
                         self.bootloader
                     );
                 }
-            }
             _ => {}
         }
 
@@ -543,6 +560,12 @@ impl InstallationConfig {
                 "ENCRYPTION_KEY_TYPE".to_string(),
                 sanitize(self.encryption_key_type.to_string()),
             ),
+            ("NETWORK_MANAGER".to_string(), self.network_manager.to_string()),
+            ("EDITOR".to_string(), self.editor.to_string()),
+            ("NETWORK_TOOLS".to_string(), self.network_tools.clone()),
+            ("SYSTEM_UTILITIES".to_string(), self.system_utilities.clone()),
+            ("DEV_TOOLS".to_string(), self.dev_tools.clone()),
+            ("DE_VARIANT".to_string(), self.de_variant.to_string()),
         ]
     }
 }
@@ -598,6 +621,12 @@ impl Default for InstallationConfig {
             git_repository_url: String::new(),
             unified_kernel_image: Toggle::No,
             encryption_key_type: EncryptionKeyType::Password,
+            network_manager: NetworkManager::NetworkManager,
+            editor: Editor::Nano,
+            network_tools: String::new(),
+            system_utilities: String::new(),
+            dev_tools: String::new(),
+            de_variant: DeVariant::Full,
         }
     }
 }
@@ -681,6 +710,19 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             git_repository_url: get_value("Git Repository URL"),
             unified_kernel_image: parse_or_default(&get_value("Unified Kernel Image")),
             encryption_key_type: parse_or_default(&get_value("Encryption Key Type")),
+            network_manager: parse_or_default(&get_value("Network Manager")),
+            editor: parse_or_default(&get_value("Editor")),
+            network_tools: get_value("Network Tools"),
+            system_utilities: get_value("System Utilities"),
+            dev_tools: get_value("Dev Tools"),
+            de_variant: {
+                let v = get_value("DE Variant");
+                if v == "N/A" || v.is_empty() {
+                    DeVariant::Full
+                } else {
+                    parse_or_default(&v)
+                }
+            },
         }
     }
 }
@@ -718,6 +760,32 @@ mod tests {
         assert!(config.username.is_empty());
         assert_eq!(config.boot_mode, BootMode::Auto);
         assert_eq!(config.root_filesystem, Filesystem::Ext4);
+        // Wiki-aligned defaults: NetworkManager + nano are the historical defaults users expect.
+        assert_eq!(config.network_manager, NetworkManager::NetworkManager);
+        assert_eq!(config.editor, Editor::Nano);
+    }
+
+    #[test]
+    fn test_network_manager_and_editor_in_env_vars() {
+        let mut config = create_test_config();
+        config.network_manager = NetworkManager::Iwd;
+        config.editor = Editor::Vim;
+        let env_vars = config.to_env_vars();
+
+        assert!(env_vars.contains(&("NETWORK_MANAGER".to_string(), "iwd".to_string())));
+        assert!(env_vars.contains(&("EDITOR".to_string(), "vim".to_string())));
+    }
+
+    #[test]
+    fn test_network_manager_none_passes_through() {
+        // "none" is a valid choice; bash side handles the empty package list.
+        let mut config = create_test_config();
+        config.network_manager = NetworkManager::None;
+        config.editor = Editor::None;
+        let env_vars = config.to_env_vars();
+
+        assert!(env_vars.contains(&("NETWORK_MANAGER".to_string(), "none".to_string())));
+        assert!(env_vars.contains(&("EDITOR".to_string(), "none".to_string())));
     }
 
     #[test]

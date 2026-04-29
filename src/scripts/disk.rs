@@ -803,6 +803,46 @@ impl ScriptArgs for WipeDiskArgs {
     }
 }
 
+// ============================================================================
+// Detect OS
+// ============================================================================
+
+/// Type-safe arguments for `scripts/tools/detect_os.sh`.
+///
+/// Non-destructive, read-only OS probe. Mounts partitions temporarily
+/// to check for existing operating systems. Outputs JSON to stdout.
+///
+/// # Field to Flag Mapping
+///
+/// | Rust Field     | CLI Flag         | Required |
+/// |----------------|------------------|----------|
+/// | `install_disk` | `--install-disk` | Yes      |
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Available for ScriptRunner callers; detect_os_definitive() calls directly
+pub struct DetectOsArgs {
+    /// Install target disk (e.g., "/dev/sda"). Used to tag same_disk vs other_disk.
+    pub install_disk: String,
+}
+
+impl ScriptArgs for DetectOsArgs {
+    fn to_cli_args(&self) -> Vec<String> {
+        vec!["--install-disk".to_string(), self.install_disk.clone()]
+    }
+
+    fn get_env_vars(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+
+    fn script_name(&self) -> &'static str {
+        "detect_os.sh"
+    }
+
+    /// OS detection is READ-ONLY — not destructive.
+    fn is_destructive(&self) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1301,5 +1341,44 @@ mod tests {
         };
         assert_eq!(args.script_name(), "manual_partition.sh");
         assert!(args.is_destructive());
+    }
+
+    // ========================================================================
+    // DetectOsArgs Tests
+    // ========================================================================
+
+    #[test]
+    fn test_detect_os_args_cli() {
+        let args = DetectOsArgs {
+            install_disk: "/dev/sda".to_string(),
+        };
+
+        let cli_args = args.to_cli_args();
+        assert_eq!(cli_args[0], "--install-disk");
+        assert_eq!(cli_args[1], "/dev/sda");
+    }
+
+    #[test]
+    fn test_detect_os_args_not_destructive() {
+        let args = DetectOsArgs {
+            install_disk: "/dev/sda".to_string(),
+        };
+        assert!(!args.is_destructive());
+    }
+
+    #[test]
+    fn test_detect_os_args_script_name() {
+        let args = DetectOsArgs {
+            install_disk: "/dev/sda".to_string(),
+        };
+        assert_eq!(args.script_name(), "detect_os.sh");
+    }
+
+    #[test]
+    fn test_detect_os_args_no_env_vars() {
+        let args = DetectOsArgs {
+            install_disk: "/dev/nvme0n1".to_string(),
+        };
+        assert!(args.get_env_vars().is_empty());
     }
 }

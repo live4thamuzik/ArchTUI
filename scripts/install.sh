@@ -314,6 +314,38 @@ main() {
     echo ""
     echo "You can now reboot into your new Arch Linux system."
     echo "Don't forget to remove the installation media."
+
+    # Multi-boot guidance when other operating systems were detected
+    if [[ "${OTHER_LINUX_DETECTED:-}" == "yes" ]]; then
+        echo ""
+        echo "=========================================="
+        echo "  MULTI-BOOT: Other Linux installation detected"
+        [[ -n "${OTHER_LINUX_NAME:-}" ]] && echo "  Detected: ${OTHER_LINUX_NAME} on ${OTHER_LINUX_DEVICE:-unknown}"
+        echo "=========================================="
+
+        if [[ "${OTHER_LINUX_SAME_DISK:-}" == "yes" ]]; then
+            # Same-disk dual boot: os-prober handles it automatically
+            echo ""
+            echo "  Same-disk dual boot detected."
+            echo "  os-prober will auto-detect ${OTHER_LINUX_NAME:-the other Linux} during boot."
+            echo "  No manual steps needed — just boot normally."
+        else
+            # Different-disk: chainload helper instructions
+            echo ""
+            echo "  To chainload this install from your existing bootloader:"
+            echo ""
+            echo "  Option 1: Boot this disk via BIOS/UEFI firmware boot menu,"
+            echo "            then run: /root/setup-chainload.sh"
+            echo ""
+            echo "  Option 2: Use ArchTUI System Tools from this live session"
+            echo "            to mount and configure your existing bootloader."
+            echo ""
+            echo "  The script prints a GRUB menuentry — it does not modify anything."
+            echo "  Append its output to /etc/grub.d/40_custom on your main system,"
+            echo "  then run: sudo grub-mkconfig -o /boot/grub/grub.cfg"
+        fi
+        echo "=========================================="
+    fi
 }
 
 # --- Validation Functions ---
@@ -629,38 +661,83 @@ install_base_system() {
     log_info "Installing base system with pacstrap..."
 
     # Build package list as array
+    # Wiki: https://wiki.archlinux.org/title/Installation_guide#Install_essential_packages
     local -a base_packages=(
         "base"
-        "base-devel"
         "linux-firmware"
-        "sof-firmware"  # For modern onboard audio (Sound Open Firmware)
+        "sof-firmware"  # Sound Open Firmware (modern onboard audio)
         "$KERNEL"
         "${KERNEL}-headers"
     )
 
-    # Add essential packages
+    # Wiki-aligned essentials: sudo (required for non-root admin), git (Arch-cultural),
+    # docs (wiki philosophy), pciutils (GPU auto-detection in chroot).
+    # base-devel is intentionally NOT here — it moves to the Dev Tools opt-in group.
+    # nano/neovim/networkmanager/openssh/htop/curl/wget/bluez/avahi/nss-mdns are NOT here —
+    # network manager and editor are explicit user choices below; the rest are opt-in groups
+    # or DE-tier plumbing.
     local -a essential_packages=(
-        "nano"
-        "neovim"
         "sudo"
-        "networkmanager"
-        "openssh"
         "git"
-        "curl"
-        "wget"
-        "htop"
         "man-db"
         "man-pages"
         "texinfo"
-        # Bluetooth support
-        "bluez"
-        "bluez-utils"
-        # Network discovery (mDNS/Bonjour)
-        "avahi"
-        "nss-mdns"
-        # PCI detection (required for GPU auto-detection in chroot)
         "pciutils"
     )
+
+    # Network configuration tool (user choice via NETWORK_MANAGER env var).
+    # Wiki: https://wiki.archlinux.org/title/Network_configuration
+    case "${NETWORK_MANAGER:-NetworkManager}" in
+        "NetworkManager")
+            essential_packages+=("networkmanager")
+            ;;
+        "iwd")
+            essential_packages+=("iwd" "systemd-resolvconf")
+            ;;
+        "dhcpcd")
+            essential_packages+=("dhcpcd")
+            ;;
+        "none")
+            log_warn "No network manager selected — user must configure networking post-install"
+            ;;
+        *)
+            log_warn "Unknown NETWORK_MANAGER='${NETWORK_MANAGER}', falling back to NetworkManager"
+            essential_packages+=("networkmanager")
+            ;;
+    esac
+
+    # Default editor (user choice via EDITOR env var).
+    case "${EDITOR:-nano}" in
+        "nano") essential_packages+=("nano") ;;
+        "vim") essential_packages+=("vim") ;;
+        "neovim") essential_packages+=("neovim") ;;
+        "none") log_info "No default editor selected — user can install one post-install" ;;
+        *)
+            log_warn "Unknown EDITOR='${EDITOR}', falling back to nano"
+            essential_packages+=("nano")
+            ;;
+    esac
+
+    # DE-tier plumbing: only add bluetooth/mDNS when a desktop environment is selected.
+    # Wiki: https://wiki.archlinux.org/title/Bluetooth and https://wiki.archlinux.org/title/Avahi
+    # TTY-only installs (DESKTOP_ENVIRONMENT=none) skip these — wiki philosophy:
+    # don't install what isn't needed.
+    if [[ -n "${DESKTOP_ENVIRONMENT:-}" && "${DESKTOP_ENVIRONMENT}" != "none" ]]; then
+        essential_packages+=("bluez" "bluez-utils" "avahi" "nss-mdns")
+        # NetworkManager applet (system-tray network indicator) — only when NM is chosen
+        if [[ "${NETWORK_MANAGER:-NetworkManager}" == "NetworkManager" ]]; then
+            essential_packages+=("network-manager-applet")
+        fi
+    fi
+
+    # Opt-in package groups (multi-select TUI options). Each var is space-separated
+    # or empty. Bash word-splitting expands them into individual array entries.
+    # shellcheck disable=SC2206
+    [[ -n "${NETWORK_TOOLS:-}" ]] && essential_packages+=(${NETWORK_TOOLS})
+    # shellcheck disable=SC2206
+    [[ -n "${SYSTEM_UTILITIES:-}" ]] && essential_packages+=(${SYSTEM_UTILITIES})
+    # shellcheck disable=SC2206
+    [[ -n "${DEV_TOOLS:-}" ]] && essential_packages+=(${DEV_TOOLS})
 
     # Add filesystem tools based on selected filesystems
     local -a fs_packages=()
@@ -975,6 +1052,9 @@ configure_chroot() {
         printf 'export WINDOWS_EFI_PATH=%q\n' "${WINDOWS_EFI_PATH:-}"
         printf 'export WINDOWS_ESP_DEVICE=%q\n' "${WINDOWS_ESP_DEVICE:-}"
         printf 'export OTHER_OS_DETECTED=%q\n' "${OTHER_OS_DETECTED:-}"
+        printf 'export OTHER_LINUX_DETECTED=%q\n' "${OTHER_LINUX_DETECTED:-}"
+        printf 'export OTHER_LINUX_NAME=%q\n' "${OTHER_LINUX_NAME:-}"
+        printf 'export OTHER_LINUX_SAME_DISK=%q\n' "${OTHER_LINUX_SAME_DISK:-}"
         printf 'export LOG_LEVEL=%q\n' "${LOG_LEVEL:-INFO}"
     } > /mnt/install_config.sh
 

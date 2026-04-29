@@ -559,11 +559,10 @@ impl App {
             // Handle input events
             if crossterm::event::poll(Duration::from_millis(50))? {
                 match crossterm::event::read()? {
-                    Event::Key(key_event) => {
-                        if self.handle_key_event(key_event)? {
+                    Event::Key(key_event)
+                        if self.handle_key_event(key_event)? => {
                             break; // Exit requested
                         }
-                    }
                     Event::Resize(width, height) => {
                         // Handle window resize - update scroll state
                         self.handle_resize(width, height)?;
@@ -1086,11 +1085,10 @@ impl App {
             KeyCode::End => {
                 self.move_to_last();
             }
-            KeyCode::Enter => {
-                if self.handle_enter()? {
+            KeyCode::Enter
+                if self.handle_enter()? => {
                     return Ok(true);
                 }
-            }
             _ => {}
         }
 
@@ -1111,20 +1109,18 @@ impl App {
         {
             let mut state = self.lock_state();
             match state.mode {
-                AppMode::MainMenu => {
-                    if state.main_menu_selection > 0 {
+                AppMode::MainMenu
+                    if state.main_menu_selection > 0 => {
                         state.main_menu_selection -= 1;
                     }
-                }
                 AppMode::ToolsMenu
                 | AppMode::DiskTools
                 | AppMode::SystemTools
                 | AppMode::UserTools
-                | AppMode::NetworkTools => {
-                    if state.tools_menu_selection > 0 {
+                | AppMode::NetworkTools
+                    if state.tools_menu_selection > 0 => {
                         state.tools_menu_selection -= 1;
                     }
-                }
                 AppMode::ToolDialog => {
                     if let Some(ref mut dialog) = state.tool_dialog
                         && dialog.current_param > 0
@@ -1159,42 +1155,36 @@ impl App {
         {
             let mut state = self.lock_state();
             match state.mode {
-                AppMode::MainMenu => {
-                    if state.main_menu_selection < 3 {
+                AppMode::MainMenu
+                    if state.main_menu_selection < 3 => {
                         // 4 items total (0-3)
                         state.main_menu_selection += 1;
                     }
-                }
-                AppMode::ToolsMenu => {
-                    if state.tools_menu_selection < 4 {
+                AppMode::ToolsMenu
+                    if state.tools_menu_selection < 4 => {
                         // 5 items total (0-4)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::DiskTools => {
-                    if state.tools_menu_selection < 6 {
+                AppMode::DiskTools
+                    if state.tools_menu_selection < 6 => {
                         // 7 items total (0-6)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::SystemTools => {
-                    if state.tools_menu_selection < 9 {
+                AppMode::SystemTools
+                    if state.tools_menu_selection < 9 => {
                         // 10 items total (0-9)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::UserTools => {
-                    if state.tools_menu_selection < 7 {
+                AppMode::UserTools
+                    if state.tools_menu_selection < 7 => {
                         // 8 items total (0-7)
                         state.tools_menu_selection += 1;
                     }
-                }
-                AppMode::NetworkTools => {
-                    if state.tools_menu_selection < 5 {
+                AppMode::NetworkTools
+                    if state.tools_menu_selection < 5 => {
                         // 6 items total (0-5)
                         state.tools_menu_selection += 1;
                     }
-                }
                 AppMode::ToolDialog => {
                     if let Some(ref mut dialog) = state.tool_dialog
                         && dialog.current_param < dialog.parameters.len().saturating_sub(1)
@@ -1862,7 +1852,16 @@ impl App {
                 // Show confirmation dialog before starting
                 let mut state = self.lock_state();
                 state.pre_dialog_mode = Some(AppMode::GuidedInstaller);
-                state.confirm_dialog = Some(start_install_confirm());
+                let detected_os = state.detected_os.as_ref();
+                let strategy = state
+                    .config
+                    .options
+                    .iter()
+                    .find(|o| o.name == "Partitioning Strategy")
+                    .map(|o| o.get_value())
+                    .unwrap_or_default();
+                state.confirm_dialog =
+                    Some(start_install_confirm(detected_os, &strategy));
                 state.set_mode(AppMode::ConfirmDialog);
             } else {
                 // Validation failed - status message already set in validate_configuration_for_installation
@@ -2829,6 +2828,11 @@ impl App {
                     .start_package_selection(option.name.clone(), option.get_value());
                 self.sync_config_edit_from_input();
             }
+            "Network Tools" | "System Utilities" | "Dev Tools" => {
+                self.input_handler
+                    .start_multi_select_group(&option.name, &option.get_value());
+                self.sync_config_edit_from_input();
+            }
             "Timezone Region" => {
                 let options = InputHandler::get_predefined_options(&option.name);
                 self.set_inline_selection(options, option.get_value());
@@ -2986,6 +2990,31 @@ impl App {
                             .to_string();
                 }
             }
+            "DE Variant" => {
+                let de = {
+                    let state = self.lock_state();
+                    state
+                        .config
+                        .options
+                        .iter()
+                        .find(|opt| opt.name == "Desktop Environment")
+                        .map(|opt| opt.get_value().to_lowercase())
+                        .unwrap_or_default()
+                };
+                let has_variant = matches!(
+                    de.as_str(),
+                    "gnome" | "kde" | "xfce" | "mate" | "lxqt"
+                );
+                if has_variant {
+                    let options = InputHandler::get_predefined_options(&option.name);
+                    self.set_inline_selection(options, option.get_value());
+                } else {
+                    let mut state = self.lock_state();
+                    state.status_message =
+                        "DE Variant only applies to GNOME, KDE, XFCE, MATE, and LXQt."
+                            .to_string();
+                }
+            }
             "AUR Helper" => {
                 let de_requires_aur = {
                     let state = self.lock_state();
@@ -3036,9 +3065,10 @@ impl App {
                 // rather than the inline right-panel editor. ConfigEditState::None
                 // lets keys flow through to InputHandler::handle_input which already
                 // handles Up/Down/Space/Enter correctly for both single and multi-disk.
-                InputType::DiskSelection { .. } | InputType::MultiDiskSelection { .. } => {
-                    ConfigEditState::None
-                }
+                // MultiSelectGroup uses the same popup overlay flow.
+                InputType::DiskSelection { .. }
+                | InputType::MultiDiskSelection { .. }
+                | InputType::MultiSelectGroup { .. } => ConfigEditState::None,
                 InputType::PackageSelection {
                     current_input,
                     output_lines,
@@ -3214,17 +3244,15 @@ impl App {
                         value.insert(cursor, c);
                         cursor += 1;
                     }
-                    KeyCode::Backspace => {
-                        if cursor > 0 {
+                    KeyCode::Backspace
+                        if cursor > 0 => {
                             value.remove(cursor - 1);
                             cursor -= 1;
                         }
-                    }
-                    KeyCode::Delete => {
-                        if cursor < value.len() {
+                    KeyCode::Delete
+                        if cursor < value.len() => {
                             value.remove(cursor);
                         }
-                    }
                     KeyCode::Left => {
                         cursor = cursor.saturating_sub(1);
                     }
@@ -3536,6 +3564,11 @@ impl App {
         // Handle dependent option updates
         self.handle_dependent_options(&option_name, &value)?;
 
+        // Run definitive OS detection probe when disk is confirmed
+        if option_name == "Disk" {
+            self.run_os_detection_probe()?;
+        }
+
         // Move to next step
         {
             {
@@ -3549,6 +3582,103 @@ impl App {
 
         Ok(())
     } // Close the update_configuration_value function
+
+    /// Run the definitive OS detection probe after disk selection.
+    ///
+    /// Calls `detect_os.sh` synchronously (<3s), stores results in AppState,
+    /// then applies cascading effects (auto-set OS Prober, warnings).
+    fn run_os_detection_probe(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let disk_path = {
+            let state = self.lock_state();
+            state
+                .config
+                .options
+                .iter()
+                .find(|opt| opt.name == "Disk")
+                .map(|opt| opt.get_value())
+                .unwrap_or_default()
+        };
+
+        if disk_path.is_empty() || disk_path == "N/A" {
+            return Ok(());
+        }
+
+        // Strip to first disk for comma-separated RAID configs
+        let base_disk = disk_path.split(',').next().unwrap_or(&disk_path).to_string();
+
+        {
+            let mut state = self.lock_state();
+            state.status_message = "Scanning for existing operating systems...".to_string();
+        }
+
+        let results = crate::hardware::detect_os_definitive(&base_disk);
+
+        {
+            let mut state = self.lock_state();
+            state.detected_os = Some(results);
+        }
+
+        self.apply_os_detection_cascades();
+        Ok(())
+    }
+
+    /// Apply cascading config changes based on OS detection results.
+    ///
+    /// - Auto-sets OS Prober = Yes when OS detected and bootloader is GRUB
+    /// - Shows warning when auto strategy selected on disk with same-disk OS
+    fn apply_os_detection_cascades(&mut self) {
+        let mut state = self.lock_state();
+
+        let detected = match state.detected_os {
+            Some(ref d) if d.has_any() => d.clone(),
+            _ => {
+                state.status_message = "No existing operating systems detected.".to_string();
+                return;
+            }
+        };
+
+        // Auto-set OS Prober when OS detected AND bootloader is GRUB
+        let bootloader = state
+            .config
+            .options
+            .iter()
+            .find(|o| o.name == "Bootloader")
+            .map(|o| o.get_value().to_lowercase())
+            .unwrap_or_default();
+
+        if bootloader == "grub"
+            && let Some(prober) = state
+                .config
+                .options
+                .iter_mut()
+                .find(|o| o.name == "OS Prober")
+        {
+            prober.value = "Yes".to_string();
+        }
+
+        // Check if auto strategy on disk with same-disk OS → destructive warning
+        let strategy = state
+            .config
+            .options
+            .iter()
+            .find(|o| o.name == "Partitioning Strategy")
+            .map(|o| o.get_value())
+            .unwrap_or_default();
+
+        let same = detected.same_disk_os();
+        if !same.is_empty() && strategy != "manual" && strategy != "pre_mounted" {
+            let names: Vec<&str> = same.iter().map(|o| o.name.as_str()).collect();
+            state.status_message = format!(
+                "WARNING: {} on target disk — auto strategy will DESTROY it! OS Prober auto-enabled.",
+                names.join(", ")
+            );
+        } else {
+            state.status_message = format!(
+                "Detected: {}. OS Prober auto-enabled.",
+                detected.summary_line()
+            );
+        }
+    }
 
     /// Auto-set encryption based on partitioning strategy
     fn auto_set_encryption(
@@ -3643,6 +3773,9 @@ impl App {
 
         let de: DesktopEnvironment = desktop_env.parse().unwrap_or_default();
 
+        // Whether this DE has a meaningful Full/Minimal split (only the 5 meta-group DEs).
+        let has_full_variant = matches!(desktop_env, "gnome" | "kde" | "xfce" | "mate" | "lxqt");
+
         {
             let mut state = self.lock_state();
             // Auto-set display manager
@@ -3654,6 +3787,23 @@ impl App {
                     .find(|opt| opt.name == "Display Manager")
             {
                 dm_opt.value = display_manager.to_string();
+            }
+
+            // Cascade DE Variant: meaningful only for meta-group DEs.
+            if let Some(variant_opt) = state
+                .config
+                .options
+                .iter_mut()
+                .find(|opt| opt.name == "DE Variant")
+            {
+                if has_full_variant {
+                    // If the previous value was N/A (DE was non-meta before), default to Full.
+                    if variant_opt.get_value() == "N/A" {
+                        variant_opt.value = "Full".to_string();
+                    }
+                } else {
+                    variant_opt.value = "N/A".to_string();
+                }
             }
 
             // Auto-set AUR helper when DE requires AUR packages
@@ -3885,9 +4035,25 @@ impl App {
                             }
                         }
                     }
+
+                    // Warn when switching TO auto strategy with same-disk OS detected
+                    if value != "manual"
+                        && value != "pre_mounted"
+                        && let Some(ref detected) = state.detected_os
+                    {
+                        let same = detected.same_disk_os();
+                        if !same.is_empty() {
+                            let names: Vec<&str> =
+                                same.iter().map(|o| o.name.as_str()).collect();
+                            state.status_message = format!(
+                                "WARNING: {} on target disk — auto strategy will DESTROY it!",
+                                names.join(", ")
+                            );
+                        }
+                    }
                 }
-                "Root Filesystem" => {
-                    if value.to_lowercase() != "btrfs" {
+                "Root Filesystem"
+                    if value.to_lowercase() != "btrfs" => {
                         // Disable all btrfs options when not using btrfs
                         for name in &[
                             "Btrfs Snapshots",
@@ -3908,7 +4074,6 @@ impl App {
                             }
                         }
                     }
-                }
                 "Btrfs Snapshots" => {
                     if value.to_lowercase() == "no" {
                         // Disable frequency, keep count, and snapshot tool when snapshots disabled
@@ -4044,8 +4209,8 @@ impl App {
                         }
                     }
                 }
-                "Plymouth" => {
-                    if value.to_lowercase() == "no" {
+                "Plymouth"
+                    if value.to_lowercase() == "no" => {
                         // Set plymouth theme to none when plymouth is disabled
                         if let Some(theme_option) = state
                             .config
@@ -4056,13 +4221,14 @@ impl App {
                             theme_option.value = "none".to_string();
                         }
                     }
-                }
                 "Disk" => {
                     // Clear stale manual partition assignments on disk change
                     state.manual_partition_map = None;
+                    // Clear stale OS detection results — re-run after lock is dropped
+                    state.detected_os = None;
                 }
-                "Git Repository" => {
-                    if value.to_lowercase() == "no" {
+                "Git Repository"
+                    if value.to_lowercase() == "no" => {
                         // Clear git repository URL when git is disabled
                         if let Some(url_option) = state
                             .config
@@ -4073,9 +4239,8 @@ impl App {
                             url_option.value = String::new();
                         }
                     }
-                }
-                "GRUB Theme" => {
-                    if value.to_lowercase() == "no" {
+                "GRUB Theme"
+                    if value.to_lowercase() == "no" => {
                         // Set GRUB theme selection to none when themes are disabled
                         if let Some(theme_option) = state
                             .config
@@ -4086,7 +4251,6 @@ impl App {
                             theme_option.value = "none".to_string();
                         }
                     }
-                }
                 "Bootloader" => {
                     if value.to_lowercase() != "grub" {
                         // Reset GRUB-specific options when switching away from GRUB
@@ -4113,6 +4277,28 @@ impl App {
                             .find(|opt| opt.name == "OS Prober")
                         {
                             prober_option.value = "No".to_string();
+                        }
+                    } else {
+                        // Switching TO grub: auto-enable OS Prober if OS detected
+                        let os_summary = state
+                            .detected_os
+                            .as_ref()
+                            .filter(|d| d.has_any())
+                            .map(|d| d.summary_line());
+
+                        if os_summary.is_some()
+                            && let Some(prober_option) = state
+                                .config
+                                .options
+                                .iter_mut()
+                                .find(|opt| opt.name == "OS Prober")
+                        {
+                            prober_option.value = "Yes".to_string();
+                        }
+
+                        if let Some(summary) = os_summary {
+                            state.status_message =
+                                format!("OS Prober auto-enabled — detected: {}", summary);
                         }
                     }
                 }

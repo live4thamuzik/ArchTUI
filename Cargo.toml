@@ -2,7 +2,7 @@
 name = "archtui"
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.95"
 license = "MIT"
 description = "A terminal-based interface for installing and administering Arch Linux"
 repository = "https://github.com/live4thamuzik/ArchTUI"

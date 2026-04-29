@@ -201,6 +201,7 @@ main() {
 
     configure_numlock || log_warn "Numlock configuration failed — continuing"
     deploy_dotfiles || log_warn "Dotfiles deployment failed — continuing"
+    generate_chainload_helper || log_warn "Chainload helper generation failed — continuing"
     final_cleanup || true
 
     log_success "Chroot configuration complete!"
@@ -337,13 +338,37 @@ configure_sudoers() {
 enable_base_services() {
     log_info "Enabling base services..."
 
-    # NetworkManager
-    log_cmd "systemctl enable NetworkManager.service"
-    systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+    # Network manager service (user choice via NETWORK_MANAGER env var).
+    # Wiki: https://wiki.archlinux.org/title/Network_configuration
+    case "${NETWORK_MANAGER:-NetworkManager}" in
+        "NetworkManager")
+            log_cmd "systemctl enable NetworkManager.service"
+            systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+            ;;
+        "iwd")
+            log_cmd "systemctl enable systemd-networkd.service iwd.service systemd-resolved.service"
+            systemctl enable systemd-networkd.service 2>/dev/null || log_warn "systemd-networkd not found"
+            systemctl enable iwd.service 2>/dev/null || log_warn "iwd service not found"
+            systemctl enable systemd-resolved.service 2>/dev/null || log_warn "systemd-resolved not found"
+            ;;
+        "dhcpcd")
+            log_cmd "systemctl enable dhcpcd.service"
+            systemctl enable dhcpcd.service 2>/dev/null || log_warn "dhcpcd service not found"
+            ;;
+        "none")
+            log_info "No network manager selected — skipping service enable"
+            ;;
+        *)
+            log_warn "Unknown NETWORK_MANAGER='${NETWORK_MANAGER}', enabling NetworkManager.service as fallback"
+            systemctl enable NetworkManager.service 2>/dev/null || log_warn "NetworkManager service not found"
+            ;;
+    esac
 
-    # SSH (optional, but useful)
-    log_cmd "systemctl enable sshd.service"
-    systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
+    # SSH — only enable if openssh is actually installed (now opt-in via Network Tools group)
+    if pacman -Qq openssh >/dev/null 2>&1; then
+        log_cmd "systemctl enable sshd.service"
+        systemctl enable sshd.service 2>/dev/null || log_warn "sshd service not found"
+    fi
 
     # Time synchronization
     case "${TIME_SYNC:-No}" in
@@ -364,13 +389,46 @@ enable_base_services() {
     # SSD trim timer (good for SSDs)
     systemctl enable fstrim.timer 2>/dev/null || log_warn "Failed to enable fstrim.timer"
 
-    # Bluetooth support
-    systemctl enable bluetooth.service 2>/dev/null || log_warn "bluetooth service not found"
+    # Bluetooth — only if bluez was installed (DE-tier plumbing).
+    if pacman -Qq bluez >/dev/null 2>&1; then
+        log_cmd "systemctl enable bluetooth.service"
+        systemctl enable bluetooth.service 2>/dev/null || log_warn "bluetooth service not found"
+    fi
 
-    # Avahi mDNS/DNS-SD (network discovery)
-    systemctl enable avahi-daemon.service 2>/dev/null || log_warn "avahi-daemon service not found"
+    # Avahi mDNS/DNS-SD — only if avahi was installed.
+    # Wiki: https://wiki.archlinux.org/title/Avahi#Hostname_resolution
+    # Avahi requires nsswitch.conf to include mdns_minimal for .local resolution to work.
+    if pacman -Qq avahi >/dev/null 2>&1; then
+        log_cmd "systemctl enable avahi-daemon.service"
+        systemctl enable avahi-daemon.service 2>/dev/null || log_warn "avahi-daemon service not found"
+        configure_nsswitch_mdns
+    fi
 
     log_success "Base services enabled"
+}
+
+# Insert mdns_minimal into the hosts: line of /etc/nsswitch.conf so that
+# .local hostname resolution actually works when avahi is installed.
+# Wiki: https://wiki.archlinux.org/title/Avahi#Hostname_resolution
+# Idempotent: re-running on an already-edited file is a no-op.
+configure_nsswitch_mdns() {
+    local nsswitch="/etc/nsswitch.conf"
+    if [[ ! -f "$nsswitch" ]]; then
+        log_warn "nsswitch.conf not found — skipping mDNS hosts configuration"
+        return 0
+    fi
+    if grep -qE '^\s*hosts:.*mdns_minimal' "$nsswitch"; then
+        log_info "nsswitch.conf already contains mdns_minimal — no change needed"
+        return 0
+    fi
+    log_cmd "configure nsswitch.conf for mDNS"
+    # Insert mdns_minimal [NOTFOUND=return] before resolve/dns on the hosts line.
+    # Use | as sed delimiter to avoid escaping issues with the brackets.
+    if ! sed -i -E 's|^(hosts:[[:space:]]+)(.*)|\1mdns_minimal [NOTFOUND=return] \2|' "$nsswitch"; then
+        log_warn "Failed to edit nsswitch.conf for mDNS — .local resolution may not work"
+        return 0
+    fi
+    log_success "Configured nsswitch.conf for mDNS"
 }
 
 # =============================================================================
@@ -1441,6 +1499,146 @@ configure_grub_theme() {
     return 0
 }
 
+# Generate a helper script that prints a GRUB menuentry for chainloading this
+# install from another system's bootloader. The script resolves all UUIDs at
+# runtime so it remains correct even when device paths change between boots.
+# Only generated when another Linux installation was detected during partitioning.
+generate_chainload_helper() {
+    if [[ "${OTHER_LINUX_DETECTED:-}" != "yes" ]]; then
+        log_info "No other Linux installation detected — skipping chainload helper"
+        return 0
+    fi
+
+    log_info "Generating chainload helper script at /root/setup-chainload.sh"
+
+    cat > /root/setup-chainload.sh << 'CHAINLOAD_EOF'
+#!/bin/bash
+# setup-chainload.sh — Generate GRUB menuentry for chainloading this install
+#
+# Run this ON the system you want to chainload (not on the host system).
+# The output is a GRUB menuentry to append to /etc/grub.d/40_custom on your
+# MAIN system (the one whose bootloader you boot from).
+#
+# After appending, run on the main system:
+#   sudo grub-mkconfig -o /boot/grub/grub.cfg
+#
+# This script does NOT modify anything — output only.
+set -euo pipefail
+
+# ─── Resolve system identity at runtime ──────────────────────────────
+ROOT_UUID=$(findmnt -no UUID / 2>/dev/null) || { echo "ERROR: Cannot determine root UUID" >&2; exit 1; }
+BOOT_UUID=$(findmnt -no UUID /boot 2>/dev/null || echo "")
+OS_NAME=$(grep "^NAME=" /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
+OS_NAME="${OS_NAME:-Linux}"
+
+# ─── Detect kernel and initramfs ─────────────────────────────────────
+KERNEL=""
+INITRAMFS=""
+for k in /boot/vmlinuz-*; do
+    [[ -f "$k" ]] || continue
+    KERNEL="$k"
+    break
+done
+# Prefer the standard initramfs over fallback
+for i in /boot/initramfs-linux.img /boot/initramfs-*-fallback.img /boot/initramfs-*.img; do
+    [[ -f "$i" ]] || continue
+    INITRAMFS="$i"
+    break
+done
+
+if [[ -z "$KERNEL" || -z "$INITRAMFS" ]]; then
+    echo "ERROR: Cannot find kernel or initramfs in /boot" >&2
+    exit 1
+fi
+
+# ─── Detect LUKS encryption ─────────────────────────────────────────
+LUKS_PARAM=""
+root_source=$(findmnt -no SOURCE / 2>/dev/null)
+if [[ "$root_source" == /dev/mapper/* ]]; then
+    mapper_name=$(basename "$root_source")
+    # Walk back from the mapper to find the underlying LUKS partition
+    for slave in /sys/block/dm-*/slaves/*; do
+        [[ -e "$slave" ]] || continue
+        parent_dev="/dev/$(basename "$slave")"
+        luks_uuid=$(cryptsetup luksUUID "$parent_dev" 2>/dev/null || true)
+        if [[ -n "$luks_uuid" ]]; then
+            LUKS_PARAM="cryptdevice=UUID=${luks_uuid}:${mapper_name}"
+            break
+        fi
+    done
+fi
+
+# ─── Detect LVM ─────────────────────────────────────────────────────
+LVM_ROOT=""
+if [[ "$root_source" == /dev/mapper/* ]] && lvs "$root_source" &>/dev/null; then
+    # Root is on an LVM logical volume — use the mapper path directly
+    LVM_ROOT="$root_source"
+fi
+
+# ─── Detect btrfs subvolume ──────────────────────────────────────────
+BTRFS_FLAGS=""
+if findmnt -no FSTYPE / 2>/dev/null | grep -q btrfs; then
+    subvol=$(findmnt -no OPTIONS / 2>/dev/null | grep -oP 'subvol=\K[^,]+' || true)
+    [[ -n "$subvol" ]] && BTRFS_FLAGS="rootflags=subvol=${subvol}"
+fi
+
+# ─── Build root= parameter ──────────────────────────────────────────
+if [[ -n "$LVM_ROOT" && -n "$LUKS_PARAM" ]]; then
+    # LVM on LUKS: cryptdevice unlocks, root points to LV
+    root_param="${LUKS_PARAM} root=${LVM_ROOT}"
+elif [[ -n "$LUKS_PARAM" ]]; then
+    # Plain LUKS: cryptdevice unlocks, root points to mapper
+    root_param="${LUKS_PARAM} root=/dev/mapper/${mapper_name}"
+elif [[ -n "$LVM_ROOT" ]]; then
+    # Plain LVM (no encryption)
+    root_param="root=${LVM_ROOT}"
+else
+    root_param="root=UUID=${ROOT_UUID}"
+fi
+
+# ─── Build kernel command line ───────────────────────────────────────
+cmdline="${root_param} rw"
+[[ -n "$BTRFS_FLAGS" ]] && cmdline="${cmdline} ${BTRFS_FLAGS}"
+
+# ─── Determine search UUID ──────────────────────────────────────────
+# Use /boot UUID if separate partition, otherwise root UUID
+search_uuid="${BOOT_UUID:-$ROOT_UUID}"
+
+# Strip /boot prefix for GRUB paths (GRUB's root is the boot partition)
+kernel_path="${KERNEL#/boot}"
+initramfs_path="${INITRAMFS#/boot}"
+# If /boot is not a separate partition, paths stay as-is under GRUB's root
+if [[ -z "$BOOT_UUID" ]]; then
+    kernel_path="${KERNEL}"
+    initramfs_path="${INITRAMFS}"
+fi
+
+# ─── Output ──────────────────────────────────────────────────────────
+cat <<EOF
+
+# ─── Chainload entry for: ${OS_NAME} ───────────────────────────────
+# Generated by: setup-chainload.sh (ArchTUI)
+# Root UUID: ${ROOT_UUID}
+#
+# Append this to /etc/grub.d/40_custom on your MAIN system, then run:
+#   sudo grub-mkconfig -o /boot/grub/grub.cfg
+
+menuentry "${OS_NAME} (${ROOT_UUID:0:8})" {
+    insmod part_gpt
+    insmod ext2
+    insmod btrfs
+    search --no-floppy --fs-uuid --set=root ${search_uuid}
+    linux ${kernel_path} ${cmdline}
+    initrd ${initramfs_path}
+}
+EOF
+CHAINLOAD_EOF
+
+    chmod +x /root/setup-chainload.sh
+    log_success "Chainload helper script generated at /root/setup-chainload.sh"
+    return 0
+}
+
 configure_secure_boot() {
     if [[ "${SECURE_BOOT:-No}" != "Yes" ]]; then
         log_info "Secure Boot not requested"
@@ -1654,22 +1852,43 @@ HOOKEOF
 install_desktop_environment() {
     local de="${DESKTOP_ENVIRONMENT:-none}"
     de="${de,,}"  # Convert to lowercase
+    local variant="${DE_VARIANT:-Full}"
 
-    log_info "Installing desktop environment: $de"
+    log_info "Installing desktop environment: $de (variant: $variant)"
 
     case "$de" in
         "kde"|"plasma")
-            install_packages "KDE Plasma" plasma-meta kde-applications-meta konsole dolphin \
-                networkmanager pipewire pipewire-pulse wireplumber firefox ark
+            # Wiki: https://wiki.archlinux.org/title/KDE — Minimal = plasma-desktop + core apps,
+            # Full = + plasma-meta + kde-applications-meta
+            local kde_baseline=(plasma-desktop konsole dolphin kate kwallet plasma-nm plasma-pa \
+                pipewire pipewire-pulse wireplumber firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "KDE Plasma (Minimal)" "${kde_baseline[@]}"
+            else
+                install_packages "KDE Plasma (Full)" "${kde_baseline[@]}" plasma-meta kde-applications-meta
+            fi
             ;;
         "gnome")
-            install_packages "GNOME" gnome gnome-tweaks gnome-terminal \
-                networkmanager pipewire pipewire-pulse wireplumber firefox file-roller
+            # Wiki: https://wiki.archlinux.org/title/GNOME — Minimal = shell + control center +
+            # terminal + nautilus, Full = + `gnome` group + `gnome-extra`
+            local gnome_baseline=(gnome-shell gnome-control-center gnome-terminal nautilus \
+                gnome-keyring pipewire pipewire-pulse wireplumber firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "GNOME (Minimal)" "${gnome_baseline[@]}"
+            else
+                install_packages "GNOME (Full)" "${gnome_baseline[@]}" gnome gnome-extra
+            fi
             ;;
         "xfce")
-            install_packages "XFCE" xfce4 xfce4-goodies xorg-server xorg-xinit \
-                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol \
-                firefox thunar-archive-plugin
+            # Wiki: https://wiki.archlinux.org/title/Xfce — Minimal = xfce4 group only,
+            # Full = + xfce4-goodies + thunar-archive-plugin
+            local xfce_baseline=(xfce4 xorg-server xorg-xinit \
+                pipewire pipewire-pulse wireplumber pavucontrol firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "XFCE (Minimal)" "${xfce_baseline[@]}"
+            else
+                install_packages "XFCE (Full)" "${xfce_baseline[@]}" xfce4-goodies thunar-archive-plugin
+            fi
             ;;
         "i3"|"i3wm")
             install_packages "i3 Window Manager" i3-wm i3status i3lock dmenu rofi alacritty \
@@ -1697,8 +1916,14 @@ install_desktop_environment() {
                 networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "mate")
-            install_packages "MATE" mate mate-extra xorg-server xorg-xinit \
-                networkmanager network-manager-applet pipewire pipewire-pulse wireplumber pavucontrol firefox
+            # Wiki: https://wiki.archlinux.org/title/MATE — Minimal = mate group only, Full = + mate-extra
+            local mate_baseline=(mate xorg-server xorg-xinit \
+                pipewire pipewire-pulse wireplumber pavucontrol firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "MATE (Minimal)" "${mate_baseline[@]}"
+            else
+                install_packages "MATE (Full)" "${mate_baseline[@]}" mate-extra
+            fi
             ;;
         "budgie")
             install_packages "Budgie" budgie-desktop budgie-extras gnome-terminal nautilus gnome-screenshot \
@@ -1721,8 +1946,15 @@ install_desktop_environment() {
                 networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
             ;;
         "lxqt")
-            install_packages "LXQt" lxqt breeze-icons \
-                networkmanager pipewire pipewire-pulse wireplumber pavucontrol firefox
+            # Wiki: https://wiki.archlinux.org/title/LXQt — Minimal = lxqt group + breeze-icons,
+            # Full = + featherpad + pavucontrol-qt
+            local lxqt_baseline=(lxqt breeze-icons \
+                pipewire pipewire-pulse wireplumber pavucontrol firefox)
+            if [[ "$variant" == "Minimal" ]]; then
+                install_packages "LXQt (Minimal)" "${lxqt_baseline[@]}"
+            else
+                install_packages "LXQt (Full)" "${lxqt_baseline[@]}" featherpad pavucontrol-qt
+            fi
             ;;
         "bspwm")
             install_packages "bspwm" bspwm sxhkd xorg-server xorg-xinit alacritty dmenu picom \

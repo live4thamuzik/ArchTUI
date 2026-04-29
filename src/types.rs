@@ -565,6 +565,112 @@ pub enum SnapshotFrequency {
     Monthly,
 }
 
+/// Network configuration tool selection.
+/// Wiki: https://wiki.archlinux.org/title/Network_configuration
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
+#[allow(clippy::enum_variant_names)]
+pub enum NetworkManager {
+    #[default]
+    #[strum(serialize = "NetworkManager")]
+    NetworkManager,
+    #[strum(serialize = "iwd")]
+    Iwd,
+    #[strum(serialize = "dhcpcd")]
+    Dhcpcd,
+    #[strum(serialize = "none")]
+    None,
+}
+
+impl NetworkManager {
+    /// Pacman packages required for this network configuration.
+    /// `None` means the user will configure networking post-install (no packages added).
+    pub fn packages(&self) -> &'static [&'static str] {
+        match self {
+            Self::NetworkManager => &["networkmanager"],
+            // iwd needs systemd-resolvconf for DNS handoff to systemd-resolved (wiki iwd page)
+            Self::Iwd => &["iwd", "systemd-resolvconf"],
+            Self::Dhcpcd => &["dhcpcd"],
+            Self::None => &[],
+        }
+    }
+}
+
+/// Variant for meta-group desktop environments (GNOME / KDE / XFCE / MATE / LXQt).
+/// Full = wiki-prescribed meta group + extras; Minimal = just the shell/baseline.
+/// Other DEs/WMs ignore this setting (their package list is already curated).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
+pub enum DeVariant {
+    #[default]
+    #[strum(serialize = "Full")]
+    Full,
+    #[strum(serialize = "Minimal")]
+    Minimal,
+}
+
+/// Default text editor for the installed system.
+/// Wiki: https://wiki.archlinux.org/title/Installation_guide#Initial_configuration
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+)]
+#[strum(serialize_all = "lowercase")]
+pub enum Editor {
+    #[default]
+    #[strum(serialize = "nano")]
+    Nano,
+    #[strum(serialize = "vim")]
+    Vim,
+    #[strum(serialize = "neovim")]
+    Neovim,
+    #[strum(serialize = "none")]
+    None,
+}
+
+impl Editor {
+    /// Pacman package name for this editor, or `None` if user opted out.
+    pub fn package(&self) -> Option<&'static str> {
+        match self {
+            Self::Nano => Some("nano"),
+            Self::Vim => Some("vim"),
+            Self::Neovim => Some("neovim"),
+            Self::None => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -67,6 +67,14 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     // 1. Base system — always installed
     packages.extend_from_slice(BASE_PACKAGES);
 
+    // 1b. Network manager (user choice)
+    packages.extend_from_slice(config.network_manager.packages());
+
+    // 1c. Default editor (user choice; may be None)
+    if let Some(editor_pkg) = config.editor.package() {
+        packages.push(editor_pkg);
+    }
+
     // 2. Kernel
     let kernel_pkgs = match config.kernel {
         Kernel::Linux => kernel_packages::LINUX,
@@ -110,6 +118,23 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
     let profile_pkgs = profile.get_packages();
     packages.extend_from_slice(profile_pkgs);
     tracing::debug!(de = %config.desktop_environment, count = profile_pkgs.len(), "Resolved profile packages");
+
+    // 5a. Full-variant extras (only meta-group DEs have meaningful extras)
+    if profile.has_full_variant() && config.de_variant == crate::types::DeVariant::Full {
+        let extras = profile.get_full_extras();
+        packages.extend_from_slice(extras);
+        tracing::debug!(de = %config.desktop_environment, count = extras.len(), "Added Full-variant extras");
+    }
+
+    // 5b. DE-tier plumbing: bluetooth + mDNS for any DE (TTY installs skip this).
+    // Wiki: https://wiki.archlinux.org/title/Bluetooth and https://wiki.archlinux.org/title/Avahi
+    if config.desktop_environment != DesktopEnvironment::None {
+        packages.extend_from_slice(&["bluez", "bluez-utils", "avahi", "nss-mdns"]);
+        // NM applet only makes sense when NetworkManager is the chosen network stack.
+        if config.network_manager == crate::types::NetworkManager::NetworkManager {
+            packages.push("network-manager-applet");
+        }
+    }
 
     // 6. Flatpak
     if config.flatpak == Toggle::Yes {
@@ -180,11 +205,22 @@ pub fn resolve_packages(config: &InstallationConfig) -> Vec<String> {
         packages.push("plymouth");
     }
 
-    // 16. Additional user-specified packages
+    // 16. Opt-in package groups (Network Tools / System Utilities / Dev Tools)
+    let opt_ins: Vec<String> = [
+        config.network_tools.as_str(),
+        config.system_utilities.as_str(),
+        config.dev_tools.as_str(),
+    ]
+    .iter()
+    .flat_map(|s| parse_package_list(s))
+    .collect();
+
+    // 17. Additional user-specified packages
     let additional = parse_package_list(&config.additional_packages);
 
     // Deduplicate and sort
     let mut result: Vec<String> = packages.iter().map(|s| s.to_string()).collect();
+    result.extend(opt_ins);
     result.extend(additional);
     result.sort();
     result.dedup();
@@ -214,8 +250,18 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
     tracing::info!(de = %config.desktop_environment, dm = %config.display_manager, "Resolving services");
     let mut services: Vec<&str> = Vec::new();
 
-    // NetworkManager — always enabled
-    services.push("NetworkManager");
+    // Network manager service (user choice).
+    // Wiki: https://wiki.archlinux.org/title/Network_configuration
+    match config.network_manager {
+        crate::types::NetworkManager::NetworkManager => services.push("NetworkManager"),
+        crate::types::NetworkManager::Iwd => {
+            services.push("systemd-networkd");
+            services.push("iwd");
+            services.push("systemd-resolved");
+        }
+        crate::types::NetworkManager::Dhcpcd => services.push("dhcpcd"),
+        crate::types::NetworkManager::None => {}
+    }
 
     // Display manager — prefer user's explicit choice, fall back to profile default
     let profile = desktop_to_profile(config.desktop_environment);
@@ -238,9 +284,10 @@ pub fn resolve_services(config: &InstallationConfig) -> Vec<String> {
     // Profile-specific services
     services.extend_from_slice(profile.get_services());
 
-    // Bluetooth for desktop environments
+    // DE-tier plumbing services: bluetooth + avahi-daemon when a DE is installed.
     if config.desktop_environment != DesktopEnvironment::None {
         services.push("bluetooth");
+        services.push("avahi-daemon");
     }
 
     // NTP time sync
@@ -325,10 +372,16 @@ mod tests {
         let config = test_config();
         let packages = resolve_packages(&config);
 
+        // Wiki-aligned minimum: base-devel is no longer in BASE_PACKAGES (moved to Dev Tools opt-in).
         assert!(packages.contains(&"base".to_string()));
-        assert!(packages.contains(&"base-devel".to_string()));
         assert!(packages.contains(&"linux-firmware".to_string()));
         assert!(packages.contains(&"sudo".to_string()));
+        assert!(packages.contains(&"git".to_string()));
+        assert!(packages.contains(&"man-db".to_string()));
+        assert!(packages.contains(&"pciutils".to_string()));
+        // Default network manager/editor are user-selectable; default values include them.
+        assert!(packages.contains(&"networkmanager".to_string()));
+        assert!(packages.contains(&"nano".to_string()));
     }
 
     #[test]
@@ -494,10 +547,178 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_services_always_has_networkmanager() {
+    fn test_resolve_services_default_is_networkmanager() {
         let config = test_config();
         let services = resolve_services(&config);
         assert!(services.contains(&"NetworkManager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_iwd_dispatch() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::Iwd;
+        let services = resolve_services(&config);
+        assert!(services.contains(&"systemd-networkd".to_string()));
+        assert!(services.contains(&"iwd".to_string()));
+        assert!(services.contains(&"systemd-resolved".to_string()));
+        assert!(!services.contains(&"NetworkManager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_dhcpcd_dispatch() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::Dhcpcd;
+        let services = resolve_services(&config);
+        assert!(services.contains(&"dhcpcd".to_string()));
+        assert!(!services.contains(&"NetworkManager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_none_no_network_service() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::None;
+        let services = resolve_services(&config);
+        assert!(!services.contains(&"NetworkManager".to_string()));
+        assert!(!services.contains(&"iwd".to_string()));
+        assert!(!services.contains(&"dhcpcd".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_editor_choice() {
+        let mut config = test_config();
+        config.editor = crate::types::Editor::Vim;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"vim".to_string()));
+        assert!(!packages.contains(&"nano".to_string()));
+
+        config.editor = crate::types::Editor::None;
+        let packages = resolve_packages(&config);
+        assert!(!packages.contains(&"vim".to_string()));
+        assert!(!packages.contains(&"nano".to_string()));
+        assert!(!packages.contains(&"neovim".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_iwd_pulls_resolvconf() {
+        let mut config = test_config();
+        config.network_manager = crate::types::NetworkManager::Iwd;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"iwd".to_string()));
+        assert!(packages.contains(&"systemd-resolvconf".to_string()));
+        assert!(!packages.contains(&"networkmanager".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_de_tier_plumbing() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"bluez".to_string()));
+        assert!(packages.contains(&"bluez-utils".to_string()));
+        assert!(packages.contains(&"avahi".to_string()));
+        assert!(packages.contains(&"nss-mdns".to_string()));
+        // NM applet only with NM as the network manager
+        assert!(packages.contains(&"network-manager-applet".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_de_tier_skipped_for_minimal() {
+        let config = test_config();
+        let packages = resolve_packages(&config);
+        // Minimal install — no bluetooth, no mDNS
+        assert!(!packages.contains(&"bluez".to_string()));
+        assert!(!packages.contains(&"avahi".to_string()));
+        assert!(!packages.contains(&"network-manager-applet".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_de_with_iwd_no_nm_applet() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Hyprland;
+        config.network_manager = crate::types::NetworkManager::Iwd;
+        let packages = resolve_packages(&config);
+        // iwd users shouldn't get the NetworkManager applet
+        assert!(!packages.contains(&"network-manager-applet".to_string()));
+        // But still get bluez/avahi (DE-tier baseline)
+        assert!(packages.contains(&"bluez".to_string()));
+        assert!(packages.contains(&"avahi".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_de_tier_plumbing() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        let services = resolve_services(&config);
+        assert!(services.contains(&"bluetooth".to_string()));
+        assert!(services.contains(&"avahi-daemon".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_services_minimal_no_de_tier() {
+        let config = test_config();
+        let services = resolve_services(&config);
+        assert!(!services.contains(&"bluetooth".to_string()));
+        assert!(!services.contains(&"avahi-daemon".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_opt_in_groups_merge() {
+        let mut config = test_config();
+        config.network_tools = "openssh wget".to_string();
+        config.system_utilities = "htop".to_string();
+        config.dev_tools = "base-devel gcc".to_string();
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"openssh".to_string()));
+        assert!(packages.contains(&"wget".to_string()));
+        assert!(packages.contains(&"htop".to_string()));
+        assert!(packages.contains(&"base-devel".to_string()));
+        assert!(packages.contains(&"gcc".to_string()));
+        // Ones not selected stay out
+        assert!(!packages.contains(&"curl".to_string()));
+        assert!(!packages.contains(&"btop".to_string()));
+        assert!(!packages.contains(&"gdb".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_opt_in_groups_empty_no_addition() {
+        let config = test_config();
+        let packages = resolve_packages(&config);
+        assert!(!packages.contains(&"openssh".to_string()));
+        assert!(!packages.contains(&"htop".to_string()));
+        assert!(!packages.contains(&"base-devel".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_gnome_full_includes_extras() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        config.de_variant = crate::types::DeVariant::Full;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"gnome-shell".to_string())); // baseline
+        assert!(packages.contains(&"gnome".to_string())); // full extra
+        assert!(packages.contains(&"gnome-extra".to_string())); // full extra
+    }
+
+    #[test]
+    fn test_resolve_packages_gnome_minimal_excludes_extras() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Gnome;
+        config.de_variant = crate::types::DeVariant::Minimal;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"gnome-shell".to_string())); // baseline kept
+        assert!(!packages.contains(&"gnome".to_string()));
+        assert!(!packages.contains(&"gnome-extra".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_packages_hyprland_ignores_de_variant() {
+        let mut config = test_config();
+        config.desktop_environment = DesktopEnvironment::Hyprland;
+        // Setting Minimal should be a no-op for Hyprland — its package list is curated already.
+        config.de_variant = crate::types::DeVariant::Minimal;
+        let packages = resolve_packages(&config);
+        assert!(packages.contains(&"hyprland".to_string()));
+        assert!(packages.contains(&"waybar".to_string()));
     }
 
     #[test]

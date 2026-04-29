@@ -282,6 +282,47 @@ impl Default for Configuration {
                     "Git repository URL to clone",
                     "",
                 ),
+                // System base choices (47-48)
+                ConfigOption::new(
+                    "Network Manager",
+                    false,
+                    "Network configuration tool (NetworkManager/iwd/dhcpcd/none)",
+                    "NetworkManager",
+                ),
+                ConfigOption::new(
+                    "Editor",
+                    false,
+                    "Default text editor for the installed system",
+                    "nano",
+                ),
+                // Opt-in package groups (49-51) — multi-select checkboxes, all default off
+                ConfigOption::new(
+                    "Network Tools",
+                    false,
+                    "Optional networking utilities (openssh, wget, curl)",
+                    "",
+                ),
+                ConfigOption::new(
+                    "System Utilities",
+                    false,
+                    "Optional system utilities (htop, btop, fastfetch)",
+                    "",
+                ),
+                ConfigOption::new(
+                    "Dev Tools",
+                    false,
+                    "Optional development tools (base-devel, gcc, make, gdb)",
+                    "",
+                ),
+                // DE Variant (52) — only meaningful for meta-group DEs (GNOME/KDE/XFCE/MATE/LXQt).
+                // Default is N/A; cascade in handle_dependent_options sets it to Full when a meta
+                // DE is chosen, leaves it N/A for WMs and other DEs that have curated stacks.
+                ConfigOption::new(
+                    "DE Variant",
+                    false,
+                    "Full = meta-group + extras (everything); Minimal = just the desktop shell",
+                    "N/A",
+                ),
             ],
         }
     }
@@ -349,6 +390,12 @@ impl Configuration {
                 "Git Repository URL" => "GIT_REPOSITORY_URL",
                 "Unified Kernel Image" => "UNIFIED_KERNEL_IMAGE",
                 "Encryption Key Type" => "ENCRYPTION_KEY_TYPE",
+                "Network Manager" => "NETWORK_MANAGER",
+                "Editor" => "EDITOR",
+                "Network Tools" => "NETWORK_TOOLS",
+                "System Utilities" => "SYSTEM_UTILITIES",
+                "Dev Tools" => "DEV_TOOLS",
+                "DE Variant" => "DE_VARIANT",
                 _ => continue, // Skip unknown options
             };
 

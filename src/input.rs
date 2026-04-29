@@ -5,9 +5,9 @@
 use crate::config::Package;
 use crate::process_guard::CommandProcessGroup;
 use crate::types::{
-    AurHelper, AutoToggle, BootMode, Bootloader, DesktopEnvironment, DisplayManager,
-    EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, PartitionScheme, PlymouthTheme,
-    SnapshotFrequency, SnapshotTool, Toggle,
+    AurHelper, AutoToggle, BootMode, Bootloader, DeVariant, DesktopEnvironment, DisplayManager,
+    Editor, EncryptionKeyType, Filesystem, GpuDriver, GrubTheme, Kernel, NetworkManager,
+    PartitionScheme, PlymouthTheme, SnapshotFrequency, SnapshotTool, Toggle,
 };
 use ratatui::widgets::ListState;
 use strum::IntoEnumIterator;
@@ -99,6 +99,8 @@ pub enum InputType {
         scroll_state: crate::scrolling::ScrollState,
         /// Cached partition layouts keyed by disk path (e.g. "/dev/sda")
         disk_layouts: std::collections::HashMap<String, Vec<String>>,
+        /// Heuristic OS detection hints keyed by disk path
+        os_hints: std::collections::HashMap<String, Vec<String>>,
     },
     /// Multi-disk selection for RAID and manual partitioning
     MultiDiskSelection {
@@ -107,6 +109,13 @@ pub enum InputType {
         scroll_state: crate::scrolling::ScrollState,
         min_disks: usize,
         max_disks: usize,
+    },
+    /// Multi-select checkbox list for opt-in package groups (Network Tools, etc.)
+    MultiSelectGroup {
+        field_name: String,
+        available: Vec<String>,
+        selected: Vec<String>,
+        scroll_state: crate::scrolling::ScrollState,
     },
     /// Package selection (for additional packages)
     PackageSelection {
@@ -294,6 +303,36 @@ impl InputDialog {
                 crossterm::event::KeyCode::Esc => {
                     return InputResult::Cancel;
                 }
+                _ => {}
+            },
+            InputType::MultiSelectGroup {
+                available,
+                selected,
+                scroll_state,
+                ..
+            } => match key_event.code {
+                crossterm::event::KeyCode::Up => scroll_state.move_up(),
+                crossterm::event::KeyCode::Down => scroll_state.move_down(),
+                crossterm::event::KeyCode::Char(' ') => {
+                    if let Some(item) = available.get(scroll_state.selected_index) {
+                        if selected.contains(item) {
+                            selected.retain(|s| s != item);
+                        } else {
+                            selected.push(item.clone());
+                        }
+                    }
+                }
+                crossterm::event::KeyCode::Enter => {
+                    // Stable order: keep results in the same order as `available`
+                    let value: String = available
+                        .iter()
+                        .filter(|p| selected.contains(p))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    return InputResult::Confirm(value);
+                }
+                crossterm::event::KeyCode::Esc => return InputResult::Cancel,
                 _ => {}
             },
             InputType::PackageSelection {
@@ -621,6 +660,13 @@ impl InputDialog {
                     )
                 }
             }
+            InputType::MultiSelectGroup { selected, .. } => {
+                if selected.is_empty() {
+                    "(none selected)".to_string()
+                } else {
+                    selected.join(" ")
+                }
+            }
             InputType::PackageSelection { package_list, .. } => package_list.clone(),
             InputType::Warning { .. } => "Press Enter to acknowledge".to_string(),
             InputType::PasswordInput {
@@ -645,6 +691,7 @@ impl InputType {
             InputType::Selection { scroll_state, .. } => scroll_state.selected_index,
             InputType::DiskSelection { scroll_state, .. } => scroll_state.selected_index,
             InputType::MultiDiskSelection { scroll_state, .. } => scroll_state.selected_index,
+            InputType::MultiSelectGroup { scroll_state, .. } => scroll_state.selected_index,
             InputType::PackageSelection { list_state, .. } => list_state.selected().unwrap_or(0),
             _ => 0,
         }
@@ -1257,12 +1304,14 @@ impl InputHandler {
         scroll_state.set_selected(selected_index);
 
         let disk_layouts = Self::cache_disk_layouts(&available_disks);
+        let os_hints = crate::hardware::detect_os_heuristic();
 
         let input_type = InputType::DiskSelection {
             current_value,
             available_disks,
             scroll_state,
             disk_layouts,
+            os_hints,
         };
 
         self.current_dialog = Some(InputDialog::new(
@@ -1390,6 +1439,9 @@ impl InputHandler {
             "Numlock on Boot" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Git Repository" => Toggle::iter().map(|v| v.to_string()).collect(),
             "Encryption Key Type" => EncryptionKeyType::iter().map(|v| v.to_string()).collect(),
+            "Network Manager" => NetworkManager::iter().map(|v| v.to_string()).collect(),
+            "Editor" => Editor::iter().map(|v| v.to_string()).collect(),
+            "DE Variant" => DeVariant::iter().map(|v| v.to_string()).collect(),
 
             // Static lists for options with too many values to enumerate
             "Locale" => vec![
@@ -1717,6 +1769,47 @@ impl InputHandler {
             title.to_string(),
             "Use ↑↓ to navigate, Space to select/deselect, Enter to confirm, Esc to cancel"
                 .to_string(),
+        ));
+    }
+
+    /// Curated package list for an opt-in group ConfigOption.
+    ///
+    /// Returns `None` if `field_name` is not a recognized opt-in group.
+    pub fn get_opt_in_group(field_name: &str) -> Option<&'static [&'static str]> {
+        match field_name {
+            "Network Tools" => Some(&["openssh", "wget", "curl"]),
+            "System Utilities" => Some(&["htop", "btop", "fastfetch"]),
+            "Dev Tools" => Some(&["base-devel", "gcc", "make", "gdb"]),
+            _ => None,
+        }
+    }
+
+    /// Open a multi-select checkbox dialog for an opt-in package group.
+    ///
+    /// `current_value` is the space-separated string previously stored in the ConfigOption,
+    /// so we can pre-check what the user selected last time.
+    pub fn start_multi_select_group(&mut self, field_name: &str, current_value: &str) {
+        let Some(available) = Self::get_opt_in_group(field_name) else {
+            tracing::warn!(field_name, "Unknown opt-in group; ignoring");
+            return;
+        };
+        let available_vec: Vec<String> = available.iter().map(|s| s.to_string()).collect();
+        let selected: Vec<String> = current_value
+            .split_whitespace()
+            .filter(|p| available_vec.iter().any(|a| a == p))
+            .map(|s| s.to_string())
+            .collect();
+        let scroll_state = crate::scrolling::ScrollState::new(available_vec.len(), 10);
+        let input_type = InputType::MultiSelectGroup {
+            field_name: field_name.to_string(),
+            available: available_vec,
+            selected,
+            scroll_state,
+        };
+        self.current_dialog = Some(InputDialog::new(
+            input_type,
+            field_name.to_string(),
+            "Use ↑↓ to navigate, Space to toggle, Enter to confirm, Esc to cancel".to_string(),
         ));
     }
 
