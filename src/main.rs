@@ -13,6 +13,7 @@ mod input;
 mod install_state;
 mod installer;
 mod logic;
+mod option_help;
 #[cfg(feature = "alpm")]
 mod package_manager;
 mod package_utils;

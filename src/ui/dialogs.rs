@@ -614,7 +614,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
             crate::input::InputType::Selection {
                 scroll_state,
                 options,
-                ..
+                field_name,
             } => {
                 let (start, end) = scroll_state.visible_range();
                 let items: Vec<ListItem> = options
@@ -641,6 +641,22 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     .collect();
                 let list = List::new(items).style(Style::default().bg(Colors::BG_PRIMARY));
                 f.render_widget(list, content_area);
+
+                // One-line pacman-style description for the highlighted choice
+                if let Some(value) = options.get(selected_index)
+                    && let Some(desc) = crate::option_help::describe(field_name, value)
+                {
+                    f.render_widget(
+                        Paragraph::new(Span::styled(
+                            desc,
+                            Style::default()
+                                .fg(Colors::FG_MUTED)
+                                .add_modifier(Modifier::ITALIC),
+                        ))
+                        .alignment(Alignment::Center),
+                        chunks[1],
+                    );
+                }
             }
             crate::input::InputType::DiskSelection {
                 available_disks,
@@ -945,7 +961,7 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                 available,
                 selected,
                 scroll_state,
-                ..
+                field_name,
             } => {
                 let counter_text = format!(
                     " Selected: {}/{} ",
@@ -962,10 +978,31 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                             .add_modifier(Modifier::BOLD),
                     ))
                     .style(Style::default().bg(Colors::BG_PRIMARY));
-                let multi_chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Length(2), Constraint::Min(0)])
-                    .split(content_area);
+
+                // Reserve a bottom panel for the per-package "About" description when
+                // a description exists for the cursor item — same look as the inline
+                // selection footer so the popup matches the wizard.
+                let cursor_pkg = available.get(scroll_state.selected_index);
+                let cursor_desc = cursor_pkg
+                    .and_then(|p| crate::option_help::describe(field_name, p))
+                    .map(|d| (cursor_pkg.cloned().unwrap_or_default(), d));
+
+                let multi_chunks = if cursor_desc.is_some() {
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(2),
+                            Constraint::Min(3),
+                            Constraint::Length(5),
+                        ])
+                        .split(content_area)
+                } else {
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Length(2), Constraint::Min(0)])
+                        .split(content_area)
+                };
+
                 f.render_widget(counter_block, multi_chunks[0]);
                 let items: Vec<ListItem> = available
                     .iter()
@@ -996,6 +1033,51 @@ pub fn render_input_dialog(f: &mut Frame, input_handler: &mut crate::input::Inpu
                     List::new(items).style(Style::default().bg(Colors::BG_PRIMARY)),
                     multi_chunks[1],
                 );
+
+                // Bordered "About" panel for the package under the cursor
+                if let Some((pkg_name, desc_text)) = cursor_desc {
+                    let desc_block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(Colors::BORDER_INACTIVE))
+                        .title(Line::from(vec![
+                            Span::styled(
+                                "\u{2500}",
+                                Style::default().fg(Colors::BORDER_INACTIVE),
+                            ),
+                            Span::styled(
+                                " About ",
+                                Style::default()
+                                    .fg(Colors::INFO)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                "\u{2500}",
+                                Style::default().fg(Colors::BORDER_INACTIVE),
+                            ),
+                        ]))
+                        .style(Style::default().bg(Colors::BG_PRIMARY));
+                    let desc_para = Paragraph::new(vec![
+                        Line::from(""),
+                        Line::from(vec![
+                            Span::styled(
+                                format!("  {}", pkg_name),
+                                Style::default()
+                                    .fg(Colors::SECONDARY)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                format!("  \u{2014}  {}", desc_text),
+                                Style::default()
+                                    .fg(Colors::FG_PRIMARY)
+                                    .add_modifier(Modifier::ITALIC),
+                            ),
+                        ]),
+                    ])
+                    .block(desc_block)
+                    .wrap(Wrap { trim: false });
+                    f.render_widget(desc_para, multi_chunks[2]);
+                }
             }
         }
 

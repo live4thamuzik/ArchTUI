@@ -157,7 +157,7 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             options: vec![
-                // Boot Setup (0-1)
+                // Boot Setup
                 ConfigOption::new("Boot Mode", true, "Boot firmware type (Auto/UEFI/BIOS)", ""),
                 ConfigOption::new(
                     "Secure Boot",
@@ -165,10 +165,10 @@ impl Default for Configuration {
                     "Enable Secure Boot (WARNING: Requires UEFI setup)",
                     "No",
                 ),
-                // System Locale and Input (2-3)
+                // System Locale and Input
                 ConfigOption::new("Locale", true, "System locale", "en_US.UTF-8"),
                 ConfigOption::new("Keymap", true, "Keyboard layout", "us"),
-                // Disk and Storage (4-18)
+                // Disk and Storage
                 ConfigOption::new(
                     "Partitioning Strategy",
                     true,
@@ -197,6 +197,12 @@ impl Default for Configuration {
                 ConfigOption::new("Root Size", false, "Root partition size", "N/A"),
                 ConfigOption::new("Home Size", false, "Home partition size", "N/A"),
                 ConfigOption::new("Btrfs Snapshots", false, "Enable Btrfs snapshots", "No"),
+                ConfigOption::new(
+                    "Snapshot Tool",
+                    false,
+                    "Snapshot tool (snapper/timeshift)",
+                    "none",
+                ),
                 ConfigOption::new("Snapshot Frequency", false, "Snapshot frequency", "N/A"),
                 ConfigOption::new(
                     "Snapshot Keep Count",
@@ -204,13 +210,7 @@ impl Default for Configuration {
                     "Number of snapshots to keep",
                     "N/A",
                 ),
-                ConfigOption::new(
-                    "Snapshot Tool",
-                    false,
-                    "Snapshot tool (snapper/timeshift)",
-                    "none",
-                ),
-                // Time and Location (19-21)
+                // Time and Location
                 ConfigOption::new("Timezone Region", true, "Timezone region", "America"),
                 ConfigOption::new("Timezone", true, "Timezone city", "New_York"),
                 ConfigOption::new(
@@ -219,7 +219,7 @@ impl Default for Configuration {
                     "Enable NTP time synchronization",
                     "No",
                 ),
-                // System Packages (22-26)
+                // System Packages — pacstrap content, in install order
                 ConfigOption::new(
                     "Mirror Country",
                     true,
@@ -227,62 +227,6 @@ impl Default for Configuration {
                     "United States",
                 ),
                 ConfigOption::new("Kernel", true, "Linux kernel to install", "linux"),
-                ConfigOption::new("Multilib", false, "Enable multilib repository", "No"),
-                ConfigOption::new(
-                    "Additional Pacman Packages",
-                    false,
-                    "Extra packages to install",
-                    "",
-                ),
-                ConfigOption::new("GPU Drivers", false, "Graphics drivers", "Auto"),
-                // Hostname (27)
-                ConfigOption::new("Hostname", true, "System hostname", ""),
-                // User Setup (28-30)
-                ConfigOption::new("Username", true, "Primary user account", ""),
-                ConfigOption::new("User Password", true, "User account password", ""),
-                ConfigOption::new("Root Password", true, "Root account password", ""),
-                // Package Management (31-33)
-                ConfigOption::new("AUR Helper", false, "AUR package helper", "none"),
-                ConfigOption::new("Additional AUR Packages", false, "Extra AUR packages", ""),
-                ConfigOption::new("Flatpak", false, "Enable Flatpak support", "No"),
-                // Boot Configuration (34-37)
-                ConfigOption::new("Bootloader", true, "Boot loader", "grub"),
-                ConfigOption::new("OS Prober", false, "Enable OS detection", "No"),
-                ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
-                ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "N/A"),
-                // Desktop Environment (38-39)
-                ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
-                ConfigOption::new("Display Manager", false, "Display manager", "none"),
-                // Advanced Boot (40-41)
-                ConfigOption::new(
-                    "Unified Kernel Image",
-                    false,
-                    "Build UKI (.efi) instead of separate kernel+initramfs",
-                    "No",
-                ),
-                ConfigOption::new(
-                    "Encryption Key Type",
-                    false,
-                    "LUKS unlock method (Password, FIDO2, or both)",
-                    "N/A",
-                ),
-                // Boot Splash and Final Setup (42-46)
-                ConfigOption::new("Plymouth", false, "Boot splash screen", "No"),
-                ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "N/A"),
-                ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot (requires AUR: mkinitcpio-numlock)", "No"),
-                ConfigOption::new(
-                    "Git Repository",
-                    false,
-                    "Clone installation repository",
-                    "No",
-                ),
-                ConfigOption::new(
-                    "Git Repository URL",
-                    false,
-                    "Git repository URL to clone",
-                    "",
-                ),
-                // System base choices (47-48)
                 ConfigOption::new(
                     "Network Manager",
                     false,
@@ -295,7 +239,14 @@ impl Default for Configuration {
                     "Default text editor for the installed system",
                     "nano",
                 ),
-                // Opt-in package groups (49-51) — multi-select checkboxes, all default off
+                ConfigOption::new("Multilib", false, "Enable multilib repository", "No"),
+                ConfigOption::new(
+                    "Additional Pacman Packages",
+                    false,
+                    "Extra packages to install",
+                    "",
+                ),
+                // Opt-in package groups — multi-select checkboxes, all default off
                 ConfigOption::new(
                     "Network Tools",
                     false,
@@ -314,7 +265,24 @@ impl Default for Configuration {
                     "Optional development tools (base-devel, gcc, make, gdb)",
                     "",
                 ),
-                // DE Variant (52) — only meaningful for meta-group DEs (GNOME/KDE/XFCE/MATE/LXQt).
+                ConfigOption::new("GPU Drivers", false, "Graphics drivers", "Auto"),
+                // Hostname
+                ConfigOption::new("Hostname", true, "System hostname", ""),
+                // User Setup
+                ConfigOption::new("Username", true, "Primary user account", ""),
+                ConfigOption::new("User Password", true, "User account password", ""),
+                ConfigOption::new("Root Password", true, "Root account password", ""),
+                // Package Management
+                ConfigOption::new("AUR Helper", false, "AUR package helper", "none"),
+                ConfigOption::new("Additional AUR Packages", false, "Extra AUR packages", ""),
+                ConfigOption::new("Flatpak", false, "Enable Flatpak support", "No"),
+                // Boot Configuration
+                ConfigOption::new("Bootloader", true, "Boot loader", "grub"),
+                ConfigOption::new("OS Prober", false, "Enable OS detection", "No"),
+                ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
+                ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "N/A"),
+                // Desktop Environment
+                // DE Variant is only meaningful for meta-group DEs (GNOME/KDE/XFCE/MATE/LXQt).
                 // Default is N/A; cascade in handle_dependent_options sets it to Full when a meta
                 // DE is chosen, leaves it N/A for WMs and other DEs that have curated stacks.
                 ConfigOption::new(
@@ -322,6 +290,37 @@ impl Default for Configuration {
                     false,
                     "Full = meta-group + extras (everything); Minimal = just the desktop shell",
                     "N/A",
+                ),
+                ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
+                ConfigOption::new("Display Manager", false, "Display manager", "none"),
+                // Advanced Boot
+                ConfigOption::new(
+                    "Unified Kernel Image",
+                    false,
+                    "Build UKI (.efi) instead of separate kernel+initramfs",
+                    "No",
+                ),
+                ConfigOption::new(
+                    "Encryption Key Type",
+                    false,
+                    "LUKS unlock method (Password, FIDO2, or both)",
+                    "N/A",
+                ),
+                // Boot Splash and Final Setup
+                ConfigOption::new("Plymouth", false, "Boot splash screen", "No"),
+                ConfigOption::new("Plymouth Theme", false, "Plymouth theme", "N/A"),
+                ConfigOption::new("Numlock on Boot", false, "Enable numlock at boot (requires AUR: mkinitcpio-numlock)", "No"),
+                ConfigOption::new(
+                    "Git Repository",
+                    false,
+                    "Clone installation repository",
+                    "No",
+                ),
+                ConfigOption::new(
+                    "Git Repository URL",
+                    false,
+                    "Git repository URL to clone",
+                    "",
                 ),
             ],
         }

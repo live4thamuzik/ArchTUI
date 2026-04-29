@@ -13,6 +13,7 @@ pub mod input;
 pub mod install_state;
 pub mod installer;
 pub mod logic;
+pub mod option_help;
 #[cfg(feature = "alpm")]
 pub mod package_manager;
 pub mod package_utils;

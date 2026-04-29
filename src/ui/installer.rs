@@ -282,15 +282,29 @@ fn render_detail_selection(
     let opt_name = opt.map(|o| o.name.as_str()).unwrap_or("Option");
     let show_layout = opt_name == "Disk" && !state.disk_layout.is_empty();
 
+    // Pacman-style help text for the highlighted choice (e.g. "linux-zen" → "Tuned for desktop responsiveness…").
+    // Reserved as a footer panel under the list when both apply: a description exists, and we're not already
+    // squeezing in the disk layout panel.
+    let description = choices
+        .get(selected)
+        .and_then(|v| crate::option_help::describe(opt_name, v));
+    let show_desc = description.is_some() && !show_layout;
+
     // Split area: selection list top, disk layout bottom (when applicable)
-    let (list_area, layout_area) = if show_layout {
+    let (list_area, layout_area, desc_area) = if show_layout {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
             .split(area);
-        (chunks[0], Some(chunks[1]))
+        (chunks[0], Some(chunks[1]), None)
+    } else if show_desc {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(5), Constraint::Length(5)])
+            .split(area);
+        (chunks[0], None, Some(chunks[1]))
     } else {
-        (area, None)
+        (area, None, None)
     };
 
     let w = list_area.width.saturating_sub(2) as usize;
@@ -407,6 +421,49 @@ fn render_detail_selection(
             .block(layout_block)
             .wrap(Wrap { trim: false });
         f.render_widget(layout_para, layout_rect);
+    }
+
+    // Description panel for the highlighted choice
+    if let Some(desc_rect) = desc_area
+        && let Some(desc_text) = description
+    {
+        let desc_block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Colors::BORDER_INACTIVE))
+            .title(Line::from(vec![
+                Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_INACTIVE)),
+                Span::styled(
+                    " About ",
+                    Style::default()
+                        .fg(Colors::INFO)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("\u{2500}", Style::default().fg(Colors::BORDER_INACTIVE)),
+            ]))
+            .style(Style::default().bg(Colors::BG_PRIMARY));
+
+        let current_value = choices.get(selected).cloned().unwrap_or_default();
+        let desc_para = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!("  {}", current_value),
+                    Style::default()
+                        .fg(Colors::SECONDARY)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("  \u{2014}  {}", desc_text),
+                    Style::default()
+                        .fg(Colors::FG_PRIMARY)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+            ]),
+        ])
+        .block(desc_block)
+        .wrap(Wrap { trim: false });
+        f.render_widget(desc_para, desc_rect);
     }
 }
 
