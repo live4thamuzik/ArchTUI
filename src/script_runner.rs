@@ -53,8 +53,9 @@ pub fn log_dir() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
         return PathBuf::from(home).join(".local/state/archtui");
     }
-    // Last resort
-    PathBuf::from("/tmp/archtui-logs")
+    // Last resort. PID-suffix the path so a local attacker can't
+    // pre-create /tmp/archtui-logs as a symlink to a privileged target.
+    std::env::temp_dir().join(format!("archtui-logs.{}", std::process::id()))
 }
 
 /// Resolve the scripts base directory.
@@ -183,8 +184,9 @@ pub fn run_script_safe<T: ScriptArgs>(args: &T) -> Result<ScriptOutput> {
         });
     }
 
-    // Build command with process group isolation
-    let mut cmd = Command::new("bash");
+    // Build command with process group isolation.
+    // Absolute path defeats PATH-injection attacks (a malicious "bash" earlier in PATH).
+    let mut cmd = Command::new("/bin/bash");
     cmd.arg(&script_path)
         .args(&cli_args)
         .stdout(Stdio::piped())

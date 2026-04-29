@@ -284,7 +284,7 @@ impl Installer {
 
         // Launch the installation script
         // stdin is null - scripts are non-interactive per lint rules
-        let mut child = Command::new("bash")
+        let mut child = Command::new("/bin/bash")
             .arg(&script_path)
             .envs(&env_vars)
             .stdout(Stdio::piped())

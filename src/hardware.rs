@@ -383,7 +383,7 @@ pub fn detect_os_definitive(install_disk: &str) -> OsDetectionResults {
 
     tracing::info!(disk = %install_disk, "Running definitive OS detection probe");
 
-    let output = match Command::new("bash")
+    let output = match Command::new("/bin/bash")
         .arg(script_path.as_os_str())
         .args(["--install-disk", install_disk])
         .stdin(std::process::Stdio::null())

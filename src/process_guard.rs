@@ -190,6 +190,19 @@ fn send_signal_to_group(pgid: u32, signal: Signal) -> Result<(), nix::Error> {
 }
 
 /// Check if a process is still alive (not dead or zombie)
+/// Extract the state character from a /proc/pid/stat string.
+///
+/// Field 2 (`comm`) is parenthesized and may contain spaces or `)` for
+/// executables with such names. Splitting on whitespace from the start
+/// would mis-locate the state field. Walk back from the LAST `)` — the
+/// space-separated tail begins with the state character.
+fn parse_proc_stat_state(stat: &str) -> Option<&str> {
+    stat.rsplit_once(')')
+        .map(|(_, tail)| tail)?
+        .split_whitespace()
+        .next()
+}
+
 fn is_process_alive(pid: u32) -> bool {
     // First check if process exists at all
     let pid_i32 = match i32::try_from(pid) {
@@ -200,15 +213,13 @@ fn is_process_alive(pid: u32) -> bool {
         return false;
     }
 
-    // Check for zombie state via /proc - zombies are "dead" for our purposes
-    // A zombie can still receive signals but isn't running
-    if let Ok(stat) = std::fs::read_to_string(format!("/proc/{}/stat", pid)) {
-        // Field 3 of /proc/pid/stat is the state: R=running, S=sleeping, Z=zombie, etc.
-        let fields: Vec<&str> = stat.split_whitespace().collect();
-        if fields.len() > 2 {
-            // 'Z' = zombie, 'X' = dead - neither is "alive"
-            return !matches!(fields[2], "Z" | "X");
-        }
+    // Check for zombie state via /proc - zombies are "dead" for our purposes.
+    // A zombie can still receive signals but isn't running.
+    if let Ok(stat) = std::fs::read_to_string(format!("/proc/{}/stat", pid))
+        && let Some(state) = parse_proc_stat_state(&stat)
+    {
+        // 'Z' = zombie, 'X' = dead - neither is "alive"
+        return !matches!(state, "Z" | "X");
     }
 
     // If we can't read /proc, assume alive (safe default)
@@ -357,6 +368,39 @@ impl CommandProcessGroup for std::process::Command {
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn parse_proc_stat_state_handles_normal_comm() {
+        // Standard `bash` process: simple comm, no spaces.
+        let stat = "12345 (bash) S 1234 12345 1234 0 -1 ...";
+        assert_eq!(parse_proc_stat_state(stat), Some("S"));
+    }
+
+    #[test]
+    fn parse_proc_stat_state_handles_zombie() {
+        let stat = "12345 (bash) Z 1234 12345 1234 0 -1";
+        assert_eq!(parse_proc_stat_state(stat), Some("Z"));
+    }
+
+    #[test]
+    fn parse_proc_stat_state_handles_comm_with_space() {
+        // Executables can have spaces in their name — naive split breaks here.
+        let stat = "12345 (my program) R 1234 12345 1234";
+        assert_eq!(parse_proc_stat_state(stat), Some("R"));
+    }
+
+    #[test]
+    fn parse_proc_stat_state_handles_comm_with_close_paren() {
+        // And close-parens. We rsplit on the LAST `)` to handle this.
+        let stat = "12345 (weird:)comm) S 1234 12345 1234";
+        assert_eq!(parse_proc_stat_state(stat), Some("S"));
+    }
+
+    #[test]
+    fn parse_proc_stat_state_returns_none_on_malformed() {
+        assert_eq!(parse_proc_stat_state(""), None);
+        assert_eq!(parse_proc_stat_state("12345 bash S"), None); // no )
+    }
 
     #[test]
     fn test_registry_register_unregister() {

@@ -266,7 +266,7 @@ fn run_installer_with_config(
         .to_string();
     info!("Spawning installer script: {}", script_path);
 
-    let mut child = Command::new("bash")
+    let mut child = Command::new("/bin/bash")
         .arg(script_path)
         .arg("--config")
         .arg(config_path)
