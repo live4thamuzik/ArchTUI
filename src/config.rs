@@ -282,8 +282,10 @@ impl Default for Configuration {
                 ConfigOption::new("GRUB Theme", false, "Enable GRUB themes", "No"),
                 ConfigOption::new("GRUB Theme Selection", false, "GRUB theme to use", "N/A"),
                 // Desktop Environment
+                ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
+                ConfigOption::new("Display Manager", false, "Display manager", "none"),
                 // DE Variant is only meaningful for meta-group DEs (GNOME/KDE/XFCE/MATE/LXQt).
-                // Default is N/A; cascade in handle_dependent_options sets it to Full when a meta
+                // Default is N/A; cascade in handle_dependent_options sets it to Minimal when a meta
                 // DE is chosen, leaves it N/A for WMs and other DEs that have curated stacks.
                 ConfigOption::new(
                     "DE Variant",
@@ -291,8 +293,6 @@ impl Default for Configuration {
                     "Full = meta-group + extras (everything); Minimal = just the desktop shell",
                     "N/A",
                 ),
-                ConfigOption::new("Desktop Environment", false, "Desktop environment", "none"),
-                ConfigOption::new("Display Manager", false, "Display manager", "none"),
                 // Advanced Boot
                 ConfigOption::new(
                     "Unified Kernel Image",

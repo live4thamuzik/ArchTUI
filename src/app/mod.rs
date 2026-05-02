@@ -3797,9 +3797,9 @@ impl App {
                 .find(|opt| opt.name == "DE Variant")
             {
                 if has_full_variant {
-                    // If the previous value was N/A (DE was non-meta before), default to Full.
+                    // If the previous value was N/A (DE was non-meta before), default to Minimal.
                     if variant_opt.get_value() == "N/A" {
-                        variant_opt.value = "Full".to_string();
+                        variant_opt.value = "Minimal".to_string();
                     }
                 } else {
                     variant_opt.value = "N/A".to_string();

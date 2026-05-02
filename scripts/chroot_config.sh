@@ -1852,7 +1852,7 @@ HOOKEOF
 install_desktop_environment() {
     local de="${DESKTOP_ENVIRONMENT:-none}"
     de="${de,,}"  # Convert to lowercase
-    local variant="${DE_VARIANT:-Full}"
+    local variant="${DE_VARIANT:-Minimal}"
 
     log_info "Installing desktop environment: $de (variant: $variant)"
 

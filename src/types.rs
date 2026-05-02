@@ -624,9 +624,9 @@ impl NetworkManager {
     EnumIter,
 )]
 pub enum DeVariant {
-    #[default]
     #[strum(serialize = "Full")]
     Full,
+    #[default]
     #[strum(serialize = "Minimal")]
     Minimal,
 }

@@ -626,7 +626,7 @@ impl Default for InstallationConfig {
             network_tools: String::new(),
             system_utilities: String::new(),
             dev_tools: String::new(),
-            de_variant: DeVariant::Full,
+            de_variant: DeVariant::Minimal,
         }
     }
 }
@@ -718,7 +718,7 @@ impl From<&crate::config::Configuration> for InstallationConfig {
             de_variant: {
                 let v = get_value("DE Variant");
                 if v == "N/A" || v.is_empty() {
-                    DeVariant::Full
+                    DeVariant::Minimal
                 } else {
                     parse_or_default(&v)
                 }
