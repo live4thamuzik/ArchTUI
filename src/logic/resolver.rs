@@ -466,6 +466,8 @@ mod tests {
     fn test_resolve_packages_kde_desktop() {
         let mut config = test_config();
         config.desktop_environment = DesktopEnvironment::Kde;
+        // plasma-meta is a Full-variant extra; Minimal default would exclude it.
+        config.de_variant = crate::types::DeVariant::Full;
         let packages = resolve_packages(&config);
 
         assert!(packages.contains(&"plasma-meta".to_string()));
