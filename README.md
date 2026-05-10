@@ -1,4 +1,4 @@
-# ArchTUI
+# ArchTUI - MOVED TO GITLAB https://gitlab.com/live4thamuzik/ArchTUI
 
 A guided installer and system administration toolkit for Arch Linux. The TUI handles configuration, validation, and sequencing. Bash scripts handle execution. The two layers communicate through typed argument structs and environment contracts — Rust decides what to do, Bash does it.
 
